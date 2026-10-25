@@ -1,57 +1,52 @@
 # Vanya BuildTrack
 
-A starter application for tracking concrete construction projects. The repository is an npm-workspaces monorepo with a React + TypeScript frontend, an Express + TypeScript API, and PostgreSQL access through Prisma.
+A construction project management SaaS starter with role-based Owner, Site Engineer, and Client portals. The frontend is React + TypeScript; the backend is Node.js, Express, and TypeScript.
 
-## Requirements
+## Run the demo
 
-- Node.js 20.19+ or 22.12+
-- npm
-- Docker Desktop (for the local PostgreSQL service)
+Requirements: Node.js 20.19+ or 22.12+, and npm.
 
-## Getting started
+```powershell
+npm install
+npm run dev
+```
 
-1. Install dependencies:
+Open http://localhost:5173. The public landing page is `/`, the sign-in page is `/signin`, and the three role portals are `/admin`, `/employee`, and `/client`. Portal pages have role-specific subroutes such as `/admin/projects-sites`, `/employee/progress-updates`, and `/client/quotations`.
 
-   ```powershell
-   npm install
-   ```
+The Express mock API runs at http://localhost:3001 and the Vite development server proxies `/api` requests to it. Use the demo access shortcuts on `/signin` to fill an account for each portal:
 
-2. Create the backend environment file:
+| Role | Email | Password |
+| --- | --- | --- |
+| Owner | `owner@vanya.com` | `owner123` |
+| Employee | `employee@vanya.com` | `employee123` |
+| Client | `client@vanya.com` | `client123` |
 
-   ```powershell
-   Copy-Item backend/.env.example backend/.env
-   ```
-
-3. Start PostgreSQL:
-
-   ```powershell
-   npm run db:up
-   ```
-
-4. Generate the Prisma client and apply the initial migration:
-
-   ```powershell
-   npm run db:migrate
-   ```
-
-5. Start the frontend and API:
-
-   ```powershell
-   npm run dev
-   ```
-
-The frontend is available at http://localhost:5173 and the API at http://localhost:3001. The Vite dev server proxies `/api` requests to the API.
+**Database setup is not required for the current demo.** The mock API returns seeded project data and keeps create/update actions in memory. Demo data resets when the backend restarts. Prisma, the PostgreSQL schema, migrations, and optional Docker Compose service remain in the repository for a future database-backed implementation; they are not used by the demo API.
 
 ## Available commands
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the frontend and API in watch mode |
+| `npm run dev` | Start the frontend and mock API in watch mode |
 | `npm run build` | Build both workspaces |
-| `npm run db:up` | Start the local PostgreSQL container |
-| `npm run db:down` | Stop the local PostgreSQL container |
+| `npm run db:up` | Start the optional local PostgreSQL container |
+| `npm run db:down` | Stop the optional PostgreSQL container |
 | `npm run db:migrate` | Generate the Prisma client and run development migrations |
 | `npm run db:deploy` | Apply existing migrations in a deployment |
 | `npm run db:studio` | Open Prisma Studio |
 
-The API exposes `GET /api/health` for database connectivity and `GET /api/projects` for the project list. Add database settings by editing `backend/.env`; never commit the populated file.
+## Demo API
+
+The dashboard loads projects, quotations, expenses, materials, attendance, site visits, activity, feedback, and backup history from `GET /api/dashboard`.
+
+- `GET /api/health` — mock API status; no database connection is made.
+- `POST /api/auth/login` and `POST /api/auth/logout` — demo role sign-in and sign-out.
+- `GET` and `POST /api/projects` — list and create demo projects.
+- `POST /api/quotations` and `PATCH /api/quotations/:id` — create and respond to quotations.
+- `GET` and `POST /api/expenses` — list and submit demo expenses.
+- `POST /api/progress` — submit a demo progress update.
+- `GET` and `POST /api/site-visits` — list and schedule demo site visits.
+- `GET` and `POST /api/feedback` — list and submit demo client feedback.
+- `POST /api/backups` — request a demo account backup.
+
+These endpoints are an in-memory UI prototype, not production persistence or authentication. The demo sign-in only checks the seeded role-specific credentials and stores the selected user in browser local storage; it is not suitable for production or sensitive data. Restarting the backend resets all demo changes.
