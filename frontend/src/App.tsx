@@ -437,9 +437,9 @@ function PortalApp({ role, userName }: { role: Role; userName: string }) {
   return (
     <div className="app-frame">
       <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
-        <Link className="brand" to={rolePath(roleId(role))} aria-label="BuildTrack home">
+        <Link className="brand" to={rolePath(roleId(role))} aria-label="Vanya BuildTrack home">
           <span className="brand-mark"><BuildingIcon /></span>
-          <span className="brand-copy"><strong>BuildTrack</strong><small>Construction Manager</small></span>
+          <span className="brand-copy"><strong>Vanya BuildTrack</strong><small>Construction workspace</small></span>
         </Link>
         <div className="profile">
           <span className="avatar">{initials(currentUser)}</span>
@@ -459,7 +459,6 @@ function PortalApp({ role, userName }: { role: Role; userName: string }) {
           {role === "Owner" && <button className={`nav-item ${page === "Settings & Backup" ? "nav-active" : ""}`} onClick={() => navigateToPage("Settings & Backup")}><span className="nav-icon">⚙</span><span>Settings & Backup</span></button>}
           <div className="sidebar-divider" />
           <button className="logout-button" onClick={() => void signOut()}><span>↪</span> Sign out</button>
-          <div className="workspace-note"><span className="workspace-mark">V</span><span><strong>Vanya Construction</strong><small>BuildTrack workspace</small></span><span className="workspace-dots">···</span></div>
         </div>
       </aside>
 

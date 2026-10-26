@@ -57,13 +57,6 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .logout-button { display: flex; width: 100%; height: 36px; align-items: center; gap: 10px; padding: 0 11px; border: 1px solid var(--border); border-radius: 5px; background: #fff; color: #5e5954; cursor: pointer; text-align: left; font-size: 12px; font-weight: 600; }
 .logout-button:hover { border-color: #d6cfc8; background: #faf9f7; }
 .logout-button span { font-size: 17px; }
-.workspace-note { display: flex; align-items: center; gap: 9px; padding: 16px 5px 4px; }
-.workspace-mark { display: grid; width: 29px; height: 29px; flex: 0 0 29px; place-items: center; border: 1px solid #efd4c6; border-radius: 7px; color: var(--orange-dark); font-family: "Manrope", sans-serif; font-weight: 800; }
-.workspace-note > span:nth-child(2) { display: grid; gap: 3px; }
-.workspace-note strong { font-size: 10px; }
-.workspace-note small { color: var(--muted); font-size: 9px; }
-.workspace-dots { margin-left: auto; color: #9b948e; }
-
 .main-shell { min-height: 100vh; margin-left: 248px; }
 .topbar { position: sticky; z-index: 10; top: 0; display: flex; height: 60px; align-items: center; justify-content: space-between; padding: 0 36px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.94); backdrop-filter: blur(12px); }
 .breadcrumb { display: flex; align-items: center; gap: 10px; color: #928b84; font-size: 11px; }
