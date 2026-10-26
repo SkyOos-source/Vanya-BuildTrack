@@ -59,9 +59,9 @@ export const fallbackData: DashboardData = {
     { id: "MAT-04", material: "OPC Cement · 53 grade", project: "Cedar & Stone Café", received: "860 bags", used: "712 bags", stock: "148 bags", lastUpdated: "22 Oct" }
   ],
   attendance: [
-    { id: "ATT-01", project: "Riverside Residence", engineer: "Arjun Mehta", present: "14 / 16", shift: "Full day", status: "Present", evidence: "▧ 2 photos" },
-    { id: "ATT-02", project: "Northstar Office Campus", engineer: "Priya Nair", present: "10 / 12", shift: "Full day", status: "Present", evidence: "▧ 3 photos" },
-    { id: "ATT-03", project: "Gardenia Villas — Phase II", engineer: "Arjun Mehta", present: "—", shift: "—", status: "Not submitted", evidence: "—" }
+    { id: "ATT-01", project: "Riverside Residence", engineer: "Arjun Mehta", present: "14 / 16", shift: "Full day", status: "Present", evidence: "▧ 2 photos", date: "2026-10-25" },
+    { id: "ATT-02", project: "Northstar Office Campus", engineer: "Priya Nair", present: "10 / 12", shift: "Full day", status: "Present", evidence: "▧ 3 photos", date: "2026-10-25" },
+    { id: "ATT-03", project: "Gardenia Villas — Phase II", engineer: "Arjun Mehta", present: "—", shift: "—", status: "Not submitted", evidence: "—", date: "2026-10-25" }
   ],
   feedback: [
     { id: "FDB-01", project: "Riverside Residence", client: "Ananya Rao", rating: 5, comment: "Great communication throughout the project. Arjun keeps us updated every week and the progress photos are really helpful.", date: "21 Oct 2026" }
@@ -118,4 +118,3 @@ export function pageFromPath(pathname: string, role: Role): string {
   const pages = [...navigation[role].map((item) => item.label), ...(role === "Owner" ? ["Settings & Backup"] : [])];
   return pages.find((page) => pageSlug(page) === slug) ?? "Dashboard";
 }
-

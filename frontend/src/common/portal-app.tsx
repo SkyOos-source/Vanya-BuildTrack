@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Backup, DashboardData, Feedback, Quote, Role, RoleId, NotificationItem } from "./types";
+import type { Attendance, AttendanceProof, Backup, DashboardData, Feedback, Quote, Role, RoleId, NotificationItem } from "./types";
 import { fallbackData, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
 import { formatCurrency, initials } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
@@ -197,6 +197,30 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     }
   };
 
+  const submitAttendance = async (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => {
+    try {
+      const response = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engineer: currentUser, action, date, proof })
+      });
+      const result = await response.json() as { record?: Attendance; error?: string };
+      if (!response.ok) throw new Error(result.error || `Attendance submission failed (${response.status})`);
+      const savedRecord = result.record;
+      if (!savedRecord) throw new Error("The attendance service returned no saved record.");
+      setData((current) => ({
+        ...current,
+        attendance: current.attendance.some((record) => record.id === savedRecord.id)
+          ? current.attendance.map((record) => record.id === savedRecord.id ? savedRecord : record)
+          : [savedRecord, ...current.attendance]
+      }));
+      showToast(`${action === "check-in" ? "Check-in" : "Check-out"} recorded with photo and location.`);
+    } catch (error) {
+      console.error("Unable to submit attendance:", error);
+      throw error;
+    }
+  };
+
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -266,6 +290,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
   };
   const pageTitle = page === "Dashboard" ? `${role} Dashboard` : page;
   const featurePageProps = {
+    currentUser,
     data,
     projects: visibleProjects,
     search,
@@ -274,6 +299,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     setFilter,
     onCreate: setModal,
     onQuote: updateQuote,
+    onAttendanceSubmit: submitAttendance,
     onToast: showToast,
     onFeedback: submitFeedback,
     onBackup: requestBackup

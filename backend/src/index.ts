@@ -55,7 +55,8 @@ type Activity = {
   kind: string;
 };
 type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string };
-type Attendance = { id: string; project: string; engineer: string; present: string; shift: string; status: string; evidence: string };
+type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number };
+type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof };
 type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 type DemoRole = "owner" | "employee" | "client";
@@ -101,9 +102,9 @@ const materials: Material[] = [
   { id: "MAT-04", material: "OPC Cement · 53 grade", project: "Cedar & Stone Café", received: "860 bags", used: "712 bags", stock: "148 bags", lastUpdated: "22 Oct" }
 ];
 const attendance: Attendance[] = [
-  { id: "ATT-01", project: "Riverside Residence", engineer: "Arjun Mehta", present: "14 / 16", shift: "Full day", status: "Present", evidence: "▧ 2 photos" },
-  { id: "ATT-02", project: "Northstar Office Campus", engineer: "Priya Nair", present: "10 / 12", shift: "Full day", status: "Present", evidence: "▧ 3 photos" },
-  { id: "ATT-03", project: "Gardenia Villas — Phase II", engineer: "Arjun Mehta", present: "—", shift: "—", status: "Not submitted", evidence: "—" }
+  { id: "ATT-01", project: "Riverside Residence", engineer: "Arjun Mehta", present: "14 / 16", shift: "Full day", status: "Present", evidence: "▧ 2 photos", date: "2026-10-25" },
+  { id: "ATT-02", project: "Northstar Office Campus", engineer: "Priya Nair", present: "10 / 12", shift: "Full day", status: "Present", evidence: "▧ 3 photos", date: "2026-10-25" },
+  { id: "ATT-03", project: "Gardenia Villas — Phase II", engineer: "Arjun Mehta", present: "—", shift: "—", status: "Not submitted", evidence: "—", date: "2026-10-25" }
 ];
 const feedback: Feedback[] = [
   { id: "FDB-01", project: "Riverside Residence", client: "Ananya Rao", rating: 5, comment: "Great communication throughout the project. Arjun keeps us updated every week and the progress photos are really helpful.", date: "21 Oct 2026" }
@@ -119,9 +120,10 @@ let quotationSequence = 1043;
 let expenseSequence = 783;
 let visitSequence = 219;
 let updateSequence = 1;
+let attendanceSequence = 4;
 
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "3mb" }));
 
 app.get("/api/health", (_request, response) => {
   response.json({ status: "ok", data: "mock", database: "not-required" });
@@ -157,6 +159,51 @@ app.post("/api/auth/logout", (_request, response) => {
 
 app.get("/api/dashboard", (_request, response) => {
   response.json({ projects, quotes: quotations, expenses, siteVisits, activities, materials, attendance, feedback, backups });
+});
+
+app.post("/api/attendance", (request, response) => {
+  const engineer = readText(request.body?.engineer);
+  const date = readText(request.body?.date);
+  const action = request.body?.action;
+  const proof = readAttendanceProof(request.body?.proof);
+  if (!engineer || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    (action !== "check-in" && action !== "check-out") || !proof) {
+    response.status(400).json({ error: "Engineer, date, action, photo, and location are required." });
+    return;
+  }
+
+  let record = attendance.find((item) => item.engineer === engineer && item.date === date);
+  if (action === "check-in" && record?.checkIn) {
+    response.status(409).json({ error: "A check-in is already recorded for this site today." });
+    return;
+  }
+  if (action === "check-out" && (!record?.checkIn || record.checkOut)) {
+    response.status(409).json({ error: "Check in before recording a check-out." });
+    return;
+  }
+
+  if (!record) {
+    record = {
+      id: `ATT-${String(attendanceSequence++).padStart(2, "0")}`,
+      engineer,
+      present: "—",
+      shift: "Full day",
+      status: "Checked in",
+      evidence: "Check-in photo",
+      date
+    };
+    attendance.unshift(record);
+  }
+  if (action === "check-in") {
+    record.checkIn = proof;
+    record.status = "Checked in";
+    record.evidence = "Check-in photo";
+  } else {
+    record.checkOut = proof;
+    record.status = "Complete";
+    record.evidence = "Check-in and check-out photos";
+  }
+  response.status(200).json({ record });
 });
 
 app.get("/api/projects", (_request, response) => {
@@ -344,6 +391,28 @@ function readText(value: unknown): string | null {
 function readAmount(value: unknown): number | null {
   const amount = typeof value === "number" ? value : Number(value);
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
+
+function readAttendanceProof(value: unknown): AttendanceProof | null {
+  if (!value || typeof value !== "object") return null;
+  const proof = value as Record<string, unknown>;
+  if (typeof proof.image !== "string" ||
+    !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(proof.image) ||
+    proof.image.length > 2_500_000 ||
+    typeof proof.capturedAt !== "string" ||
+    !Number.isFinite(Date.parse(proof.capturedAt)) ||
+    typeof proof.latitude !== "number" || proof.latitude < -90 || proof.latitude > 90 ||
+    typeof proof.longitude !== "number" || proof.longitude < -180 || proof.longitude > 180 ||
+    typeof proof.accuracy !== "number" || !Number.isFinite(proof.accuracy) || proof.accuracy < 0) {
+    return null;
+  }
+  return {
+    image: proof.image,
+    capturedAt: proof.capturedAt,
+    latitude: proof.latitude,
+    longitude: proof.longitude,
+    accuracy: proof.accuracy
+  };
 }
 
 function isDemoRole(value: unknown): value is DemoRole {
