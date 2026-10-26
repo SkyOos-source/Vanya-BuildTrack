@@ -1,0 +1,27 @@
+export type Role = "Owner" | "Employee" | "Client";
+export type RoleId = "owner" | "employee" | "client";
+export type SessionUser = { name: string; email: string; role: RoleId };
+export type Project = {
+  id: string;
+  name: string;
+  site: string;
+  client: string;
+  engineer: string;
+  status: string;
+  progress: number;
+  budget: number;
+  spent: number;
+  dueDate: string;
+  image: string;
+};
+export type Quote = { id: string; project: string; title: string; client: string; amount: number; date: string; status: string };
+export type Expense = { id: string; project: string; category: string; description: string; amount: number; date: string; submittedBy: string; status: string };
+export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; time: string; status: string };
+export type Activity = { id: string; actor: string; action: string; project: string; time: string; kind: string };
+export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string };
+export type Attendance = { id: string; project: string; engineer: string; present: string; shift: string; status: string; evidence: string };
+export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
+export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
+export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[] };
+export type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };
+
