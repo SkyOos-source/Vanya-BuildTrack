@@ -21,7 +21,21 @@ The Express mock API runs at http://localhost:3001 and the Vite development serv
 | Employee | `employee@vanya.com` | `employee123` |
 | Client | `client@vanya.com` | `client123` |
 
-**Database setup is not required for the current demo.** The mock API returns seeded project data and keeps create/update actions in memory. Demo data resets when the backend restarts. Prisma, the PostgreSQL schema, migrations, and optional Docker Compose service remain in the repository for a future database-backed implementation; they are not used by the demo API.
+**Database setup is not required.** The API stores all workspace records in `backend/data/buildtrack.json` and writes updates to disk, so changes survive backend restarts. Set `BUILDTRACK_DATA_FILE` to use a different JSON file. The file is local runtime data and is ignored by Git. Prisma, the PostgreSQL schema, migrations, and optional Docker Compose service remain available for a future database-backed implementation; they are not used by the demo API.
+
+### Backend architecture
+
+The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns seeded records, sequence recovery, and atomic JSON-file persistence. `backend/src/index.ts` configures Express and registers the generated routes.
+
+Route and OpenAPI generation are configured for the backend. Build generates both automatically; they can also be generated explicitly:
+
+```powershell
+cd backend
+npm run generate
+npm run build
+```
+
+The generated Express bindings are written under `backend/src/generated`, and the OpenAPI document under `backend/openapi`. The TSOA configuration is `backend/tsoa.json`.
 
 ## Available commands
 
@@ -37,16 +51,20 @@ The Express mock API runs at http://localhost:3001 and the Vite development serv
 
 ## Demo API
 
-The dashboard loads projects, quotations, expenses, materials, attendance, site visits, activity, feedback, and backup history from `GET /api/dashboard`.
+The dashboard loads its initial data from `GET /api/dashboard`. Feature pages request their own data from the matching resource endpoint.
 
 - `GET /api/health` — mock API status; no database connection is made.
 - `POST /api/auth/login` and `POST /api/auth/logout` — demo role sign-in and sign-out.
-- `GET` and `POST /api/projects` — list and create demo projects.
-- `POST /api/quotations` and `PATCH /api/quotations/:id` — create and respond to quotations.
-- `GET` and `POST /api/expenses` — list and submit demo expenses.
-- `POST /api/progress` — submit a demo progress update.
-- `GET` and `POST /api/site-visits` — list and schedule demo site visits.
+- `GET`, `POST /api/projects`, `PATCH /api/projects/:id`, and `DELETE /api/projects/:id` — manage projects.
+- `GET`, `POST /api/quotations`, and `PATCH /api/quotations/:id` — manage quotations and client decisions.
+- `GET`, `POST /api/expenses`, and `PATCH /api/expenses/:id` — submit expenses and update review status.
+- `GET` and `POST /api/progress` — list progress updates and submit updates with optional photo attachments.
+- `GET` and `POST /api/materials` — list inventory and log received/used materials.
+- `GET`, `POST /api/site-visits`, and `PATCH /api/site-visits/:id` — schedule visits and mark them complete or cancelled.
+- `GET` and `POST /api/attendance` — retrieve attendance and record photo/location-backed check-in and check-out.
+- `GET`, `POST /api/people`, and `DELETE /api/people/:id` — manage the workspace people list.
 - `GET` and `POST /api/feedback` — list and submit demo client feedback.
-- `POST /api/backups` — request a demo account backup.
+- `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
+- `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 
-These endpoints are an in-memory UI prototype, not production persistence or authentication. The demo sign-in only checks the seeded role-specific credentials and stores the selected user in browser local storage; it is not suitable for production or sensitive data. Restarting the backend resets all demo changes.
+The JSON file is a lightweight local persistence option, not a multi-user database. Demo sign-in checks seeded role credentials and stores the selected user in browser local storage; it is not production authentication and is not suitable for sensitive data or concurrent multi-instance deployments.

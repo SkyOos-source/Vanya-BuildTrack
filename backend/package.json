@@ -4,8 +4,11 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "dev": "npm run routes && tsx watch src/index.ts",
+    "routes": "tsoa routes -c tsoa.json",
+    "spec": "tsoa spec -c tsoa.json",
+    "generate": "npm run spec && npm run routes",
+    "build": "npm run generate && tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -16,7 +19,9 @@
     "@prisma/client": "^6.19.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "reflect-metadata": "^0.2.2",
+    "tsoa": "^7.0.0-alpha.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

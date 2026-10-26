@@ -1,5 +1,5 @@
 import { ProjectCards } from "../../common/components";
-import type { Project } from "../../common/types";
+import type { Project, RecordModalType } from "../../common/types";
 import { formatCurrency } from "../../common/utils";
 
 type OwnerProjectsProps = {
@@ -8,7 +8,7 @@ type OwnerProjectsProps = {
   setSearch: (value: string) => void;
   filter: string;
   setFilter: (value: string) => void;
-  onCreate: (modal: "project" | "quote" | "progress" | "expense" | "visit" | null) => void;
+  onCreate: (modal: RecordModalType | null) => void;
   onToast: (message: string) => void;
 };
 

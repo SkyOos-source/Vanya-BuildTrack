@@ -68,6 +68,13 @@ export const fallbackData: DashboardData = {
   ],
   backups: [
     { id: "BKP-008", status: "Ready to download", requestedAt: "20 Oct 2026", requestedBy: "John Smith" }
+  ],
+  people: [
+    { id: "USR-001", name: "Ananya Rao", role: "Client", project: "Riverside Residence", email: "client@vanya.com" },
+    { id: "USR-002", name: "Northstar Labs", role: "Client", project: "Northstar Office Campus", email: "northstar@example.com" },
+    { id: "USR-003", name: "Arjun Mehta", role: "Site Engineer", project: "2 active sites", email: "employee@vanya.com" },
+    { id: "USR-004", name: "Priya Nair", role: "Site Engineer", project: "Northstar Office Campus", email: "priya@example.com" },
+    { id: "USR-005", name: "Dev Patel", role: "Site Engineer", project: "Cedar & Stone Café", email: "dev@example.com" }
   ]
 };
 

@@ -1,8 +1,8 @@
-import type { DashboardData, Project } from "../../common/types";
+import type { DashboardData, Project, RecordModalType } from "../../common/types";
 import { formatCurrency } from "../../common/utils";
 import { ExpenseRows, ProjectCards, StatCard } from "../../common/components";
 
-export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { data: DashboardData; onNavigate: (page: string) => void; onCreate: (modal: "project" | "quote" | "progress" | "expense" | "visit" | null) => void; onOpenProject: (project: Project) => void }) {
+export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { data: DashboardData; onNavigate: (page: string) => void; onCreate: (modal: RecordModalType | null) => void; onOpenProject: (project: Project) => void }) {
   const totalBudget = data.projects.reduce((sum, item) => sum + item.budget, 0);
   const totalSpent = data.projects.reduce((sum, item) => sum + item.spent, 0);
   const pendingExpenses = data.expenses.filter((item) => item.status === "Pending review").length;
@@ -31,4 +31,3 @@ export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { 
     <button className="floating-demo-action" onClick={() => onCreate("quote")}><span>＋</span> Create quotation</button>
   </>;
 }
-

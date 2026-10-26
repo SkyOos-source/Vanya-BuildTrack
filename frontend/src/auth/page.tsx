@@ -60,10 +60,9 @@ export function SignInPage() {
           {error && <div className="signin-error" role="alert">{error}</div>}
           <button className="button button-primary signin-submit" type="submit" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"} <span>→</span></button>
         </form>
-        <div className="demo-access"><div className="demo-access-heading"><span>DEMO ACCESS</span><span>Pick a role to fill its demo login</span></div><div className="demo-role-list">{(["owner", "employee", "client"] as RoleId[]).map((demoRole) => <button type="button" key={demoRole} className={role === demoRole ? "demo-role-active" : ""} onClick={() => selectDemoRole(demoRole)}><span>{demoCredentials[demoRole].label}</span><span>{demoCredentials[demoRole].email}</span></button>)}</div><small>Demo only · changes reset when the API restarts</small></div>
+        <div className="demo-access"><div className="demo-access-heading"><span>DEMO ACCESS</span><span>Pick a role to fill its demo login</span></div><div className="demo-role-list">{(["owner", "employee", "client"] as RoleId[]).map((demoRole) => <button type="button" key={demoRole} className={role === demoRole ? "demo-role-active" : ""} onClick={() => selectDemoRole(demoRole)}><span>{demoCredentials[demoRole].label}</span><span>{demoCredentials[demoRole].email}</span></button>)}</div><small>Demo sign-in · workspace data is saved in a local JSON file</small></div>
       </div>
     </section>
     <footer className="signin-footer">© 2026 Vanya BuildTrack <span>·</span> Built for the people who build.</footer>
   </main>;
 }
-

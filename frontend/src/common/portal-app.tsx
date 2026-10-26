@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceProof, Backup, DashboardData, Feedback, Quote, Role, RoleId, NotificationItem } from "./types";
+import type { Attendance, AttendanceProof, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, Activity, NotificationItem } from "./types";
 import { fallbackData, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
 import { formatCurrency, initials } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
@@ -32,7 +32,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState("");
-  const [modal, setModal] = useState<"project" | "quote" | "progress" | "expense" | "visit" | null>(null);
+  const [modal, setModal] = useState<RecordModalType | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
@@ -56,6 +56,70 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     void load();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const resources: Record<string, string> = {
+      "Projects & Sites": "/api/projects",
+      "My Sites": "/api/projects",
+      "My Projects": "/api/projects",
+      Materials: "/api/materials",
+      Expenses: "/api/expenses",
+      Quotations: "/api/quotations",
+      Attendance: "/api/attendance",
+      "Progress Updates": "/api/progress",
+      Timeline: "/api/progress",
+      "Site Visits": "/api/site-visits",
+      Feedback: "/api/feedback",
+      People: "/api/people",
+      "Settings & Backup": "/api/backups"
+    };
+    const endpoint = resources[page];
+    if (!endpoint) return;
+    let active = true;
+    const loadPageData = async () => {
+      try {
+        const response = await fetch(endpoint);
+        if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
+        const result: unknown = await response.json();
+        if (!active || !Array.isArray(result)) return;
+        setApiStatus("connected");
+        setData((current) => {
+          switch (page) {
+            case "Projects & Sites":
+            case "My Sites":
+            case "My Projects":
+              return { ...current, projects: result as DashboardData["projects"] };
+            case "Materials":
+              return { ...current, materials: result as DashboardData["materials"] };
+            case "Expenses":
+              return { ...current, expenses: result as DashboardData["expenses"] };
+            case "Quotations":
+              return { ...current, quotes: result as DashboardData["quotes"] };
+            case "Attendance":
+              return { ...current, attendance: result as DashboardData["attendance"] };
+            case "Progress Updates":
+            case "Timeline":
+              return { ...current, activities: [...result as DashboardData["activities"], ...current.activities.filter((item) => item.kind !== "progress")] };
+            case "Site Visits":
+              return { ...current, siteVisits: result as DashboardData["siteVisits"] };
+            case "Feedback":
+              return { ...current, feedback: result as DashboardData["feedback"] };
+            case "People":
+              return { ...current, people: result as DashboardData["people"] };
+            case "Settings & Backup":
+              return { ...current, backups: result as DashboardData["backups"] };
+            default:
+              return current;
+          }
+        });
+      } catch (error) {
+        console.error(`Unable to load ${page} API:`, error);
+        if (active) setApiStatus("offline");
+      }
+    };
+    void loadPageData();
+    return () => { active = false; };
+  }, [page]);
 
   const visibleProjects = useMemo(() => data.projects.filter((project) => {
     const matchesSearch = `${project.name} ${project.site} ${project.client}`.toLowerCase().includes(search.toLowerCase());
@@ -132,53 +196,73 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     window.setTimeout(() => setToast(""), 3200);
   };
 
+  const readFileDataUrl = (file: FormDataEntryValue | null) => {
+    if (!(file instanceof File) || !file.size) return Promise.resolve(undefined);
+    if (file.size > 1_800_000) return Promise.reject(new Error("The attachment must be smaller than 1.8 MB."));
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Could not read the selected attachment."));
+      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Could not read the selected attachment."));
+      reader.readAsDataURL(file);
+    });
+  };
+
   const createRecord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!modal) return;
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
     const amount = Number(form.get("amount") || 0);
-    const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" ? "expenses" : modal === "visit" ? "site-visits" : "progress"}`;
     try {
+      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "person" ? "people" : "progress"}`;
+      const attachment = modal === "expense" || modal === "progress" ? await readFileDataUrl(form.get("attachment")) : undefined;
+      const body = {
+        name,
+        title: name,
+        description: name,
+        amount,
+        project: form.get("project"),
+        engineer: form.get("engineer") || (modal === "project" ? form.get("engineer") : currentUser),
+        date: form.get("date"),
+        site: form.get("site"),
+        client: form.get("client"),
+        budget: Number(form.get("budget") || 0),
+        dueDate: form.get("dueDate"),
+        material: form.get("material"),
+        received: form.get("received"),
+        used: form.get("used"),
+        stock: form.get("stock"),
+        email: form.get("email"),
+        role: form.get("role"),
+        submittedBy: currentUser,
+        attachment
+      };
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          title: name,
-          description: name,
-          amount,
-          project: form.get("project"),
-          engineer: form.get("engineer"),
-          date: form.get("date")
-        })
+        body: JSON.stringify(body)
       });
-      if (!response.ok) throw new Error(`Could not save record (${response.status})`);
-      const result = await response.json() as { record?: { id: string; name?: string; title?: string; project?: string; amount?: number; status?: string } };
+      const result = await response.json() as { record?: Project | Quote | Expense | SiteVisit | Activity | Material | Person; error?: string };
+      if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
-      if (record && modal === "project") {
-        setData((current) => ({ ...current, projects: [{ ...fallbackData.projects[0], id: record.id, name: record.name || name, site: "New project site", client: "Unassigned", engineer: "Unassigned", progress: 0, budget: 0, spent: 0, dueDate: "To be confirmed", image: "photo-1600585154340-be6161a56a0c", status: record.status || "Planning" }, ...current.projects] }));
-      } else if (record && modal === "quote") {
-        setData((current) => ({ ...current, quotes: [{ id: record.id, project: String(form.get("project") || "Riverside Residence"), title: record.title || name, client: "Ananya Rao", amount: record.amount || amount, date: "25 Oct 2026", status: record.status || "Awaiting review" }, ...current.quotes] }));
-      } else if (record && modal === "expense") {
-        setData((current) => ({ ...current, expenses: [{ id: record.id, project: String(form.get("project") || "Riverside Residence"), category: "Other", description: record.name || name, amount: record.amount || amount, date: "25 Oct 2026", submittedBy: role === "Employee" ? currentUser : "John Smith", status: "Pending review" }, ...current.expenses] }));
-      } else if (record && modal === "visit") {
-        setData((current) => ({ ...current, siteVisits: [{ id: record.id, project: String(form.get("project")), site: "Project site", engineer: String(form.get("engineer")), date: String(form.get("date")).slice(0, 10), time: "Scheduled", status: "Scheduled" }, ...current.siteVisits] }));
-      } else if (record && modal === "progress") {
-        setData((current) => ({
-          ...current,
-          activities: [{
-            id: record.id,
-            actor: currentUser,
-            action: `submitted a progress update: ${name}`,
-            project: String(form.get("project")),
-            time: "Just now",
-            kind: "progress"
-          }, ...current.activities]
-        }));
+      if (!record) throw new Error("The API returned no saved record.");
+      if (modal === "project") {
+        setData((current) => ({ ...current, projects: [record as Project, ...current.projects] }));
+      } else if (modal === "quote") {
+        setData((current) => ({ ...current, quotes: [record as Quote, ...current.quotes] }));
+      } else if (modal === "expense") {
+        setData((current) => ({ ...current, expenses: [record as Expense, ...current.expenses] }));
+      } else if (modal === "visit") {
+        setData((current) => ({ ...current, siteVisits: [record as SiteVisit, ...current.siteVisits] }));
+      } else if (modal === "progress") {
+        setData((current) => ({ ...current, activities: [record as Activity, ...current.activities] }));
+      } else if (modal === "material") {
+        setData((current) => ({ ...current, materials: [record as Material, ...current.materials] }));
+      } else if (modal === "person") {
+        setData((current) => ({ ...current, people: [record as Person, ...current.people] }));
       }
       setModal(null);
-      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Expense" : modal === "visit" ? "Site visit" : "Progress update"} saved to the demo API.`);
+      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Expense" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save demo record:", error);
       showToast("Could not save this record. Check the API connection and try again.");
@@ -194,6 +278,53 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     } catch (error) {
       console.error("Unable to update quotation:", error);
       showToast("Could not update quotation. Check the API connection.");
+    }
+  };
+
+  const updateExpense = async (expense: Expense, status: "Approved" | "Declined" | "Paid") => {
+    try {
+      const response = await fetch(`/api/expenses/${expense.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      const result = await response.json() as { record?: Expense; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Expense update failed (${response.status})`);
+      setData((current) => ({ ...current, expenses: current.expenses.map((item) => item.id === expense.id ? result.record! : item) }));
+      showToast(`Expense ${status.toLowerCase()}.`);
+    } catch (error) {
+      console.error("Unable to update expense:", error);
+      showToast(error instanceof Error ? error.message : "Could not update expense.");
+    }
+  };
+
+  const updateVisit = async (visit: SiteVisit, status: "Scheduled" | "Completed" | "Cancelled") => {
+    try {
+      const response = await fetch(`/api/site-visits/${visit.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      const result = await response.json() as { record?: SiteVisit; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Site visit update failed (${response.status})`);
+      setData((current) => ({ ...current, siteVisits: current.siteVisits.map((item) => item.id === visit.id ? result.record! : item) }));
+      showToast(`Site visit marked ${status.toLowerCase()}.`);
+    } catch (error) {
+      console.error("Unable to update site visit:", error);
+      showToast(error instanceof Error ? error.message : "Could not update site visit.");
+    }
+  };
+
+  const removePerson = async (person: Person) => {
+    try {
+      const response = await fetch(`/api/people/${person.id}`, { method: "DELETE" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || `Could not remove ${person.name} (${response.status})`);
+      setData((current) => ({ ...current, people: current.people.filter((item) => item.id !== person.id) }));
+      showToast(`${person.name} removed from the team list.`);
+    } catch (error) {
+      console.error("Unable to remove person:", error);
+      showToast(error instanceof Error ? error.message : "Could not remove this person.");
     }
   };
 
@@ -231,7 +362,8 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         body: JSON.stringify({
           project: form.get("project"),
           comment: form.get("comment"),
-          rating: Number(form.get("rating"))
+          rating: Number(form.get("rating")),
+          client: currentUser
         })
       });
       if (!response.ok) throw new Error(`Feedback request failed (${response.status})`);
@@ -299,6 +431,9 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     setFilter,
     onCreate: setModal,
     onQuote: updateQuote,
+    onExpenseStatus: updateExpense,
+    onVisitStatus: updateVisit,
+    onRemovePerson: removePerson,
     onAttendanceSubmit: submitAttendance,
     onToast: showToast,
     onFeedback: submitFeedback,
@@ -358,7 +493,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
 
           {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
           {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onCreate={setModal} onNavigate={navigateToPage} />}
-          {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} onNavigate={navigateToPage} onQuote={updateQuote} onToast={showToast} />}
+          {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} onQuote={updateQuote} />}
           {page !== "Dashboard" && role === "Owner" && page === "Projects & Sites" && <OwnerProjectsPage {...featurePageProps} />}
           {page !== "Dashboard" && role === "Owner" && page === "Materials" && <OwnerMaterialsPage {...featurePageProps} />}
           {page !== "Dashboard" && !(role === "Owner" && (page === "Projects & Sites" || page === "Materials")) && <FeaturePage {...featurePageProps} page={page} role={role} />}

@@ -1,0 +1,13 @@
+{
+  "entryFile": "src/index.ts",
+  "noImplicitAdditionalProperties": "ignore",
+  "controllerPathGlobs": ["src/features/**/controller.ts"],
+  "routes": {
+    "routesDir": "src/generated",
+    "middleware": "express"
+  },
+  "spec": {
+    "outputDirectory": "openapi",
+    "specVersion": 3
+  }
+}

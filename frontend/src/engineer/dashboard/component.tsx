@@ -1,7 +1,7 @@
-import type { DashboardData } from "../../common/types";
+import type { DashboardData, RecordModalType } from "../../common/types";
 import { ExpenseRows, StatCard } from "../../common/components";
 
-export function EngineerDashboard({ data, currentUser, onCreate, onNavigate }: { data: DashboardData; currentUser: string; onCreate: (modal: "project" | "quote" | "progress" | "expense" | "visit" | null) => void; onNavigate: (page: string) => void }) {
+export function EngineerDashboard({ data, currentUser, onCreate, onNavigate }: { data: DashboardData; currentUser: string; onCreate: (modal: RecordModalType | null) => void; onNavigate: (page: string) => void }) {
   const projects = data.projects.filter((project) => project.engineer === currentUser || project.engineer === "Arjun Mehta");
   return <>
     <div className="welcome-banner"><div className="welcome-copy"><span className="panel-kicker">SUNDAY, OCTOBER 25, 2026</span><h2>Good morning, Arjun <span>☀</span></h2><p>Your sites are moving along. Here’s what needs your attention today.</p></div><div className="weather-pill">⌖ <span><strong>28°C</strong><small>Bengaluru</small></span><span className="weather-sun">☀</span></div></div>
@@ -10,4 +10,3 @@ export function EngineerDashboard({ data, currentUser, onCreate, onNavigate }: {
     <div className="bottom-grid"><section className="panel table-panel"><div className="panel-heading compact"><div><span className="panel-kicker">YOUR SUBMISSIONS</span><h2>Recent expenses</h2></div><button className="text-link" onClick={() => onNavigate("Expenses")}>History ↗</button></div><ExpenseRows expenses={data.expenses.filter((item) => item.submittedBy === currentUser).slice(0, 3)} /></section><section className="panel instructions-panel"><div className="panel-heading compact"><div><span className="panel-kicker">FROM JOHN SMITH · OWNER</span><h2>Site instructions</h2></div><span className="instruction-new">NEW</span></div><div className="instruction-note"><span className="instruction-pin">↳</span><p>Please complete the ground-floor slab inspection before the next concrete pour. Upload the checklist photos once the review is done.</p></div><span className="instruction-time">Riverside Residence · 24 Oct, 4:18 PM</span><button className="text-link instruction-link" onClick={() => onNavigate("Instructions")}>View all instructions ↗</button></section></div>
   </>;
 }
-
