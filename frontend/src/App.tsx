@@ -26,6 +26,7 @@ type Attendance = { id: string; project: string; engineer: string; present: stri
 type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[] };
+type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };
 
 const navigation: Record<Role, { label: string; icon: string }[]> = {
   Owner: [
@@ -267,6 +268,7 @@ function PortalApp({ role, userName }: { role: Role; userName: string }) {
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<"project" | "quote" | "progress" | "expense" | "visit" | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
 
   useEffect(() => {
@@ -294,6 +296,70 @@ function PortalApp({ role, userName }: { role: Role; userName: string }) {
     const matchesFilter = filter === "All" || project.status === filter;
     return matchesSearch && matchesFilter;
   }), [data.projects, filter, search]);
+
+  const notifications = useMemo<NotificationItem[]>(() => {
+    if (role === "Owner") {
+      return [
+        ...data.expenses.filter((expense) => expense.status.toLowerCase().includes("pending")).map((expense) => ({
+          title: "Expense needs review",
+          detail: `${expense.description} · ${formatCurrency(expense.amount)}`,
+          time: expense.date,
+          icon: "＄",
+          page: "Expenses"
+        })),
+        ...data.quotes.filter((quote) => quote.status.toLowerCase().includes("review")).map((quote) => ({
+          title: "Quotation needs review",
+          detail: `${quote.title} · ${quote.project}`,
+          time: quote.date,
+          icon: "▤",
+          page: "Quotations"
+        }))
+      ].slice(0, 8);
+    }
+    if (role === "Employee") {
+      return [
+        ...data.siteVisits.filter((visit) => visit.status === "Scheduled" && visit.engineer === userName).map((visit) => ({
+          title: "Upcoming site visit",
+          detail: `${visit.project} · ${visit.site}`,
+          time: `${visit.date} at ${visit.time}`,
+          icon: "⌖",
+          page: "Site Visits"
+        })),
+        ...data.activities.filter((activity) => activity.kind === "progress").map((activity) => ({
+          title: "Site progress update",
+          detail: `${activity.actor} · ${activity.project}`,
+          time: activity.time,
+          icon: "▥",
+          page: "Progress Updates"
+        }))
+      ].slice(0, 8);
+    }
+    return [
+      ...data.quotes.filter((quote) => quote.status === "Sent to client" || quote.status === "Changes requested").map((quote) => ({
+        title: quote.status === "Sent to client" ? "Quotation ready for review" : "Quotation updated",
+        detail: `${quote.title} · ${quote.project}`,
+        time: quote.date,
+        icon: "▤",
+        page: "Quotations"
+      })),
+      ...data.activities.slice(0, 5).map((activity) => ({
+        title: "Project update",
+        detail: `${activity.action} · ${activity.project}`,
+        time: activity.time,
+        icon: "◷",
+        page: "Timeline"
+      }))
+    ].slice(0, 8);
+  }, [userName, data.activities, data.expenses, data.quotes, data.siteVisits, role]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNotificationsOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [notificationsOpen]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -470,7 +536,7 @@ function PortalApp({ role, userName }: { role: Role; userName: string }) {
             <div className={`api-indicator api-${apiStatus}`} title={apiStatus === "offline" ? "API unavailable — local demo data shown" : "Dashboard API status"}>
               <span />{apiStatus === "connected" ? "Demo API connected" : apiStatus === "offline" ? "Using local preview" : "Connecting"}
             </div>
-            <button className="icon-button notification-button" aria-label="Notifications" onClick={() => showToast("You’re all caught up on notifications.")}>♧<i /></button>
+            <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>♧<i /></button>
             <div className="top-avatar">{initials(currentUser)}</div>
           </div>
         </header>
@@ -494,6 +560,24 @@ function PortalApp({ role, userName }: { role: Role; userName: string }) {
         </div>
       </main>
       {mobileNavOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
+      {notificationsOpen && <>
+        <button className="notification-scrim" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)} />
+        <aside className="notification-drawer" role="dialog" aria-modal="true" aria-labelledby="notification-title">
+          <header className="notification-heading">
+            <div><span className="panel-kicker">{role.toUpperCase()} WORKSPACE</span><h2 id="notification-title">Notifications</h2><p>Updates that need your attention.</p></div>
+            <button className="icon-button notification-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button>
+          </header>
+          {notifications.length > 0
+            ? <div className="notification-list">{notifications.map((item, index) => (
+              <button className="notification-item" key={`${item.title}-${item.detail}-${index}`} onClick={() => { setNotificationsOpen(false); navigateToPage(item.page); }}>
+                <span className="notification-item-icon">{item.icon}</span>
+                <span className="notification-item-copy"><strong>{item.title}</strong><span>{item.detail}</span><small>{item.time}</small></span>
+                <span className="notification-arrow">›</span>
+              </button>
+            ))}</div>
+            : <div className="notification-empty"><span>✓</span><strong>You’re all caught up</strong><p>New updates will appear here.</p></div>}
+        </aside>
+      </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
       {modal && <RecordModal modal={modal} projects={data.projects} onClose={() => setModal(null)} onSubmit={createRecord} />}
     </div>
