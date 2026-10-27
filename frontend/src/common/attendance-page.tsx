@@ -72,16 +72,22 @@ function AttendanceProofCell({ proof, label, onPreview }: { proof?: AttendancePr
 function AttendanceTable({ records, onPreview }: { records: Attendance[]; onPreview: (proof: AttendanceProof, label: string) => void }) {
   if (!records.length) return <div className="inline-empty">No attendance records have been submitted yet.</div>;
   return <div className="data-table-wrap"><table className="data-table attendance-table">
-    <thead><tr><th>Date</th><th>Engineer</th><th>Check-in time</th><th>Check-in photo</th><th>Check-out time</th><th>Check-out photo</th><th>Status</th></tr></thead>
-    <tbody>{records.map((record) => <tr key={record.id}>
-      <td>{record.date ? new Date(`${record.date}T00:00:00`).toLocaleDateString() : "—"}</td>
-      <td>{record.engineer}</td>
-      <td>{record.checkIn ? formatTime(record.checkIn.capturedAt) : "—"}</td>
-      <td><AttendanceProofCell proof={record.checkIn} label={`${record.engineer} check-in`} onPreview={onPreview} /></td>
-      <td>{record.checkOut ? formatTime(record.checkOut.capturedAt) : "—"}</td>
-      <td><AttendanceProofCell proof={record.checkOut} label={`${record.engineer} check-out`} onPreview={onPreview} /></td>
-      <td><StatusBadge status={record.status} /></td>
-    </tr>)}</tbody>
+    <thead><tr><th>Date</th><th>Engineer</th><th>Location</th><th>Check-in time</th><th>Check-in photo</th><th>Check-out time</th><th>Check-out photo</th><th>Status</th></tr></thead>
+    <tbody>{records.map((record) => {
+      const location = record.checkIn ?? record.checkOut;
+      return <tr key={record.id}>
+        <td>{record.date ? new Date(`${record.date}T00:00:00`).toLocaleDateString() : "—"}</td>
+        <td>{record.engineer}</td>
+        <td>{location
+          ? <a className="attendance-location-link" href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`} target="_blank" rel="noreferrer">⌖ View location</a>
+          : <span className="attendance-missing">Not recorded</span>}</td>
+        <td>{record.checkIn ? formatTime(record.checkIn.capturedAt) : "—"}</td>
+        <td><AttendanceProofCell proof={record.checkIn} label={`${record.engineer} check-in`} onPreview={onPreview} /></td>
+        <td>{record.checkOut ? formatTime(record.checkOut.capturedAt) : "—"}</td>
+        <td><AttendanceProofCell proof={record.checkOut} label={`${record.engineer} check-out`} onPreview={onPreview} /></td>
+        <td><StatusBadge status={record.status} /></td>
+      </tr>;
+    })}</tbody>
   </table></div>;
 }
 

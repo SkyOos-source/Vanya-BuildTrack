@@ -1,4 +1,4 @@
-import { nextId, projects, readAmount, readText } from "../../data/store";
+import { nextId, projects, readAmount, readPdfAttachment, readText } from "../../data/store";
 import { quotations } from "./data";
 import { failure, result, today } from "../shared";
 
@@ -8,7 +8,9 @@ export function createQuotation(body: any) {
   const title = readText(body?.title);
   const project = readText(body?.project);
   const amount = readAmount(body?.amount);
+  const attachment = readPdfAttachment(body?.quotationAttachment);
   if (!title || !project || amount === null) return failure(400, "Quotation title, project, and non-negative amount are required.");
+  if (body?.quotationAttachment && !attachment) return failure(400, "Quotation attachment must be a valid PDF file.");
   const quote = {
     id: nextId("quotation"),
     project,
@@ -16,7 +18,8 @@ export function createQuotation(body: any) {
     client: projects.find((item) => item.name === project)?.client ?? "Unassigned",
     amount,
     date: today(),
-    status: "Awaiting review"
+    status: "Awaiting review",
+    ...(attachment ? { attachment } : {})
   };
   quotations.unshift(quote);
   return result({ record: quote }, 201);

@@ -45,12 +45,12 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Quote": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"status":{"dataType":"string","required":true},"date":{"dataType":"string","required":true},"amount":{"dataType":"double","required":true},"client":{"dataType":"string","required":true},"title":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"attachment":{"dataType":"string"},"status":{"dataType":"string","required":true},"date":{"dataType":"string","required":true},"amount":{"dataType":"double","required":true},"client":{"dataType":"string","required":true},"title":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Project": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"image":{"dataType":"string","required":true},"dueDate":{"dataType":"string","required":true},"spent":{"dataType":"double","required":true},"budget":{"dataType":"double","required":true},"progress":{"dataType":"double","required":true},"status":{"dataType":"string","required":true},"engineer":{"dataType":"string","required":true},"client":{"dataType":"string","required":true},"site":{"dataType":"string","required":true},"name":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"image":{"dataType":"string","required":true},"dueDate":{"dataType":"string","required":true},"spent":{"dataType":"double","required":true},"budget":{"dataType":"double","required":true},"quotationAmount":{"dataType":"double"},"progress":{"dataType":"double","required":true},"status":{"dataType":"string","required":true},"engineer":{"dataType":"string","required":true},"client":{"dataType":"string","required":true},"site":{"dataType":"string","required":true},"name":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Activity": {

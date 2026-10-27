@@ -44,6 +44,9 @@
 			},
 			"Quote": {
 				"properties": {
+					"attachment": {
+						"type": "string"
+					},
 					"status": {
 						"type": "string"
 					},
@@ -91,6 +94,10 @@
 						"format": "double"
 					},
 					"budget": {
+						"type": "number",
+						"format": "double"
+					},
+					"quotationAmount": {
 						"type": "number",
 						"format": "double"
 					},

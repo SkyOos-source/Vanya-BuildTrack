@@ -10,6 +10,7 @@ import ClientDashboard from "../client/dashboard/page";
 import { FeaturePage } from "./feature-page";
 import OwnerProjectsPage from "../owner/projects/page";
 import OwnerMaterialsPage from "../owner/material/page";
+import { NotFoundPage } from "./legal-pages";
 
 export function PortalRoute({ role }: { role: RoleId }) {
   const session = readSession();
@@ -19,6 +20,9 @@ export function PortalRoute({ role }: { role: RoleId }) {
   }
   if (session.role !== role) {
     return <Navigate to={rolePath(session.role)} replace />;
+  }
+  if (location.pathname.slice(rolePath(role).length).replace(/^\/+|\/+$/g, "") && pageFromPath(location.pathname, roleName(role)) === "Dashboard") {
+    return <NotFoundPage />;
   }
   return <PortalApp role={roleName(role)} userName={session.name} />;
 }
@@ -38,8 +42,10 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
 
   useEffect(() => {
+    if (page !== "Dashboard") return;
     let active = true;
     const load = async () => {
+      setApiStatus("connecting");
       try {
         const response = await fetch("/api/dashboard");
         if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
@@ -55,7 +61,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     };
     void load();
     return () => { active = false; };
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     const resources: Record<string, string> = {
@@ -216,6 +222,13 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     try {
       const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "person" ? "people" : "progress"}`;
       const attachment = modal === "expense" || modal === "progress" ? await readFileDataUrl(form.get("attachment")) : undefined;
+      const quotationFile = form.get("quotationFile");
+      if (modal === "quote" && quotationFile instanceof File && quotationFile.size > 0) {
+        if (!/\.pdf$/i.test(quotationFile.name) || (quotationFile.type && quotationFile.type !== "application/pdf")) {
+          throw new Error("Quotation upload must be a PDF file.");
+        }
+      }
+      const quotationAttachment = modal === "quote" ? await readFileDataUrl(quotationFile) : undefined;
       const body = {
         name,
         title: name,
@@ -226,6 +239,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         date: form.get("date"),
         site: form.get("site"),
         client: form.get("client"),
+        quotationAmount: Number(form.get("quotationAmount") || 0),
         budget: Number(form.get("budget") || 0),
         dueDate: form.get("dueDate"),
         material: form.get("material"),
@@ -235,7 +249,8 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         email: form.get("email"),
         role: form.get("role"),
         submittedBy: currentUser,
-        attachment
+        attachment,
+        quotationAttachment
       };
       const response = await fetch(endpoint, {
         method: "POST",
@@ -498,7 +513,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
           {page !== "Dashboard" && role === "Owner" && page === "Materials" && <OwnerMaterialsPage {...featurePageProps} />}
           {page !== "Dashboard" && !(role === "Owner" && (page === "Projects & Sites" || page === "Materials")) && <FeaturePage {...featurePageProps} page={page} role={role} />}
 
-          <footer className="footer"><span>© 2026 Vanya BuildTrack</span><span>Built for the people who build.</span><span className="footer-status"><i /> All systems operational</span></footer>
+          <footer className="footer"><span>© 2026 Vanya BuildTrack</span><span>Built for the people who build.</span><nav className="footer-legal" aria-label="Legal"><Link to="/privacy-policy">Privacy</Link><Link to="/data-usage">Data Usage</Link></nav><span className="footer-status"><i /> All systems operational</span></footer>
         </div>
       </main>
       {mobileNavOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
@@ -521,7 +536,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} projects={data.projects} onClose={() => setModal(null)} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} projects={data.projects} people={data.people} onClose={() => setModal(null)} onSubmit={createRecord} />}
     </div>
   );
 }

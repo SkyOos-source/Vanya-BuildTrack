@@ -10,6 +10,7 @@ export type Project = {
   engineer: string;
   status: string;
   progress: number;
+  quotationAmount?: number;
   budget: number;
   spent: number;
   dueDate: string;
@@ -24,6 +25,7 @@ export type Quote = {
   amount: number;
   date: string;
   status: string;
+  attachment?: string;
 };
 
 export type Expense = {
@@ -75,10 +77,10 @@ export const projects: Project[] = [
 ];
 
 export const quotations: Quote[] = [
-  { id: "QT-1042", project: "Riverside Residence", title: "Kitchen island — add-on work", client: "Ananya Rao", amount: 285000, date: "24 Oct 2026", status: "Awaiting review" },
-  { id: "QT-1039", project: "Northstar Office Campus", title: "Foundation & structure", client: "Northstar Labs", amount: 4250000, date: "21 Oct 2026", status: "Sent to client" },
-  { id: "QT-1034", project: "Gardenia Villas — Phase II", title: "Landscape lighting package", client: "Gardenia Estates", amount: 168000, date: "17 Oct 2026", status: "Approved" },
-  { id: "QT-1028", project: "Cedar & Stone Café", title: "Custom steel canopy", client: "Mira Hospitality", amount: 342000, date: "12 Oct 2026", status: "Changes requested" }
+  { id: "QT-1042", project: "Riverside Residence", title: "Kitchen island — add-on work", client: "Ananya Rao", amount: 285000, date: "24 Oct 2026", status: "Awaiting review", attachment: "/sample-quotations/riverside-residence.pdf" },
+  { id: "QT-1039", project: "Northstar Office Campus", title: "Foundation & structure", client: "Northstar Labs", amount: 4250000, date: "21 Oct 2026", status: "Sent to client", attachment: "/sample-quotations/northstar-office-campus.pdf" },
+  { id: "QT-1034", project: "Gardenia Villas — Phase II", title: "Landscape lighting package", client: "Gardenia Estates", amount: 168000, date: "17 Oct 2026", status: "Approved", attachment: "/sample-quotations/gardenia-villas-phase-ii.pdf" },
+  { id: "QT-1028", project: "Cedar & Stone Café", title: "Custom steel canopy", client: "Mira Hospitality", amount: 342000, date: "12 Oct 2026", status: "Changes requested", attachment: "/sample-quotations/cedar-and-stone-cafe.pdf" }
 ];
 
 export const expenses: Expense[] = [
@@ -153,9 +155,10 @@ export function readProject(value: unknown, id: string): Project | null {
   const input = value as Record<string, unknown>;
   const name = readText(input.name);
   const budget = input.budget === undefined ? 0 : readAmount(input.budget);
+  const quotationAmount = input.quotationAmount === undefined ? 0 : readAmount(input.quotationAmount);
   const spent = input.spent === undefined ? 0 : readAmount(input.spent);
   const progress = input.progress === undefined ? 0 : readAmount(input.progress);
-  if (!name || budget === null || spent === null || progress === null || progress > 100) return null;
+  if (!name || quotationAmount === null || budget === null || spent === null || progress === null || progress > 100) return null;
   return {
     id,
     name,
@@ -164,6 +167,7 @@ export function readProject(value: unknown, id: string): Project | null {
     engineer: readText(input.engineer) ?? "Unassigned",
     status: readText(input.status) ?? "Planning",
     progress,
+    quotationAmount,
     budget,
     spent,
     dueDate: readText(input.dueDate) ?? "To be confirmed",
@@ -179,6 +183,17 @@ export function readAttachment(value: unknown): string | null {
     return null;
   }
   return value;
+}
+
+export function readPdfAttachment(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" ||
+    !/^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/.test(value) ||
+    value.length > 2_500_000) {
+    return null;
+  }
+  const contents = Buffer.from(value.slice("data:application/pdf;base64,".length), "base64");
+  return contents.subarray(0, 5).toString("ascii") === "%PDF-" ? value : null;
 }
 
 export function readAttendanceProof(value: unknown): AttendanceProof | null {

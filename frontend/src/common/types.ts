@@ -10,12 +10,13 @@ export type Project = {
   engineer: string;
   status: string;
   progress: number;
+  quotationAmount?: number;
   budget: number;
   spent: number;
   dueDate: string;
   image: string;
 };
-export type Quote = { id: string; project: string; title: string; client: string; amount: number; date: string; status: string };
+export type Quote = { id: string; project: string; title: string; client: string; amount: number; date: string; status: string; attachment?: string };
 export type Expense = { id: string; project: string; category: string; description: string; amount: number; date: string; submittedBy: string; status: string; attachment?: string };
 export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; time: string; status: string };
 export type Activity = { id: string; actor: string; action: string; project: string; time: string; kind: string; description?: string; attachment?: string; createdAt?: string };

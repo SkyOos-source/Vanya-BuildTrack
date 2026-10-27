@@ -10,10 +10,10 @@ export function createPerson(body: any) {
   const project = readText(body?.project);
   const role = body?.role;
   if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-    (role !== "Client" && role !== "Site Engineer") || !project) {
-    return failure(400, "Valid name, email, role, and project are required.");
+    (role !== "Client" && role !== "Site Engineer") || (role === "Client" && !project)) {
+    return failure(400, "Valid name, email, and role are required; clients also need a project.");
   }
-  const person = { id: nextId("person"), name, email, role, project };
+  const person = { id: nextId("person"), name, email, role, project: project ?? "No assigned sites" };
   people.unshift(person);
   return result({ record: person }, 201);
 }
