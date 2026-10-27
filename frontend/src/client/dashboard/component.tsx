@@ -3,8 +3,10 @@ import { formatCurrency } from "../../common/utils";
 import { StatusBadge } from "../../common/components";
 
 export function ClientDashboard({ data, currentUser, onNavigate, onQuote }: { data: DashboardData; currentUser: string; onNavigate: (page: string) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void }) {
-  const project = data.projects.find((item) => item.client === currentUser) ?? data.projects[0];
-  const quote = data.quotes.find((item) => item.client === currentUser && (item.status === "Sent to client" || item.status === "Awaiting review")) ?? data.quotes.find((item) => item.client === currentUser);
+  const assignedProjectName = data.people.find((person) => person.role === "Client" && person.name === currentUser)?.project;
+  const project = data.projects.find((item) => item.client === currentUser || item.name === assignedProjectName);
+  const projectQuotes = data.quotes.filter((item) => item.client === currentUser || item.project === assignedProjectName);
+  const quote = projectQuotes.find((item) => item.status === "Sent to client" || item.status === "Awaiting review") ?? projectQuotes[0];
   const timeline = data.activities.filter((item) => item.project === project?.name && item.kind === "progress");
   const photos = timeline.filter((item) => item.attachment);
   return <>

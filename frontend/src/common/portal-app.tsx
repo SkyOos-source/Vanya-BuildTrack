@@ -238,7 +238,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         engineer: form.get("engineer") || (modal === "project" ? form.get("engineer") : currentUser),
         date: form.get("date"),
         site: form.get("site"),
-        client: form.get("client"),
+        client: modal === "person" && form.get("role") === "Client" ? name : form.get("client"),
         quotationAmount: Number(form.get("quotationAmount") || 0),
         budget: Number(form.get("budget") || 0),
         dueDate: form.get("dueDate"),
@@ -248,6 +248,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         stock: form.get("stock"),
         email: form.get("email"),
         role: form.get("role"),
+        password: form.get("password"),
         submittedBy: currentUser,
         attachment,
         quotationAttachment
@@ -275,12 +276,20 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         setData((current) => ({ ...current, materials: [record as Material, ...current.materials] }));
       } else if (modal === "person") {
         setData((current) => ({ ...current, people: [record as Person, ...current.people] }));
+        if ((record as Person).role === "Client") {
+          setData((current) => ({
+            ...current,
+            projects: current.projects.map((project) => project.name === (record as Person).project
+              ? { ...project, client: (record as Person).name }
+              : project)
+          }));
+        }
       }
       setModal(null);
       showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Expense" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save demo record:", error);
-      showToast("Could not save this record. Check the API connection and try again.");
+      showToast(error instanceof Error ? error.message : "Could not save this record.");
     }
   };
 
@@ -367,6 +376,26 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     }
   };
 
+  const regularizeAttendance = async (record: Attendance, capturedAt: string, reason: string) => {
+    try {
+      const response = await fetch(`/api/attendance/${record.id}/regularize`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ capturedAt: new Date(capturedAt).toISOString(), reason, regularizedBy: currentUser })
+      });
+      const result = await response.json() as { record?: Attendance; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Attendance regularization failed (${response.status}).`);
+      setData((current) => ({
+        ...current,
+        attendance: current.attendance.map((item) => item.id === result.record!.id ? result.record! : item)
+      }));
+      showToast(`Attendance for ${record.engineer} regularized as Present.`);
+    } catch (error) {
+      console.error("Unable to regularize attendance:", error);
+      throw error instanceof Error ? error : new Error("Could not regularize attendance.");
+    }
+  };
+
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -450,6 +479,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     onVisitStatus: updateVisit,
     onRemovePerson: removePerson,
     onAttendanceSubmit: submitAttendance,
+    onAttendanceRegularize: regularizeAttendance,
     onToast: showToast,
     onFeedback: submitFeedback,
     onBackup: requestBackup
