@@ -61,10 +61,10 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET` and `POST /api/progress` — list progress updates and submit updates with optional photo attachments.
 - `GET` and `POST /api/materials` — list inventory and log received/used materials.
 - `GET`, `POST /api/site-visits`, and `PATCH /api/site-visits/:id` — schedule visits and mark them complete or cancelled.
-- `GET` and `POST /api/attendance` — retrieve attendance and record photo/location-backed check-in and check-out.
-- `GET`, `POST /api/people`, and `DELETE /api/people/:id` — manage the workspace people list.
+- `GET` and `POST /api/attendance` — retrieve attendance and record photo/location-backed check-in and check-out; an unfinished check-in becomes absent 24 hours after check-in, and a late employee check-out is rejected. `PATCH /api/attendance/:id/regularize` lets an owner enter the actual check-out time and reason for a missed check-out. `/api/attendance/leaves` supports listing, adding, and deleting owner-managed leave dates. Sundays and scheduled leave dates are treated as non-working days, not absences.
+- `GET`, `POST /api/people`, and `DELETE /api/people/:id` — manage the workspace people list; new site engineers receive login credentials set by the owner.
 - `GET` and `POST /api/feedback` — list and submit demo client feedback.
 - `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
 - `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 
-The JSON file is a lightweight local persistence option, not a multi-user database. Demo sign-in checks seeded role credentials and stores the selected user in browser local storage; it is not production authentication and is not suitable for sensitive data or concurrent multi-instance deployments.
+The JSON file is a lightweight local persistence option, not a multi-user database. Demo sign-in supports the seeded role credentials and credentials set when an owner adds a site engineer or client. Invited employee and client passwords are stored as salted hashes in the local JSON file. Sign-in stores the selected user in browser local storage; this is not production authentication and is not suitable for sensitive data or concurrent multi-instance deployments.

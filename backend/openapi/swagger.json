@@ -350,8 +350,34 @@
 				],
 				"type": "object"
 			},
+			"AttendanceRegularization": {
+				"properties": {
+					"regularizedAt": {
+						"type": "string"
+					},
+					"regularizedBy": {
+						"type": "string"
+					},
+					"reason": {
+						"type": "string"
+					},
+					"capturedAt": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"regularizedAt",
+					"regularizedBy",
+					"reason",
+					"capturedAt"
+				],
+				"type": "object"
+			},
 			"Attendance": {
 				"properties": {
+					"checkoutRegularization": {
+						"$ref": "#/components/schemas/AttendanceRegularization"
+					},
 					"checkOut": {
 						"$ref": "#/components/schemas/AttendanceProof"
 					},
@@ -412,6 +438,25 @@
 					"requestedBy",
 					"requestedAt",
 					"status",
+					"id"
+				],
+				"type": "object"
+			},
+			"AttendanceLeave": {
+				"properties": {
+					"date": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"date",
+					"title",
 					"id"
 				],
 				"type": "object"
@@ -1251,7 +1296,50 @@
 							"application/json": {
 								"schema": {
 									"items": {
-										"$ref": "#/components/schemas/Attendance"
+										"properties": {
+											"checkoutRegularization": {
+												"$ref": "#/components/schemas/AttendanceRegularization"
+											},
+											"checkOut": {
+												"$ref": "#/components/schemas/AttendanceProof"
+											},
+											"checkIn": {
+												"$ref": "#/components/schemas/AttendanceProof"
+											},
+											"date": {
+												"type": "string"
+											},
+											"evidence": {
+												"type": "string"
+											},
+											"shift": {
+												"type": "string"
+											},
+											"present": {
+												"type": "string"
+											},
+											"engineer": {
+												"type": "string"
+											},
+											"project": {
+												"type": "string"
+											},
+											"id": {
+												"type": "string"
+											},
+											"status": {
+												"type": "string"
+											}
+										},
+										"required": [
+											"evidence",
+											"shift",
+											"present",
+											"engineer",
+											"id",
+											"status"
+										],
+										"type": "object"
 									},
 									"type": "array"
 								}
@@ -1276,6 +1364,111 @@
 				},
 				"security": [],
 				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/attendance/leaves": {
+			"get": {
+				"operationId": "ListLeaves",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/AttendanceLeave"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "CreateLeave",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/attendance/leaves/{id}": {
+			"delete": {
+				"operationId": "DeleteLeave",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/api/attendance/{id}/regularize": {
+			"patch": {
+				"operationId": "Regularize",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {

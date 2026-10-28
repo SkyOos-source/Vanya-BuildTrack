@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 
 
@@ -63,10 +64,13 @@ export type Activity = {
 };
 export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string };
 export type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number };
-export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof };
+export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
+export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
+export type AttendanceLeave = { id: string; title: string; date: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string };
+export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
 export type DemoRole = "owner" | "employee" | "client";
 
 export const projects: Project[] = [
@@ -112,8 +116,9 @@ export const materials: Material[] = [
 export const attendance: Attendance[] = [
   { id: "ATT-01", project: "Riverside Residence", engineer: "Arjun Mehta", present: "14 / 16", shift: "Full day", status: "Present", evidence: "▧ 2 photos", date: "2026-10-25" },
   { id: "ATT-02", project: "Northstar Office Campus", engineer: "Priya Nair", present: "10 / 12", shift: "Full day", status: "Present", evidence: "▧ 3 photos", date: "2026-10-25" },
-  { id: "ATT-03", project: "Gardenia Villas — Phase II", engineer: "Arjun Mehta", present: "—", shift: "—", status: "Not submitted", evidence: "—", date: "2026-10-25" }
+  { id: "ATT-03", project: "Gardenia Villas — Phase II", engineer: "Arjun Mehta", present: "—", shift: "—", status: "Weekly Off", evidence: "—", date: "2026-10-25" }
 ];
+export const attendanceLeaves: AttendanceLeave[] = [];
 export const feedback: Feedback[] = [
   { id: "FDB-01", project: "Riverside Residence", client: "Ananya Rao", rating: 5, comment: "Great communication throughout the project. Arjun keeps us updated every week and the progress photos are really helpful.", date: "21 Oct 2026" }
 ];
@@ -128,8 +133,10 @@ export const people: Person[] = [
   { id: "USR-005", name: "Dev Patel", role: "Site Engineer", project: "Cedar & Stone Café", email: "dev@example.com" }
 ];
 
+export const employeeCredentials: EmployeeCredential[] = [];
+export const clientCredentials: EmployeeCredential[] = [];
 
-export const store = { projects, quotations, expenses, siteVisits, activities, materials, attendance, feedback, backups, people };
+export const store = { projects, quotations, expenses, siteVisits, activities, materials, attendance, attendanceLeaves, feedback, backups, people };
 let projectSequence = 25;
 let quotationSequence = 1043;
 let expenseSequence = 783;
@@ -246,9 +253,12 @@ function loadStore() {
   restore(activities, "activities");
   restore(materials, "materials");
   restore(attendance, "attendance");
+  restore(attendanceLeaves, "attendanceLeaves");
   restore(feedback, "feedback");
   restore(backups, "backups");
   restore(people, "people");
+  restore(employeeCredentials, "employeeCredentials");
+  restore(clientCredentials, "clientCredentials");
   projectSequence = nextSequence(projects, "PRJ-", projectSequence);
   quotationSequence = nextSequence(quotations, "QT-", quotationSequence);
   expenseSequence = nextSequence(expenses, "EXP-", expenseSequence);
@@ -270,10 +280,53 @@ export function nextSequence(records: Array<{ id: string }>, prefix: string, fal
 export function saveStore() {
   mkdirSync(path.dirname(dataFile), { recursive: true });
   const temporaryFile = `${dataFile}.tmp`;
-  writeFileSync(temporaryFile, JSON.stringify(store, null, 2), "utf8");
+  writeFileSync(temporaryFile, JSON.stringify({ ...store, employeeCredentials, clientCredentials }, null, 2), "utf8");
   renameSync(temporaryFile, dataFile);
 }
 
+export function createEmployeeCredential(email: string, password: string) {
+  const salt = randomBytes(16).toString("hex");
+  employeeCredentials.push({ email, salt, passwordHash: scryptSync(password, salt, 64).toString("hex") });
+}
+
+export function verifyEmployeeCredential(email: string, password: string) {
+  const credential = employeeCredentials.find((item) => item.email === email);
+  if (!credential) return false;
+  const actual = scryptSync(password, credential.salt, 64);
+  const expected = Buffer.from(credential.passwordHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function deleteEmployeeCredential(email: string) {
+  const index = employeeCredentials.findIndex((item) => item.email === email);
+  if (index >= 0) employeeCredentials.splice(index, 1);
+}
+
+export function createClientCredential(email: string, password: string) {
+  const salt = randomBytes(16).toString("hex");
+  clientCredentials.push({ email, salt, passwordHash: scryptSync(password, salt, 64).toString("hex") });
+}
+
+export function verifyClientCredential(email: string, password: string) {
+  const credential = clientCredentials.find((item) => item.email === email);
+  if (!credential) return false;
+  const actual = scryptSync(password, credential.salt, 64);
+  const expected = Buffer.from(credential.passwordHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function deleteClientCredential(email: string) {
+  const index = clientCredentials.findIndex((item) => item.email === email);
+  if (index >= 0) clientCredentials.splice(index, 1);
+}
+
+export function nextAttendanceLeaveId() {
+  const sequence = attendanceLeaves.reduce((max, leave) => {
+    const number = Number(leave.id.replace("LEV-", ""));
+    return Number.isFinite(number) ? Math.max(max, number) : max;
+  }, 0) + 1;
+  return `LEV-${String(sequence).padStart(3, "0")}`;
+}
 
 export function nextId(kind: string): string {
   const values: Record<string, { prefix: string; next: () => number }> = {
