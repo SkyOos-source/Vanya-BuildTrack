@@ -62,7 +62,8 @@ export type Activity = {
   attachment?: string;
   createdAt?: string;
 };
-export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string };
+export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };
+export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string };
 export type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number };
 export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
 export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
@@ -70,6 +71,7 @@ export type AttendanceLeave = { id: string; title: string; date: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string };
+export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: DemoRole; userName: string };
 export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
 export type DemoRole = "owner" | "employee" | "client";
 
@@ -113,6 +115,7 @@ export const materials: Material[] = [
   { id: "MAT-03", material: "Red clay bricks", project: "Gardenia Villas — Phase II", received: "24,000 pcs", used: "18,500 pcs", stock: "5,500 pcs", lastUpdated: "Yesterday" },
   { id: "MAT-04", material: "OPC Cement · 53 grade", project: "Cedar & Stone Café", received: "860 bags", used: "712 bags", stock: "148 bags", lastUpdated: "22 Oct" }
 ];
+export const materialRequests: MaterialRequest[] = [];
 export const attendance: Attendance[] = [
   { id: "ATT-01", project: "Riverside Residence", engineer: "Arjun Mehta", present: "14 / 16", shift: "Full day", status: "Present", evidence: "▧ 2 photos", date: "2026-10-25" },
   { id: "ATT-02", project: "Northstar Office Campus", engineer: "Priya Nair", present: "10 / 12", shift: "Full day", status: "Present", evidence: "▧ 3 photos", date: "2026-10-25" },
@@ -135,8 +138,9 @@ export const people: Person[] = [
 
 export const employeeCredentials: EmployeeCredential[] = [];
 export const clientCredentials: EmployeeCredential[] = [];
+export const pushSubscriptions: PushSubscriptionRecord[] = [];
 
-export const store = { projects, quotations, expenses, siteVisits, activities, materials, attendance, attendanceLeaves, feedback, backups, people };
+export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, feedback, backups, people, pushSubscriptions };
 let projectSequence = 25;
 let quotationSequence = 1043;
 let expenseSequence = 783;
@@ -144,6 +148,7 @@ let visitSequence = 219;
 let updateSequence = 1;
 let attendanceSequence = 4;
 let materialSequence = 5;
+let materialRequestSequence = 1;
 let personSequence = 6;
 const dataDirectory = path.resolve(__dirname, "..", "..", "data");
 const dataFile = process.env.BUILDTRACK_DATA_FILE || path.join(dataDirectory, "buildtrack.json");
@@ -252,6 +257,7 @@ function loadStore() {
   restore(siteVisits, "siteVisits");
   restore(activities, "activities");
   restore(materials, "materials");
+  restore(materialRequests, "materialRequests");
   restore(attendance, "attendance");
   restore(attendanceLeaves, "attendanceLeaves");
   restore(feedback, "feedback");
@@ -259,12 +265,14 @@ function loadStore() {
   restore(people, "people");
   restore(employeeCredentials, "employeeCredentials");
   restore(clientCredentials, "clientCredentials");
+  restore(pushSubscriptions, "pushSubscriptions");
   projectSequence = nextSequence(projects, "PRJ-", projectSequence);
   quotationSequence = nextSequence(quotations, "QT-", quotationSequence);
   expenseSequence = nextSequence(expenses, "EXP-", expenseSequence);
   visitSequence = nextSequence(siteVisits, "VIS-", visitSequence);
   attendanceSequence = nextSequence(attendance, "ATT-", attendanceSequence);
   materialSequence = nextSequence(materials, "MAT-", materialSequence);
+  materialRequestSequence = nextSequence(materialRequests, "MREQ-", materialRequestSequence);
   personSequence = nextSequence(people, "USR-", personSequence);
   updateSequence = nextSequence(activities, "UPD-", updateSequence);
 }
@@ -337,6 +345,7 @@ export function nextId(kind: string): string {
     progress: { prefix: "UPD-", next: () => updateSequence++ },
     attendance: { prefix: "ATT-", next: () => attendanceSequence++ },
     material: { prefix: "MAT-", next: () => materialSequence++ },
+    "material-request": { prefix: "MREQ-", next: () => materialRequestSequence++ },
     person: { prefix: "USR-", next: () => personSequence++ }
   };
   const sequence = values[kind];

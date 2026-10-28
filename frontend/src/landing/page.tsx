@@ -1,7 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { BuildingIcon } from "../common/components";
+import { readSession, rolePath } from "../common/data";
 
 export function LandingPage() {
+  const session = readSession();
+  if (session) return <Navigate to={rolePath(session.role)} replace />;
+
   return <main className="landing-page">
     <header className="landing-nav">
       <Link className="brand landing-brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>BuildTrack</strong><small>Construction Manager</small></span></Link>

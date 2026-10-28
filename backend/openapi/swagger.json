@@ -212,6 +212,9 @@
 			},
 			"Material": {
 				"properties": {
+					"submittedBy": {
+						"type": "string"
+					},
 					"lastUpdated": {
 						"type": "string"
 					},
@@ -239,6 +242,44 @@
 					"stock",
 					"used",
 					"received",
+					"project",
+					"material",
+					"id"
+				],
+				"type": "object"
+			},
+			"MaterialRequest": {
+				"properties": {
+					"status": {
+						"type": "string"
+					},
+					"requestedAt": {
+						"type": "string"
+					},
+					"note": {
+						"type": "string"
+					},
+					"requestedBy": {
+						"type": "string"
+					},
+					"quantity": {
+						"type": "string"
+					},
+					"project": {
+						"type": "string"
+					},
+					"material": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
+					"requestedAt",
+					"requestedBy",
+					"quantity",
 					"project",
 					"material",
 					"id"
@@ -918,6 +959,51 @@
 				}
 			}
 		},
+		"/api/material-requests": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/MaterialRequest"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/health": {
 			"get": {
 				"operationId": "Get",
@@ -1111,6 +1197,12 @@
 											},
 											"type": "array"
 										},
+										"materialRequests": {
+											"items": {
+												"$ref": "#/components/schemas/MaterialRequest"
+											},
+											"type": "array"
+										},
 										"materials": {
 											"items": {
 												"$ref": "#/components/schemas/Material"
@@ -1153,6 +1245,7 @@
 										"backups",
 										"feedback",
 										"attendance",
+										"materialRequests",
 										"materials",
 										"activities",
 										"siteVisits",

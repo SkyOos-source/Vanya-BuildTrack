@@ -18,6 +18,8 @@ import { PeopleController } from './../features/people/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { MaterialsController } from './../features/materials/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { MaterialRequestsController } from './../features/materials/controller';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { HealthController } from './../features/health/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { FeedbackController } from './../features/feedback/controller';
@@ -65,7 +67,12 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Material": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"lastUpdated":{"dataType":"string","required":true},"stock":{"dataType":"string","required":true},"used":{"dataType":"string","required":true},"received":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"submittedBy":{"dataType":"string"},"lastUpdated":{"dataType":"string","required":true},"stock":{"dataType":"string","required":true},"used":{"dataType":"string","required":true},"received":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "MaterialRequest": {
+        "dataType": "refAlias",
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"status":{"dataType":"string","required":true},"requestedAt":{"dataType":"string","required":true},"note":{"dataType":"string"},"requestedBy":{"dataType":"string","required":true},"quantity":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Feedback": {
@@ -643,6 +650,65 @@ export function RegisterRoutes(app: Router) {
                 validatedArgs = templateService.getValidatedArgs({ args: argsMaterialsController_create, request, response });
 
                 const controller = new MaterialsController();
+
+              await templateService.apiHandler({
+                methodName: 'create',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsMaterialRequestsController_list: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        app.get('/api/material-requests',
+            ...(fetchMiddlewares<RequestHandler>(MaterialRequestsController)),
+            ...(fetchMiddlewares<RequestHandler>(MaterialRequestsController.prototype.list)),
+
+            async function MaterialRequestsController_list(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsMaterialRequestsController_list, request, response });
+
+                const controller = new MaterialRequestsController();
+
+              await templateService.apiHandler({
+                methodName: 'list',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsMaterialRequestsController_create: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.post('/api/material-requests',
+            ...(fetchMiddlewares<RequestHandler>(MaterialRequestsController)),
+            ...(fetchMiddlewares<RequestHandler>(MaterialRequestsController.prototype.create)),
+
+            async function MaterialRequestsController_create(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsMaterialRequestsController_create, request, response });
+
+                const controller = new MaterialRequestsController();
 
               await templateService.apiHandler({
                 methodName: 'create',

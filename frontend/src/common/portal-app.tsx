@@ -12,6 +12,17 @@ import OwnerProjectsPage from "../owner/projects/page";
 import OwnerMaterialsPage from "../owner/material/page";
 import { NotFoundPage } from "./legal-pages";
 
+type PushStatus = "checking" | "ready" | "enabled" | "unsupported" | "unconfigured" | "denied" | "error";
+
+function decodeVapidPublicKey(value: string): ArrayBuffer {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64 + "=".repeat((4 - base64.length % 4) % 4));
+  const buffer = new ArrayBuffer(raw.length);
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
+  return buffer;
+}
+
 export function PortalRoute({ role }: { role: RoleId }) {
   const session = readSession();
   const location = useLocation();
@@ -39,7 +50,107 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
   const [modal, setModal] = useState<RecordModalType | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [pushStatus, setPushStatus] = useState<PushStatus>("checking");
+  const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
+
+  useEffect(() => {
+    let active = true;
+    const checkPushSubscription = async () => {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        setPushStatus("unsupported");
+        return;
+      }
+      try {
+        const response = await fetch("/api/push/config");
+        if (!response.ok) throw new Error(`Push configuration request failed (${response.status})`);
+        const config = await response.json() as { enabled?: boolean; publicKey?: string | null };
+        if (!config.enabled || !config.publicKey) {
+          if (active) setPushStatus("unconfigured");
+          return;
+        }
+        if (active) setPushPublicKey(config.publicKey);
+        if (Notification.permission === "denied") {
+          if (active) setPushStatus("denied");
+          return;
+        }
+        const registration = await navigator.serviceWorker.register("/service-worker.js", { updateViaCache: "none" });
+        await registration.update();
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription && Notification.permission === "granted") {
+          const saveResponse = await fetch("/api/push/subscriptions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subscription: subscription.toJSON(), role: roleId(role), userName })
+          });
+          if (!saveResponse.ok) throw new Error(`Push subscription sync failed (${saveResponse.status})`);
+          if (active) setPushStatus("enabled");
+        } else if (active) {
+          setPushStatus("ready");
+        }
+      } catch (error) {
+        console.error("Unable to initialize browser push notifications:", error);
+        if (active) setPushStatus("error");
+      }
+    };
+    void checkPushSubscription();
+    return () => { active = false; };
+  }, [role, userName]);
+
+  const togglePushNotifications = async () => {
+    if (pushStatus === "enabled") {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) {
+          const response = await fetch("/api/push/subscriptions", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: subscription.endpoint })
+          });
+          if (!response.ok) throw new Error(`Push unsubscribe request failed (${response.status})`);
+          await subscription.unsubscribe();
+        }
+        setPushStatus("ready");
+      } catch (error) {
+        console.error("Unable to disable browser push notifications:", error);
+        setPushStatus("error");
+        showToast(error instanceof Error ? error.message : "Could not disable browser notifications.");
+      }
+      return;
+    }
+    if (!pushPublicKey) return;
+    try {
+      setPushStatus("checking");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushStatus(permission === "denied" ? "denied" : "ready");
+        return;
+      }
+      const registration = await navigator.serviceWorker.register("/service-worker.js", { updateViaCache: "none" });
+      await registration.update();
+      const subscription = await registration.pushManager.getSubscription() ??
+        await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: decodeVapidPublicKey(pushPublicKey)
+        });
+      const response = await fetch("/api/push/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subscription.toJSON(), role: roleId(role), userName })
+      });
+      if (!response.ok) {
+        const result = await response.json() as { error?: string };
+        throw new Error(result.error || `Push subscription failed (${response.status})`);
+      }
+      setPushStatus("enabled");
+      showToast("Browser push notifications are enabled.");
+    } catch (error) {
+      console.error("Unable to enable browser push notifications:", error);
+      setPushStatus("error");
+      showToast(error instanceof Error ? error.message : "Could not enable browser notifications.");
+    }
+  };
 
   useEffect(() => {
     if (page !== "Dashboard") return;
@@ -60,6 +171,82 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
       }
     };
     void load();
+    return () => { active = false; };
+  }, [page]);
+
+  useEffect(() => {
+    if (role === "Employee") return;
+    const events = new EventSource("/api/events");
+    events.onmessage = (event) => {
+      let resource: unknown;
+      try {
+        resource = (JSON.parse(event.data) as { resource?: unknown }).resource;
+      } catch (error) {
+        console.error("Unable to parse a real-time workspace update:", error);
+        return;
+      }
+      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress") {
+        console.error("Received an unsupported real-time workspace update:", resource);
+        return;
+      }
+      if (role === "Client" && resource !== "progress") return;
+      void (async () => {
+        try {
+          if (resource === "progress") {
+            const response = await fetch("/api/progress");
+            if (!response.ok) throw new Error(`Progress refresh failed (${response.status})`);
+            const activities = await response.json() as DashboardData["activities"];
+            if (!Array.isArray(activities)) throw new Error("Progress refresh returned invalid data.");
+            const clientProjectNames = data.projects.filter((project) => project.client === userName).map((project) => project.name);
+            const assignedClientProject = data.people.find((person) => person.role === "Client" && person.name === userName)?.project;
+            const visibleActivities = role === "Client"
+              ? activities.filter((activity) => clientProjectNames.includes(activity.project) || activity.project === assignedClientProject)
+              : activities;
+            setData((current) => ({ ...current, activities: visibleActivities }));
+            setApiStatus("connected");
+            return;
+          }
+          const endpoint = resource === "materialRequests" ? "/api/material-requests" : `/api/${resource}`;
+          const response = await fetch(endpoint);
+          if (!response.ok) throw new Error(`${resource} refresh failed (${response.status})`);
+          const records = await response.json() as DashboardData[typeof resource];
+          if (!Array.isArray(records)) throw new Error(`${resource} refresh returned invalid data.`);
+          if (resource === "materials") {
+            setData((current) => ({ ...current, materials: records as DashboardData["materials"] }));
+          } else if (resource === "materialRequests") {
+            setData((current) => ({ ...current, materialRequests: records as DashboardData["materialRequests"] }));
+          } else {
+            setData((current) => ({ ...current, expenses: records as DashboardData["expenses"] }));
+          }
+          setApiStatus("connected");
+        } catch (error) {
+          console.error(`Unable to refresh ${resource} after a real-time update:`, error);
+          setApiStatus("offline");
+        }
+      })();
+    };
+    events.onerror = () => {
+      console.error("Real-time workspace connection interrupted; the browser will retry automatically.");
+    };
+    return () => events.close();
+  }, [data.people, data.projects, role, userName]);
+
+  useEffect(() => {
+    if (page !== "Materials") return;
+    let active = true;
+    const loadMaterialRequests = async () => {
+      try {
+        const response = await fetch("/api/material-requests");
+        if (!response.ok) throw new Error(`Material request list failed (${response.status})`);
+        const requests: DashboardData["materialRequests"] = await response.json();
+        if (!Array.isArray(requests)) throw new Error("Material request list returned invalid data.");
+        if (active) setData((current) => ({ ...current, materialRequests: requests }));
+      } catch (error) {
+        console.error("Unable to load material requests:", error);
+        if (active) setApiStatus("offline");
+      }
+    };
+    void loadMaterialRequests();
     return () => { active = false; };
   }, [page]);
 
@@ -136,12 +323,33 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
   const notifications = useMemo<NotificationItem[]>(() => {
     if (role === "Owner") {
       return [
+        ...data.activities.filter((activity) => activity.kind === "progress").map((activity) => ({
+          title: "Work update received",
+          detail: `${activity.actor} · ${activity.project} · ${activity.description || activity.action}`,
+          time: activity.time,
+          icon: "▥",
+          page: "Progress Updates"
+        })),
         ...data.expenses.filter((expense) => expense.status.toLowerCase().includes("pending")).map((expense) => ({
           title: "Expense needs review",
           detail: `${expense.description} · ${formatCurrency(expense.amount)}`,
           time: expense.date,
           icon: "＄",
           page: "Expenses"
+        })),
+        ...data.materials.filter((material) => material.submittedBy && material.submittedBy !== userName).map((material) => ({
+          title: "Material update from engineer",
+          detail: `${material.material} · ${material.project} · ${material.submittedBy}`,
+          time: material.lastUpdated,
+          icon: "◈",
+          page: "Materials"
+        })),
+        ...data.materialRequests.filter((request) => request.status === "Pending review").map((request) => ({
+          title: "Material request needs review",
+          detail: `${request.material} · ${request.quantity} · ${request.project} · ${request.requestedBy}`,
+          time: request.requestedAt,
+          icon: "◈",
+          page: "Materials"
         })),
         ...data.quotes.filter((quote) => quote.status.toLowerCase().includes("review")).map((quote) => ({
           title: "Quotation needs review",
@@ -161,7 +369,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
           icon: "⌖",
           page: "Site Visits"
         })),
-        ...data.activities.filter((activity) => activity.kind === "progress").map((activity) => ({
+        ...data.activities.filter((activity) => activity.kind === "progress" && activity.actor === userName).map((activity) => ({
           title: "Site progress update",
           detail: `${activity.actor} · ${activity.project}`,
           time: activity.time,
@@ -170,23 +378,27 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         }))
       ].slice(0, 8);
     }
+    const clientProjectNames = new Set([
+      ...data.projects.filter((project) => project.client === userName).map((project) => project.name),
+      ...data.people.filter((person) => person.role === "Client" && person.name === userName).map((person) => person.project)
+    ]);
     return [
-      ...data.quotes.filter((quote) => quote.status === "Sent to client" || quote.status === "Changes requested").map((quote) => ({
+      ...data.activities.filter((activity) => clientProjectNames.has(activity.project)).map((activity) => ({
+        title: activity.kind === "progress" ? "Work update from your project" : "Project update",
+        detail: `${activity.actor} · ${activity.project} · ${activity.description || activity.action}`,
+        time: activity.time,
+        icon: activity.kind === "progress" ? "▥" : "◷",
+        page: "Timeline"
+      })),
+      ...data.quotes.filter((quote) => (quote.client === userName || clientProjectNames.has(quote.project)) && (quote.status === "Sent to client" || quote.status === "Changes requested")).map((quote) => ({
         title: quote.status === "Sent to client" ? "Quotation ready for review" : "Quotation updated",
         detail: `${quote.title} · ${quote.project}`,
         time: quote.date,
         icon: "▤",
         page: "Quotations"
       })),
-      ...data.activities.slice(0, 5).map((activity) => ({
-        title: "Project update",
-        detail: `${activity.action} · ${activity.project}`,
-        time: activity.time,
-        icon: "◷",
-        page: "Timeline"
-      }))
     ].slice(0, 8);
-  }, [userName, data.activities, data.expenses, data.quotes, data.siteVisits, role]);
+  }, [userName, data.activities, data.expenses, data.materialRequests, data.materials, data.people, data.projects, data.quotes, data.siteVisits, role]);
 
   useEffect(() => {
     if (!notificationsOpen) return;
@@ -220,8 +432,8 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
     const amount = Number(form.get("amount") || 0);
     try {
-      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "person" ? "people" : "progress"}`;
-      const attachment = modal === "expense" || modal === "progress" ? await readFileDataUrl(form.get("attachment")) : undefined;
+      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
+      const attachment = modal === "expense" || modal === "expense-log" || modal === "progress" ? await readFileDataUrl(form.get("attachment")) : undefined;
       const quotationFile = form.get("quotationFile");
       if (modal === "quote" && quotationFile instanceof File && quotationFile.size > 0) {
         if (!/\.pdf$/i.test(quotationFile.name) || (quotationFile.type && quotationFile.type !== "application/pdf")) {
@@ -243,6 +455,8 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         budget: Number(form.get("budget") || 0),
         dueDate: form.get("dueDate"),
         material: form.get("material"),
+        quantity: form.get("quantity"),
+        note: form.get("note"),
         received: form.get("received"),
         used: form.get("used"),
         stock: form.get("stock"),
@@ -250,6 +464,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         role: form.get("role"),
         password: form.get("password"),
         submittedBy: currentUser,
+        entryType: modal === "expense-log" ? "log" : "request",
         attachment,
         quotationAttachment
       };
@@ -258,7 +473,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const result = await response.json() as { record?: Project | Quote | Expense | SiteVisit | Activity | Material | Person; error?: string };
+      const result = await response.json() as { record?: Project | Quote | Expense | SiteVisit | Activity | Material | DashboardData["materialRequests"][number] | Person; error?: string };
       if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
       if (!record) throw new Error("The API returned no saved record.");
@@ -274,6 +489,8 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         setData((current) => ({ ...current, activities: [record as Activity, ...current.activities] }));
       } else if (modal === "material") {
         setData((current) => ({ ...current, materials: [record as Material, ...current.materials] }));
+      } else if (modal === "material-request") {
+        setData((current) => ({ ...current, materialRequests: [record as DashboardData["materialRequests"][number], ...current.materialRequests] }));
       } else if (modal === "person") {
         setData((current) => ({ ...current, people: [record as Person, ...current.people] }));
         if ((record as Person).role === "Client") {
@@ -286,7 +503,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         }
       }
       setModal(null);
-      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Expense" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "person" ? "Person" : "Progress update"} saved.`);
+      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Expense request" : modal === "expense-log" ? "Expense" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save demo record:", error);
       showToast(error instanceof Error ? error.message : "Could not save this record.");
@@ -554,6 +771,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
             <div><span className="panel-kicker">{role.toUpperCase()} WORKSPACE</span><h2 id="notification-title">Notifications</h2><p>Updates that need your attention.</p></div>
             <button className="icon-button notification-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button>
           </header>
+          <div className="push-notification-control"><div><strong>Browser push notifications</strong><span>{pushStatus === "enabled" ? "Enabled on this device." : pushStatus === "checking" ? "Checking browser and server support…" : pushStatus === "unsupported" ? "This browser does not support push notifications." : pushStatus === "unconfigured" ? "Push delivery needs server VAPID configuration." : pushStatus === "denied" ? "Permission is blocked in browser settings." : pushStatus === "error" ? "Could not update push settings. Try again." : role === "Owner" ? "Get expense and material requests outside the app." : role === "Employee" ? "Get project and work update alerts on this device." : "Get work updates for your project outside the app."}</span></div><button className="button button-outline" disabled={pushStatus === "checking" || pushStatus === "unsupported" || pushStatus === "unconfigured" || pushStatus === "denied"} onClick={() => void togglePushNotifications()}>{pushStatus === "enabled" ? "Turn off" : pushStatus === "checking" ? "Checking…" : pushStatus === "unconfigured" ? "Unavailable" : pushStatus === "denied" ? "Blocked" : pushStatus === "error" ? "Try again" : "Enable"}</button></div>
           {notifications.length > 0
             ? <div className="notification-list">{notifications.map((item, index) => (
               <button className="notification-item" key={`${item.title}-${item.detail}-${index}`} onClick={() => { setNotificationsOpen(false); navigateToPage(item.page); }}>
