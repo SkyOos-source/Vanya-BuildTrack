@@ -261,6 +261,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .inline-actions button { min-height: 25px; padding: 0 7px; border: 1px solid #e9e4de; border-radius: 4px; background: #fff; color: #625b55; cursor: pointer; font-size: 8px; }
 .inline-actions button:first-child { border-color: #f2cdb7; color: var(--orange-dark); }
 .expense-list-detailed .expense-row { min-height: 64px; grid-template-columns: 29px minmax(150px, 1fr) auto minmax(85px, auto) auto auto; gap: 12px; }
+.expense-list-detailed .expense-row:has(.expense-review-actions) { grid-template-columns: 29px minmax(130px, 1fr) auto minmax(85px, auto) auto auto auto; }
+.expense-review-actions { white-space: nowrap; }
 .receipt-action { font-size: 9px; }
 .data-table-wrap { width: 100%; overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
@@ -495,6 +497,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .notification-heading h2 { margin: 6px 0 4px; color: var(--charcoal); font: 700 21px "Manrope", sans-serif; letter-spacing: -.5px; }
 .notification-heading p { margin: 0; color: var(--muted); font-size: 11px; }
 .notification-close { flex: 0 0 32px; border: 1px solid var(--border); font-size: 22px; }
+.push-notification-control { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 22px; border-bottom: 1px solid var(--border); background: #fbfaf8; }
+.push-notification-control > div { display: grid; gap: 4px; }
+.push-notification-control strong { color: #39332e; font-size: 11px; }
+.push-notification-control span { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.push-notification-control .button { flex: 0 0 auto; padding: 7px 10px; font-size: 10px; }
 .notification-list { flex: 1; overflow-y: auto; padding: 5px 16px 20px; }
 .notification-item { display: flex; width: 100%; align-items: flex-start; gap: 12px; padding: 15px 6px; border: 0; border-bottom: 1px solid #f0eeeb; background: #fff; cursor: pointer; text-align: left; }
 .notification-item:hover { background: #faf8f6; }
@@ -521,7 +528,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .landing-hero h1 { margin: 22px 0 15px; color: var(--charcoal); font: 800 clamp(47px, 7vw, 78px)/1.06 "Manrope", sans-serif; letter-spacing: -4px; }
 .landing-hero h1 span { color: var(--orange); }
 .landing-hero > p { max-width: 590px; margin: 0; color: #756e68; font-size: 14px; line-height: 1.8; }
-.landing-cta { min-width: 148px; min-height: 44px; margin-top: 25px; font-size: 12px; }
+.landing-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 25px; }
+.landing-cta, .landing-install { min-width: 148px; min-height: 44px; font-size: 12px; }
+.landing-install > span { font-size: 16px; }
+.landing-install-help { max-width: 430px; margin: 12px 0 0; padding: 14px 18px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: #756e68; text-align: left; font-size: 11px; line-height: 1.6; }
+.landing-install-help > strong { color: var(--charcoal); }
+.landing-install-help ol { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 20px; }
 .landing-highlights { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 39px; }
 .landing-highlights span { padding: 10px 13px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: #5e5852; font-size: 9px; }
 .landing-highlights span::first-letter { color: var(--orange); }
@@ -713,6 +725,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .expense-list-detailed .expense-row time { display: none; }
   .expense-list-detailed .expense-row .status-badge { grid-column: 2; justify-self: start; }
   .expense-list-detailed .expense-row .receipt-action { grid-column: 3; grid-row: 2; }
+  .expense-list-detailed .expense-row .expense-review-actions { grid-column: 2 / span 2; grid-row: 3; justify-self: start; }
   .expense-list-detailed .expense-row .expense-amount { grid-column: 3; grid-row: 1; }
   .expense-row:not(.expense-list-detailed .expense-row) { grid-template-columns: 27px minmax(0,1fr) auto; gap: 7px; padding: 6px 0; }
   .expense-row:not(.expense-list-detailed .expense-row) time { display: none; }

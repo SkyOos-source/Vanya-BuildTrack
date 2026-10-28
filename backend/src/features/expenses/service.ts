@@ -15,7 +15,7 @@ export function createExpense(body: any) {
   const expense = {
     id: nextId("expense"), project, category: "Other", description, amount, date: today(),
     submittedBy: readText(body?.submittedBy) ?? "Arjun Mehta", attachment: attachment ?? undefined,
-    status: "Pending review"
+    status: body?.entryType === "log" ? "Logged" : "Pending review"
   };
   expenses.unshift(expense);
   return result({ record: expense }, 201);
