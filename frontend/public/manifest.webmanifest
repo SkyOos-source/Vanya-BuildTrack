@@ -1,0 +1,30 @@
+{
+  "name": "Vanya BuildTrack",
+  "short_name": "BuildTrack",
+  "description": "Construction project tracking for your whole team.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbfaf8",
+  "theme_color": "#f6f7f3",
+  "icons": [
+    {
+      "src": "/buildtrack-notification.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/buildtrack-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/buildtrack-notification.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

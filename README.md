@@ -13,6 +13,10 @@ npm run dev
 
 Open http://localhost:5173. The public landing page is `/`, the sign-in page is `/signin`, and the three role portals are `/admin`, `/employee`, and `/client`. Portal pages have role-specific subroutes such as `/admin/projects-sites`, `/employee/progress-updates`, and `/client/quotations`.
 
+### Install the app
+
+BuildTrack can be installed from its landing page as a progressive web app. On a supported browser, select **Install app** to open the browser's install prompt. On iPhone or iPad, select **Install app** for the Safari **Share → Add to Home Screen** steps. App installation requires a secure site (HTTPS, or localhost for development).
+
 The Express mock API runs at http://localhost:3001 and the Vite development server proxies `/api` requests to it. Use the demo access shortcuts on `/signin` to fill an account for each portal:
 
 | Role | Email | Password |

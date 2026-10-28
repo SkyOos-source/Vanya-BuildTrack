@@ -528,7 +528,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .landing-hero h1 { margin: 22px 0 15px; color: var(--charcoal); font: 800 clamp(47px, 7vw, 78px)/1.06 "Manrope", sans-serif; letter-spacing: -4px; }
 .landing-hero h1 span { color: var(--orange); }
 .landing-hero > p { max-width: 590px; margin: 0; color: #756e68; font-size: 14px; line-height: 1.8; }
-.landing-cta { min-width: 148px; min-height: 44px; margin-top: 25px; font-size: 12px; }
+.landing-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 25px; }
+.landing-cta, .landing-install { min-width: 148px; min-height: 44px; font-size: 12px; }
+.landing-install > span { font-size: 16px; }
+.landing-install-help { max-width: 430px; margin: 12px 0 0; padding: 14px 18px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: #756e68; text-align: left; font-size: 11px; line-height: 1.6; }
+.landing-install-help > strong { color: var(--charcoal); }
+.landing-install-help ol { display: grid; gap: 5px; margin: 8px 0 0; padding-left: 20px; }
 .landing-highlights { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 39px; }
 .landing-highlights span { padding: 10px 13px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: #5e5852; font-size: 9px; }
 .landing-highlights span::first-letter { color: var(--orange); }
