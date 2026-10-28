@@ -11,6 +11,7 @@ import { FeaturePage } from "./feature-page";
 import OwnerProjectsPage from "../owner/projects/page";
 import OwnerMaterialsPage from "../owner/material/page";
 import { NotFoundPage } from "./legal-pages";
+import { AccountProfilePage } from "./profile-page";
 
 type PushStatus = "checking" | "ready" | "enabled" | "unsupported" | "unconfigured" | "denied" | "error";
 
@@ -35,10 +36,10 @@ export function PortalRoute({ role }: { role: RoleId }) {
   if (location.pathname.slice(rolePath(role).length).replace(/^\/+|\/+$/g, "") && pageFromPath(location.pathname, roleName(role)) === "Dashboard") {
     return <NotFoundPage />;
   }
-  return <PortalApp role={roleName(role)} userName={session.name} />;
+  return <PortalApp role={roleName(role)} userName={session.name} userEmail={session.email} />;
 }
 
-export function PortalApp({ role, userName }: { role: Role; userName: string }) {
+export function PortalApp({ role, userName, userEmail }: { role: Role; userName: string; userEmail: string }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState<DashboardData>(fallbackData);
@@ -52,7 +53,25 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [pushStatus, setPushStatus] = useState<PushStatus>("checking");
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
+
+  useEffect(() => {
+    if (role === "Client") return;
+    let active = true;
+    const loadProfileImage = async () => {
+      try {
+        const response = await fetch(`/api/profiles/me?role=${encodeURIComponent(roleId(role))}&email=${encodeURIComponent(userEmail)}`);
+        const result = await response.json() as { profile?: { image?: string | null }; error?: string };
+        if (!response.ok || !result.profile) throw new Error(result.error || `Profile request failed (${response.status})`);
+        if (active) setProfileImage(result.profile.image ?? null);
+      } catch (error) {
+        console.error("Unable to load the profile photo:", error);
+      }
+    };
+    void loadProfileImage();
+    return () => { active = false; };
+  }, [role, userEmail]);
 
   useEffect(() => {
     let active = true;
@@ -193,16 +212,19 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
       void (async () => {
         try {
           if (resource === "progress") {
-            const response = await fetch("/api/progress");
+            const [response, projectsResponse] = await Promise.all([fetch("/api/progress"), fetch("/api/projects")]);
             if (!response.ok) throw new Error(`Progress refresh failed (${response.status})`);
+            if (!projectsResponse.ok) throw new Error(`Project refresh failed (${projectsResponse.status})`);
             const activities = await response.json() as DashboardData["activities"];
+            const projects = await projectsResponse.json() as DashboardData["projects"];
             if (!Array.isArray(activities)) throw new Error("Progress refresh returned invalid data.");
+            if (!Array.isArray(projects)) throw new Error("Project refresh returned invalid data.");
             const clientProjectNames = data.projects.filter((project) => project.client === userName).map((project) => project.name);
             const assignedClientProject = data.people.find((person) => person.role === "Client" && person.name === userName)?.project;
             const visibleActivities = role === "Client"
               ? activities.filter((activity) => clientProjectNames.includes(activity.project) || activity.project === assignedClientProject)
               : activities;
-            setData((current) => ({ ...current, activities: visibleActivities }));
+            setData((current) => ({ ...current, activities: visibleActivities, projects }));
             setApiStatus("connected");
             return;
           }
@@ -230,6 +252,28 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     };
     return () => events.close();
   }, [data.people, data.projects, role, userName]);
+
+  useEffect(() => {
+    if (role !== "Client" || page !== "My Projects") return;
+    let active = true;
+    const loadClientProgress = async () => {
+      try {
+        const response = await fetch("/api/progress");
+        if (!response.ok) throw new Error(`Project progress request failed (${response.status})`);
+        const activities = await response.json() as DashboardData["activities"];
+        if (!Array.isArray(activities)) throw new Error("Project progress request returned invalid data.");
+        const clientProjectNames = data.projects.filter((project) => project.client === userName).map((project) => project.name);
+        const assignedClientProject = data.people.find((person) => person.role === "Client" && person.name === userName)?.project;
+        const visibleActivities = activities.filter((activity) => clientProjectNames.includes(activity.project) || activity.project === assignedClientProject);
+        if (active) setData((current) => ({ ...current, activities: visibleActivities }));
+      } catch (error) {
+        console.error("Unable to load progress photos for the client project report:", error);
+        if (active) setApiStatus("offline");
+      }
+    };
+    void loadClientProgress();
+    return () => { active = false; };
+  }, [data.people, data.projects, page, role, userName]);
 
   useEffect(() => {
     if (page !== "Materials") return;
@@ -466,17 +510,20 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
         submittedBy: currentUser,
         entryType: modal === "expense-log" ? "log" : "request",
         attachment,
-        quotationAttachment
+        quotationAttachment,
+        stage: modal === "progress" ? form.get("stage") : undefined,
+        progress: modal === "progress" ? form.get("progress") : undefined
       };
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const result = await response.json() as { record?: Project | Quote | Expense | SiteVisit | Activity | Material | DashboardData["materialRequests"][number] | Person; error?: string };
+      const result = await response.json() as { record?: Project | Quote | Expense | SiteVisit | Activity | Material | DashboardData["materialRequests"][number] | Person; project?: Project; error?: string };
       if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
       if (!record) throw new Error("The API returned no saved record.");
+      const updatedProject = result.project;
       if (modal === "project") {
         setData((current) => ({ ...current, projects: [record as Project, ...current.projects] }));
       } else if (modal === "quote") {
@@ -486,7 +533,13 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
       } else if (modal === "visit") {
         setData((current) => ({ ...current, siteVisits: [record as SiteVisit, ...current.siteVisits] }));
       } else if (modal === "progress") {
-        setData((current) => ({ ...current, activities: [record as Activity, ...current.activities] }));
+        setData((current) => ({
+          ...current,
+          activities: [record as Activity, ...current.activities],
+          projects: updatedProject
+            ? current.projects.map((project) => project.id === updatedProject.id ? updatedProject : project)
+            : current.projects
+        }));
       } else if (modal === "material") {
         setData((current) => ({ ...current, materials: [record as Material, ...current.materials] }));
       } else if (modal === "material-request") {
@@ -676,6 +729,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
     Reports: "Project-wise progress, expenses, materials, and activity.",
     "Site Visits": "Plan and follow up on engineer site visits.",
     "Settings & Backup": "Manage your profile and request an account data backup.",
+    Profile: "Manage your BuildTrack contact details and profile photo.",
     People: "Manage clients and engineers across your projects.",
     Timeline: "Follow project milestones and site updates.",
     Feedback: "Share feedback and follow project reviews.",
@@ -709,11 +763,13 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
           <span className="brand-mark"><BuildingIcon /></span>
           <span className="brand-copy"><strong>Vanya BuildTrack</strong><small>Construction workspace</small></span>
         </Link>
-        <div className="profile">
+        {role === "Client" ? <div className="profile">
           <span className="avatar">{initials(currentUser)}</span>
+          <span className="profile-copy"><strong>{currentUser}</strong><small>{role}</small></span>
+        </div> : <Link className="profile" to={pagePath(role, "Profile")} aria-label={`View profile for ${currentUser}`} onClick={() => setMobileNavOpen(false)}>
+          <span className="avatar">{profileImage ? <img src={profileImage} alt="" /> : initials(currentUser)}</span>
           <span className="profile-copy"><strong>{currentUser}</strong><small>{role === "Owner" ? "Company Admin" : role}</small></span>
-          <button className="icon-button profile-menu" aria-label="Profile options" onClick={() => showToast("Profile settings are part of the demo.")}>···</button>
-        </div>
+        </Link>}
         <div className="nav-label">WORKSPACE</div>
         <nav className="side-nav" aria-label={`${role} navigation`}>
           {navigation[role].map((item) => (
@@ -739,7 +795,7 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
               <span />{apiStatus === "connected" ? "Demo API connected" : apiStatus === "offline" ? "Using local preview" : "Connecting"}
             </div>
             <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>♧<i /></button>
-            <div className="top-avatar">{initials(currentUser)}</div>
+            {role === "Client" ? <div className="top-avatar" aria-label={`${currentUser} avatar`}>{initials(currentUser)}</div> : <Link className="top-avatar" to={pagePath(role, "Profile")} aria-label={`View profile for ${currentUser}`}>{profileImage ? <img src={profileImage} alt="" /> : initials(currentUser)}</Link>}
           </div>
         </header>
 
@@ -753,12 +809,13 @@ export function PortalApp({ role, userName }: { role: Role; userName: string }) 
             </div>
           </section>
 
+          {page === "Profile" && role !== "Client" && <AccountProfilePage role={role} email={userEmail} onProfileImageChange={setProfileImage} />}
           {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
           {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onCreate={setModal} onNavigate={navigateToPage} />}
           {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} onQuote={updateQuote} />}
           {page !== "Dashboard" && role === "Owner" && page === "Projects & Sites" && <OwnerProjectsPage {...featurePageProps} />}
           {page !== "Dashboard" && role === "Owner" && page === "Materials" && <OwnerMaterialsPage {...featurePageProps} />}
-          {page !== "Dashboard" && !(role === "Owner" && (page === "Projects & Sites" || page === "Materials")) && <FeaturePage {...featurePageProps} page={page} role={role} />}
+          {page !== "Dashboard" && page !== "Profile" && !(role === "Owner" && (page === "Projects & Sites" || page === "Materials")) && <FeaturePage {...featurePageProps} page={page} role={role} />}
 
           <footer className="footer"><span>© 2026 Vanya BuildTrack</span><span>Built for the people who build.</span><nav className="footer-legal" aria-label="Legal"><Link to="/privacy-policy">Privacy</Link><Link to="/data-usage">Data Usage</Link></nav><span className="footer-status"><i /> All systems operational</span></footer>
         </div>

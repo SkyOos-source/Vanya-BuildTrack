@@ -1,4 +1,4 @@
-import { nextId, projects, readAttachment, readText } from "../../data/store";
+import { nextId, projects, readAmount, readAttachment, readText } from "../../data/store";
 import { publishWorkspaceUpdate } from "../../realtime";
 import { failure, result } from "../shared";
 import { activities, progressUpdates } from "./data";
@@ -9,8 +9,18 @@ export function createProgress(body: any) {
   const description = readText(body?.description);
   const project = readText(body?.project);
   const attachment = readAttachment(body?.attachment);
-  if (!description || !project || (body?.attachment && !attachment)) {
-    return failure(400, "Progress description, project, and a supported attachment are required.");
+  const stage = body?.stage === undefined ? "Progress" : body.stage;
+  const progressValue = body?.progress;
+  const hasProgressValue = progressValue !== undefined && progressValue !== "";
+  const completionProgress = hasProgressValue && progressValue !== null ? readAmount(progressValue) : null;
+  if (!description || !project || (stage !== "Start" && stage !== "Progress" && stage !== "Completion") ||
+    (hasProgressValue && (completionProgress === null || completionProgress > 100)) ||
+    (body?.attachment && !attachment)) {
+    return failure(400, "Progress description, project, valid photo stage, completion percentage from 0 to 100, and a supported attachment are required.");
+  }
+  const assignedProject = projects.find((item) => item.name === project);
+  if (hasProgressValue && !assignedProject) {
+    return failure(400, "A valid project is required to update completion.");
   }
   const activity = {
     id: nextId("progress"),
@@ -19,12 +29,13 @@ export function createProgress(body: any) {
     project,
     time: "Just now",
     kind: "progress",
+    stage,
     description,
     attachment: attachment ?? undefined,
     createdAt: new Date().toISOString()
   };
   activities.unshift(activity);
-  const assignedProject = projects.find((item) => item.name === project);
+  if (assignedProject && hasProgressValue && completionProgress !== null) assignedProject.progress = completionProgress;
   const push = {
     title: "Work update from Vanya BuildTrack",
     body: `${activity.actor} shared a work update for ${project}.`,
@@ -34,5 +45,5 @@ export function createProgress(body: any) {
     ]
   };
   publishWorkspaceUpdate({ resource: "progress", push });
-  return result({ record: activity }, 201);
+  return result({ record: activity, project: assignedProject }, 201);
 }

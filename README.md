@@ -27,6 +27,8 @@ The Express mock API runs at http://localhost:3001 and the Vite development serv
 
 **Database setup is not required.** The API stores all workspace records in `backend/data/buildtrack.json` and writes updates to disk, so changes survive backend restarts. Set `BUILDTRACK_DATA_FILE` to use a different JSON file. The file is local runtime data and is ignored by Git. Prisma, the PostgreSQL schema, migrations, and optional Docker Compose service remain available for a future database-backed implementation; they are not used by the demo API.
 
+Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details, compare photos marked as project start and completion (or the earliest and latest uploaded photos), submit a rating and feedback, and open the Google review page. To link directly to the business's Google review form, set `VITE_GOOGLE_REVIEW_URL` to the Google Business Profile review URL in `frontend/.env`; without it, the report links to a Google Maps search for Vanya BuildTrack.
+
 ### Browser push notifications
 
 Owners, site engineers, and clients can enable browser push from the in-app Notifications drawer. Push alerts are delivered to owners for engineer-submitted expense and material requests, and to owners plus the assigned client for engineer work updates, including when the app is not open. In-app notifications continue to work independently.
@@ -36,6 +38,8 @@ Web Push requires HTTPS (localhost is supported for local development). If VAPID
 ### Backend architecture
 
 The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns seeded records, sequence recovery, and atomic JSON-file persistence. `backend/src/index.ts` configures Express and registers the generated routes.
+
+Profile QR codes link to the frontend origin. In local development, the API derives it from the request host and maps port `3001` to Vite's default port `5173`. If the frontend is hosted separately in production, set `FRONTEND_URL` to its public origin (for example, `https://buildtrack.example.com`).
 
 Route and OpenAPI generation are configured for the backend. Build generates both automatically; they can also be generated explicitly:
 
@@ -65,6 +69,7 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 
 - `GET /api/health` — mock API status; no database connection is made.
 - `POST /api/auth/login` and `POST /api/auth/logout` — demo role sign-in and sign-out.
+- `GET /api/profiles/me?role=...&email=...`, `PATCH /api/profiles/me?role=...&email=...`, and `GET /api/profiles/:id` — load and update account profile phone numbers, generate owner/engineer QR codes, or view a QR-linked public profile.
 - `GET /api/push/config`, `POST /api/push/subscriptions`, and `DELETE /api/push/subscriptions` — configure owner browser push subscriptions.
 - `GET`, `POST /api/projects`, `PATCH /api/projects/:id`, and `DELETE /api/projects/:id` — manage projects.
 - `GET`, `POST /api/quotations`, and `PATCH /api/quotations/:id` — manage quotations and client decisions.
