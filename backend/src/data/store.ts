@@ -58,6 +58,7 @@ export type Activity = {
   project: string;
   time: string;
   kind: string;
+  stage?: "Start" | "Progress" | "Completion";
   description?: string;
   attachment?: string;
   createdAt?: string;
@@ -70,7 +71,8 @@ export type Attendance = { id: string; project?: string; engineer: string; prese
 export type AttendanceLeave = { id: string; title: string; date: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
-export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string };
+export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string; image?: string };
+export const ownerProfile = { phone: "", image: "" };
 export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: DemoRole; userName: string };
 export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
 export type DemoRole = "owner" | "employee" | "client";
@@ -140,7 +142,7 @@ export const employeeCredentials: EmployeeCredential[] = [];
 export const clientCredentials: EmployeeCredential[] = [];
 export const pushSubscriptions: PushSubscriptionRecord[] = [];
 
-export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, feedback, backups, people, pushSubscriptions };
+export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, feedback, backups, people, pushSubscriptions, ownerProfile };
 let projectSequence = 25;
 let quotationSequence = 1043;
 let expenseSequence = 783;
@@ -266,6 +268,11 @@ function loadStore() {
   restore(employeeCredentials, "employeeCredentials");
   restore(clientCredentials, "clientCredentials");
   restore(pushSubscriptions, "pushSubscriptions");
+  if (saved.ownerProfile && typeof saved.ownerProfile === "object") {
+    const savedOwnerProfile = saved.ownerProfile as { phone?: unknown; image?: unknown };
+    ownerProfile.phone = typeof savedOwnerProfile.phone === "string" ? savedOwnerProfile.phone : "";
+    ownerProfile.image = typeof savedOwnerProfile.image === "string" ? savedOwnerProfile.image : "";
+  }
   projectSequence = nextSequence(projects, "PRJ-", projectSequence);
   quotationSequence = nextSequence(quotations, "QT-", quotationSequence);
   expenseSequence = nextSequence(expenses, "EXP-", expenseSequence);

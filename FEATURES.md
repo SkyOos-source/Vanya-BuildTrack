@@ -40,6 +40,7 @@ Site engineers record field activity and keep owners and clients informed.
 - View assigned projects and construction sites.
 - Submit daily construction progress updates.
 - Upload construction progress photos.
+- Record the overall project completion percentage and mark start or completion photos.
 - Record materials received and materials used.
 - Submit expenses and upload supporting receipts.
 - Record worker attendance and upload supporting photos.
@@ -67,6 +68,7 @@ Clients follow the work on their assigned projects and respond to quotations.
 - Secure login and logout.
 - Role-based access for **Owner**, **Site Engineer**, and **Client**.
 - User profile management.
+- Owner and site engineer profile pages with editable phone numbers, profile photos, and backend-generated QR codes that open shareable public contact details; save a profile to a device's contacts as a vCard.
 - Responsive mobile and desktop interface.
 - Real-time notifications for relevant project activity.
 - Image and document uploads for progress photos, receipts, quotations, and supporting documents.
@@ -94,6 +96,8 @@ Clients follow the work on their assigned projects and respond to quotations.
 - Allow clients to submit feedback or a review for an assigned project.
 - Associate each submission with its project and submitting client.
 - Make received feedback available to the owner.
+- When a project reaches 100% completion, let its client open a report with project-start and project-completion photos, falling back to the earliest and latest uploaded photos.
+- Include a Google review link and save the client's star rating and comment to BuildTrack.
 
 ### Engineer site visits
 
