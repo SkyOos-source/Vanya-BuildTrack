@@ -446,11 +446,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   useEffect(() => {
     if (!notificationsOpen) return;
+    const previousOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setNotificationsOpen(false);
     };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      document.documentElement.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
   }, [notificationsOpen]);
 
   const showToast = (message: string) => {
