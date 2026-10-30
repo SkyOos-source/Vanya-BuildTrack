@@ -8,7 +8,7 @@ Use this document to orient future AI assistants working in this repository. It 
 - **Repository:** `SkyOos-source/Vanya-BuildTrack`
 - **Frontend:** React 18, TypeScript, Vite, React Router.
 - **Backend:** Node.js, Express, TypeScript, TSOA-generated API routes.
-- **Persistence:** Local JSON file for the running demo API. PostgreSQL/Prisma is optional infrastructure and is not currently used by the demo API.
+- **Persistence:** Real mode uses a local SQLite database through Prisma. Demo mode is frontend-only and stores its sample workspace in browser local storage.
 - **Application style:** Responsive, role-based portals with an orange, charcoal, and off-white visual system.
 - **Primary product documentation:** `README.md` (setup and API), `FEATURES.md` (product feature summary), and `DESIGN.md` (UI direction).
 
@@ -28,12 +28,12 @@ Views assigned projects, timelines, progress photos, quotations, and approved ex
 
 ### Access boundaries
 
-Pages and data are intended to be role-scoped. The demo app has client-side role routing and some server-side filtering/validation, but its demo authentication is **not production authentication**. Do not treat it as suitable for sensitive data or a multi-tenant production deployment without a proper identity/session and authorization design.
+Pages and data are intended to be role-scoped. Demo mode is frontend-only; real mode calls the SQLite-backed API. Browser sessions remain client-side, so this is not production authentication or a multi-tenant authorization system.
 
 ## Application routes
 
 - `/` — public landing page
-- `/signin` — demo sign-in
+- `/signin` — mode-aware sign-in
 - `/privacy-policy`, `/data-usage` — legal/information pages
 - `/profile/:id` — public contact profile reached from QR code
 - `/admin/*` — owner portal
@@ -50,7 +50,8 @@ Portal page slugs and role-specific navigation are centralized in `frontend/src/
 - `frontend/src/auth/` — sign-in UI.
 - `frontend/src/landing/` — public landing page.
 - `frontend/src/common/portal-app.tsx` — role-protected portal shell, API loading, notifications, and shared actions.
-- `frontend/src/common/data.ts` — navigation, route-slug helpers, and local fallback/demo data.
+- `frontend/src/common/data.ts` — navigation, route-slug helpers, mode selection, and frontend demo data.
+- `frontend/src/common/api.ts` — local demo-mode request handling and real-mode API forwarding.
 - `frontend/src/common/types.ts` — shared frontend domain types.
 - `frontend/src/common/components.tsx` — shared UI components and record modal forms.
 - `frontend/src/common/feature-page.tsx` — shared project and feature views.
@@ -61,16 +62,16 @@ Portal page slugs and role-specific navigation are centralized in `frontend/src/
 
 ### Backend
 
-- `backend/src/index.ts` — Express app, JSON parsing, API persistence hook, realtime event stream, push endpoints, route registration, and error handler.
+- `backend/src/index.ts` — Express app, JSON parsing, SQLite persistence hook, realtime event stream, push endpoints, route registration, and error handler.
 - `backend/src/features/<feature>/controller.ts` — TSOA controller and HTTP route declarations.
 - `backend/src/features/<feature>/service.ts` — validation and feature logic.
 - `backend/src/features/<feature>/data.ts` — feature data access/re-exports.
-- `backend/src/data/store.ts` — demo records, domain types, input readers, ID sequences, and JSON persistence.
+- `backend/src/data/store.ts` — empty live-mode collections, account credentials, input readers, ID sequences, and SQLite persistence.
 - `backend/src/realtime.ts` — workspace event subscription/publication.
 - `backend/src/push.ts` — VAPID configuration and Web Push support.
 - `backend/src/generated/routes.ts` — generated Express routes; do not hand-edit.
 - `backend/openapi/swagger.json` — generated OpenAPI specification; regenerate through the backend scripts rather than hand-editing.
-- `backend/prisma/` — optional PostgreSQL schema and migrations, not the current demo API datastore.
+- `backend/prisma/` — SQLite schema and migrations for the live API.
 
 ## Backend API overview
 
@@ -107,13 +108,13 @@ See `README.md` for the fuller endpoint and behavior list. Follow the existing c
 
 ## Data, persistence, and uploads
 
-- The demo API loads and persists JSON at `backend/data/buildtrack.json`. Override the location with `BUILDTRACK_DATA_FILE`.
-- `saveStore()` writes a temporary JSON file then renames it to the configured path. Successful non-GET/HEAD/OPTIONS JSON responses trigger persistence in `backend/src/index.ts`.
-- Seed data is in `backend/src/data/store.ts` and mirrored client-side as fallback/demo data in `frontend/src/common/data.ts`. Keep types and fallback behavior aligned when changing shared records.
+- Real mode persists workspace state in the SQLite database at `backend/data/buildtrack.db`; Prisma migrations are applied by the backend start scripts.
+- Successful non-GET/HEAD/OPTIONS API responses trigger SQLite persistence in `backend/src/index.ts`.
+- Live-mode collections start empty except for the initial owner account. Sample records and demo sign-in are in the frontend.
 - Backend IDs are generated by per-record sequences; sequence counters are recovered from loaded data.
-- Image/PDF attachments in this demo are data URLs with validation/size limits. New attachment types must be supported by both frontend file handling and backend validation. JSON-file attachment storage is a demo design, not an ideal scalable production storage strategy.
+- Image/PDF attachments are data URLs with validation/size limits. New attachment types must be supported by both frontend file handling and backend validation.
 - Do not overwrite or reset `backend/data/buildtrack.json` or other local runtime data unless explicitly asked.
-- Invited engineer/client passwords are salted hashes in the JSON file. Seeded demo credentials are documented in `README.md`; they are for local demonstration only.
+- Invited engineer/client passwords and the initial owner password are stored as salted hashes in SQLite. Demo credentials and sample records are documented in `README.md`; they are only used by frontend demo mode.
 
 ## Development and verification
 
@@ -127,7 +128,7 @@ npm run dev
 npm run build
 ```
 
-The dev command starts the API at `http://localhost:3001` and Vite at `http://localhost:5173`; Vite proxies `/api` requests to the API. Database setup is not needed for the demo.
+The dev command starts the API at `http://localhost:3001` and Vite at `http://localhost:5173`; Vite proxies real-mode `/api` requests to the API. Backend startup applies the SQLite migration.
 
 Useful focused checks:
 
@@ -147,7 +148,7 @@ npm run build
 
 The root `npm run build` runs both workspace builds. No dedicated test script is defined in the package manifests; prefer the smallest relevant build/typecheck and existing tests if added later.
 
-Optional PostgreSQL/Prisma commands (`db:up`, `db:migrate`, `db:deploy`, `db:studio`) are for the separate future database path. Do not assume a migration changes the demo API persistence.
+`db:migrate`, `db:deploy`, and `db:studio` operate on the SQLite database used by real mode.
 
 ## Configuration and deployment notes
 
@@ -172,7 +173,7 @@ Optional PostgreSQL/Prisma commands (`db:up`, `db:migrate`, `db:deploy`, `db:stu
 
 ## Product limitations and future implementation considerations
 
-- The backend is explicitly a local demo/mock API, not a production-ready multi-user service. It has no persistent database-backed tenancy, production-grade authentication/session security, or production authorization layer.
+- The backend is not a production-ready multi-user service. It has no database-backed tenancy, server-side session security, or complete production authorization layer.
 - For production, design a real identity provider/session strategy, tenant/project access checks on every API operation and file, database persistence/migrations, scalable attachment storage, backup/retention, and operational error handling.
 - Business-specific Google review, external links, and production deployment settings must be provided/configured; do not fabricate them.
 - `FEATURES.md` is a product description and can describe intended behavior beyond what exists in code. Verify implementation in source before asserting a feature is complete.

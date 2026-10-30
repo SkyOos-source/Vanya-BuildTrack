@@ -1,4 +1,4 @@
-import { store } from "../../data/store";
+import { ownerAccount, store } from "../../data/store";
 import { failure, result, today } from "../shared";
 import { backups } from "./data";
 
@@ -9,7 +9,7 @@ export function createBackup() {
     id: `BKP-${String(backups.length + 8).padStart(3, "0")}`,
     status: "Ready to download",
     requestedAt: today(),
-    requestedBy: "John Smith"
+    requestedBy: ownerAccount.name
   };
   backups.unshift(backup);
   return result({ record: backup }, 201);

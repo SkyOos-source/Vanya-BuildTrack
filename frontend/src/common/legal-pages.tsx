@@ -20,23 +20,23 @@ function LegalLayout({ title, eyebrow, children }: { title: string; eyebrow: str
 
 export function PrivacyPolicyPage() {
   return <LegalLayout title="Privacy Policy" eyebrow="YOUR PRIVACY">
-    <p>BuildTrack helps construction teams manage projects, site activity, and communication. This page describes the information handled by this demo application and how it is used.</p>
+    <p>BuildTrack helps construction teams manage projects, site activity, and communication. This page describes the information handled by the application and how it is used.</p>
     <h2>Information in the workspace</h2>
     <p>Workspace records may include project and site details, budgets, quotations, material and expense records, team member names and email addresses, client feedback, and site visit schedules.</p>
     <p>When an engineer records attendance, the app may collect a check-in or check-out photo and the device’s location coordinates, if the user grants location access. These details are attached to the attendance record.</p>
     <h2>How information is used</h2>
     <p>Information is used to display the workspace features: project progress, assignments, financial records, attendance, and updates to the relevant workspace roles. The app does not use this information for advertising.</p>
     <h2>Storage and access</h2>
-    <p>This starter demo stores workspace data in a local JSON file on the backend and stores the demo sign-in session in browser local storage. This is not a production security or multi-user data setup. Anyone with access to the demo environment or its data file may be able to access workspace records.</p>
+    <p>Demo mode stores sample workspace data and its sign-in session in browser local storage without contacting the backend. In live mode, workspace data is stored in the backend's SQLite database, while the sign-in session remains in browser storage. Access to the application, browser, or database may expose workspace records; deploy with appropriate security and access controls.</p>
     <h2>Retention and questions</h2>
-    <p>Workspace data remains in the configured data file until it is changed or removed by the workspace operator. For requests about records or this demo, contact the administrator who provided access.</p>
+    <p>Workspace data remains in the selected mode's storage until it is changed or removed by the workspace operator. For requests about records, contact the administrator who provided access.</p>
     <p>This sample policy is informational and should be reviewed and adapted by the organization before production use.</p>
   </LegalLayout>;
 }
 
 export function DataUsagePage() {
   return <LegalLayout title="Data Usage" eyebrow="HOW BUILDTRACK USES DATA">
-    <p>BuildTrack uses information submitted to the workspace to provide project management features. This demo is intended for sample data and evaluation, not sensitive or production records.</p>
+    <p>BuildTrack uses information submitted to the workspace to provide project management features. Demo mode is intended for sample data and evaluation. Use live mode only with the security and operational controls appropriate for your organization.</p>
     <h2>Workspace data</h2>
     <ul>
       <li><strong>Projects:</strong> project names, locations, assigned engineers, status, budget, and progress.</li>
@@ -45,9 +45,9 @@ export function DataUsagePage() {
       <li><strong>Attendance:</strong> check-in and check-out timestamps, photos, and location coordinates when attendance is submitted.</li>
     </ul>
     <h2>What happens to the data</h2>
-    <p>The frontend requests workspace records from the app API. In the demo setup, the backend persists records in a local JSON file. Uploaded attachments are stored with their related records. Demo sign-in uses sample credentials and a session value in browser local storage; it is not production authentication.</p>
+    <p>In demo mode, workspace records and sample sign-in are handled in the browser, with no API calls. In live mode, the frontend requests workspace records from the app API and the backend persists them in SQLite. The sign-in session is stored in browser local storage. Uploaded attachments are stored with their related records.</p>
     <h2>Use and sharing</h2>
-    <p>Data is displayed to support the selected workspace role and related project workflows. The demo has no advertising or analytics integration. Do not enter real personal, financial, or confidential information into a publicly accessible demo.</p>
+    <p>Data is displayed to support the selected workspace role and related project workflows. The app has no advertising or analytics integration. Do not enter real personal, financial, or confidential information into a publicly accessible demo environment.</p>
     <h2>Managing records</h2>
     <p>Workspace operators can manage records through the app and its configured data store. Contact the workspace administrator for access, correction, or deletion requests.</p>
   </LegalLayout>;

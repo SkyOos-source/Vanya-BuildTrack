@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { RoleId, SessionUser } from "../common/types";
-import { demoCredentials, readSession, rolePath } from "../common/data";
+import { demoCredentials, isDemoMode, readSession, rolePath } from "../common/data";
 import { BuildingIcon } from "../common/components";
+import { ModeToggle } from "../common/mode-toggle";
+import { apiFetch } from "../common/api";
 
 export function SignInPage() {
   const navigate = useNavigate();
@@ -13,6 +15,7 @@ export function SignInPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const session = readSession();
+  const demoMode = isDemoMode();
 
   useEffect(() => {
     if (session) navigate(rolePath(session.role), { replace: true });
@@ -30,7 +33,7 @@ export function SignInPage() {
     setSubmitting(true);
     setError("");
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, role })
@@ -48,7 +51,7 @@ export function SignInPage() {
   };
 
   return <main className="signin-page">
-    <header className="signin-nav"><Link className="brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>BuildTrack</strong><small>Construction Manager</small></span></Link><Link to="/" className="signin-back">← Back to home</Link></header>
+    <header className="signin-nav"><Link className="brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>BuildTrack</strong><small>Construction Manager</small></span></Link><div className="signin-nav-actions"><ModeToggle /><Link to="/" className="signin-back">← Back to home</Link></div></header>
     <section className="signin-layout">
       <div className="signin-story"><span className="landing-kicker"><i /> YOUR PROJECTS, IN SYNC</span><h1>Good work<br />starts with<br /><span>a clear view.</span></h1><p>One workspace for the people planning, building, and bringing every project to life.</p><div className="signin-story-note"><span>“</span><strong>Every site update brings the whole team closer.</strong><small>VANYA BUILDTRACK</small></div></div>
       <div className="signin-card">
@@ -60,7 +63,7 @@ export function SignInPage() {
           {error && <div className="signin-error" role="alert">{error}</div>}
           <button className="button button-primary signin-submit" type="submit" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"} <span>→</span></button>
         </form>
-        <div className="demo-access"><div className="demo-access-heading"><span>DEMO ACCESS</span><span>Pick a role to fill its demo login</span></div><div className="demo-role-list">{(["owner", "employee", "client"] as RoleId[]).map((demoRole) => <button type="button" key={demoRole} className={role === demoRole ? "demo-role-active" : ""} onClick={() => selectDemoRole(demoRole)}><span>{demoCredentials[demoRole].label}</span><span>{demoCredentials[demoRole].email}</span></button>)}</div><small>Demo sign-in · workspace data is saved in a local JSON file</small></div>
+        {demoMode ? <div className="demo-access"><div className="demo-access-heading"><span>DEMO ACCESS</span><span>Pick a role to fill its demo login</span></div><div className="demo-role-list">{(["owner", "employee", "client"] as RoleId[]).map((demoRole) => <button type="button" key={demoRole} className={role === demoRole ? "demo-role-active" : ""} onClick={() => selectDemoRole(demoRole)}><span>{demoCredentials[demoRole].label}</span><span>{demoCredentials[demoRole].email}</span></button>)}</div><small>Demo sign-in · data stays in this browser</small></div> : <p className="signin-description">Real mode signs in against the SQLite workspace database.</p>}
       </div>
     </section>
     <footer className="signin-footer">© 2026 Vanya BuildTrack <span>·</span> Built for the people who build.</footer>

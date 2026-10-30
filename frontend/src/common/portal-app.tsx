@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceProof, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, Activity, NotificationItem } from "./types";
-import { fallbackData, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
+import { emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
+import { apiFetch } from "./api";
 import { formatCurrency, initials } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
 import OwnerDashboard from "../owner/dashboard/page";
@@ -12,6 +13,7 @@ import OwnerProjectsPage from "../owner/projects/page";
 import OwnerMaterialsPage from "../owner/material/page";
 import { NotFoundPage } from "./legal-pages";
 import { AccountProfilePage } from "./profile-page";
+import { ModeToggle } from "./mode-toggle";
 
 type PushStatus = "checking" | "ready" | "enabled" | "unsupported" | "unconfigured" | "denied" | "error";
 
@@ -42,9 +44,10 @@ export function PortalRoute({ role }: { role: RoleId }) {
 export function PortalApp({ role, userName, userEmail }: { role: Role; userName: string; userEmail: string }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [data, setData] = useState<DashboardData>(fallbackData);
+  const demoMode = isDemoMode();
+  const [data, setData] = useState<DashboardData>(demoMode ? fallbackData : emptyDashboardData);
   const page = pageFromPath(location.pathname, role);
-  const [apiStatus, setApiStatus] = useState<"connecting" | "connected" | "offline">("connecting");
+  const [apiStatus, setApiStatus] = useState<"connecting" | "connected" | "offline">(demoMode ? "connected" : "connecting");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState("");
@@ -61,7 +64,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     let active = true;
     const loadProfileImage = async () => {
       try {
-        const response = await fetch(`/api/profiles/me?role=${encodeURIComponent(roleId(role))}&email=${encodeURIComponent(userEmail)}`);
+        const response = await apiFetch(`/api/profiles/me?role=${encodeURIComponent(roleId(role))}&email=${encodeURIComponent(userEmail)}`);
         const result = await response.json() as { profile?: { image?: string | null }; error?: string };
         if (!response.ok || !result.profile) throw new Error(result.error || `Profile request failed (${response.status})`);
         if (active) setProfileImage(result.profile.image ?? null);
@@ -76,12 +79,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   useEffect(() => {
     let active = true;
     const checkPushSubscription = async () => {
+      if (demoMode) {
+        setPushStatus("unconfigured");
+        return;
+      }
       if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
         setPushStatus("unsupported");
         return;
       }
       try {
-        const response = await fetch("/api/push/config");
+        const response = await apiFetch("/api/push/config");
         if (!response.ok) throw new Error(`Push configuration request failed (${response.status})`);
         const config = await response.json() as { enabled?: boolean; publicKey?: string | null };
         if (!config.enabled || !config.publicKey) {
@@ -97,7 +104,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         await registration.update();
         const subscription = await registration?.pushManager.getSubscription();
         if (subscription && Notification.permission === "granted") {
-          const saveResponse = await fetch("/api/push/subscriptions", {
+          const saveResponse = await apiFetch("/api/push/subscriptions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ subscription: subscription.toJSON(), role: roleId(role), userName })
@@ -114,7 +121,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     };
     void checkPushSubscription();
     return () => { active = false; };
-  }, [role, userName]);
+  }, [demoMode, role, userName]);
 
   const togglePushNotifications = async () => {
     if (pushStatus === "enabled") {
@@ -122,7 +129,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         const registration = await navigator.serviceWorker.getRegistration("/");
         const subscription = await registration?.pushManager.getSubscription();
         if (subscription) {
-          const response = await fetch("/api/push/subscriptions", {
+          const response = await apiFetch("/api/push/subscriptions", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ endpoint: subscription.endpoint })
@@ -153,7 +160,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           userVisibleOnly: true,
           applicationServerKey: decodeVapidPublicKey(pushPublicKey)
         });
-      const response = await fetch("/api/push/subscriptions", {
+      const response = await apiFetch("/api/push/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscription: subscription.toJSON(), role: roleId(role), userName })
@@ -177,7 +184,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     const load = async () => {
       setApiStatus("connecting");
       try {
-        const response = await fetch("/api/dashboard");
+        const response = await apiFetch("/api/dashboard");
         if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
         const result: DashboardData = await response.json();
         if (active) {
@@ -185,7 +192,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           setApiStatus("connected");
         }
       } catch (error) {
-        console.error("Unable to load dashboard API; showing local demo data:", error);
+        console.error("Unable to load workspace data from the SQLite API:", error);
         if (active) setApiStatus("offline");
       }
     };
@@ -194,7 +201,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, [page]);
 
   useEffect(() => {
-    if (role === "Employee") return;
+    if (role === "Employee" || demoMode) return;
     const events = new EventSource("/api/events");
     events.onmessage = (event) => {
       let resource: unknown;
@@ -212,7 +219,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       void (async () => {
         try {
           if (resource === "progress") {
-            const [response, projectsResponse] = await Promise.all([fetch("/api/progress"), fetch("/api/projects")]);
+            const [response, projectsResponse] = await Promise.all([apiFetch("/api/progress"), apiFetch("/api/projects")]);
             if (!response.ok) throw new Error(`Progress refresh failed (${response.status})`);
             if (!projectsResponse.ok) throw new Error(`Project refresh failed (${projectsResponse.status})`);
             const activities = await response.json() as DashboardData["activities"];
@@ -229,7 +236,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             return;
           }
           const endpoint = resource === "materialRequests" ? "/api/material-requests" : `/api/${resource}`;
-          const response = await fetch(endpoint);
+          const response = await apiFetch(endpoint);
           if (!response.ok) throw new Error(`${resource} refresh failed (${response.status})`);
           const records = await response.json() as DashboardData[typeof resource];
           if (!Array.isArray(records)) throw new Error(`${resource} refresh returned invalid data.`);
@@ -251,14 +258,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       console.error("Real-time workspace connection interrupted; the browser will retry automatically.");
     };
     return () => events.close();
-  }, [data.people, data.projects, role, userName]);
+  }, [data.people, data.projects, demoMode, role, userName]);
 
   useEffect(() => {
     if (role !== "Client" || page !== "My Projects") return;
     let active = true;
     const loadClientProgress = async () => {
       try {
-        const response = await fetch("/api/progress");
+        const response = await apiFetch("/api/progress");
         if (!response.ok) throw new Error(`Project progress request failed (${response.status})`);
         const activities = await response.json() as DashboardData["activities"];
         if (!Array.isArray(activities)) throw new Error("Project progress request returned invalid data.");
@@ -280,7 +287,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     let active = true;
     const loadMaterialRequests = async () => {
       try {
-        const response = await fetch("/api/material-requests");
+        const response = await apiFetch("/api/material-requests");
         if (!response.ok) throw new Error(`Material request list failed (${response.status})`);
         const requests: DashboardData["materialRequests"] = await response.json();
         if (!Array.isArray(requests)) throw new Error("Material request list returned invalid data.");
@@ -315,7 +322,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     let active = true;
     const loadPageData = async () => {
       try {
-        const response = await fetch(endpoint);
+        const response = await apiFetch(endpoint);
         if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
         const result: unknown = await response.json();
         if (!active || !Array.isArray(result)) return;
@@ -446,11 +453,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   useEffect(() => {
     if (!notificationsOpen) return;
+    const previousOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setNotificationsOpen(false);
     };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      document.documentElement.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
   }, [notificationsOpen]);
 
   const showToast = (message: string) => {
@@ -514,7 +526,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         stage: modal === "progress" ? form.get("stage") : undefined,
         progress: modal === "progress" ? form.get("progress") : undefined
       };
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
@@ -565,7 +577,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const updateQuote = async (quote: Quote, decision: "Approved" | "Declined") => {
     try {
-      const response = await fetch(`/api/quotations/${quote.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: decision }) });
+      const response = await apiFetch(`/api/quotations/${quote.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: decision }) });
       if (!response.ok) throw new Error(`Quotation update failed (${response.status})`);
       setData((current) => ({ ...current, quotes: current.quotes.map((item) => item.id === quote.id ? { ...item, status: decision } : item) }));
       showToast(`Quotation ${decision.toLowerCase()}.`);
@@ -577,7 +589,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const updateExpense = async (expense: Expense, status: "Approved" | "Declined" | "Paid") => {
     try {
-      const response = await fetch(`/api/expenses/${expense.id}`, {
+      const response = await apiFetch(`/api/expenses/${expense.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
@@ -594,7 +606,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const updateVisit = async (visit: SiteVisit, status: "Scheduled" | "Completed" | "Cancelled") => {
     try {
-      const response = await fetch(`/api/site-visits/${visit.id}`, {
+      const response = await apiFetch(`/api/site-visits/${visit.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
@@ -611,7 +623,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const removePerson = async (person: Person) => {
     try {
-      const response = await fetch(`/api/people/${person.id}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/people/${person.id}`, { method: "DELETE" });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || `Could not remove ${person.name} (${response.status})`);
       setData((current) => ({ ...current, people: current.people.filter((item) => item.id !== person.id) }));
@@ -624,7 +636,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const submitAttendance = async (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => {
     try {
-      const response = await fetch("/api/attendance", {
+      const response = await apiFetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ engineer: currentUser, action, date, proof })
@@ -648,7 +660,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const regularizeAttendance = async (record: Attendance, capturedAt: string, reason: string) => {
     try {
-      const response = await fetch(`/api/attendance/${record.id}/regularize`, {
+      const response = await apiFetch(`/api/attendance/${record.id}/regularize`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ capturedAt: new Date(capturedAt).toISOString(), reason, regularizedBy: currentUser })
@@ -670,7 +682,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
-      const response = await fetch("/api/feedback", {
+      const response = await apiFetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -692,7 +704,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const requestBackup = async () => {
     try {
-      const response = await fetch("/api/backups", { method: "POST" });
+      const response = await apiFetch("/api/backups", { method: "POST" });
       if (!response.ok) throw new Error(`Backup request failed (${response.status})`);
       const result = await response.json() as { record: Backup };
       setData((current) => ({ ...current, backups: [result.record, ...current.backups] }));
@@ -704,15 +716,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   };
 
   const signOut = async () => {
-    try {
-      const response = await fetch("/api/auth/logout", { method: "POST" });
-      if (!response.ok) throw new Error(`Sign-out failed (${response.status})`);
-    } catch (error) {
-      console.error("Demo API sign-out failed:", error);
-    } finally {
-      localStorage.removeItem("buildtrack-session");
-      navigate("/signin", { replace: true });
+    if (!demoMode) {
+      try {
+        const response = await apiFetch("/api/auth/logout", { method: "POST" });
+        if (!response.ok) throw new Error(`Sign-out failed (${response.status})`);
+      } catch (error) {
+        console.error("API sign-out failed:", error);
+      }
     }
+    localStorage.removeItem("buildtrack-session");
+    navigate("/signin", { replace: true });
   };
 
   const currentUser = userName;
@@ -775,7 +788,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           {navigation[role].map((item) => (
             <button key={item.label} className={`nav-item ${page === item.label ? "nav-active" : ""}`} onClick={() => { navigateToPage(item.label); setMobileNavOpen(false); }}>
               <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
-              {item.label === "Quotations" && role === "Owner" && <span className="nav-count">2</span>}
+              {item.label === "Quotations" && role === "Owner" && data.quotes.filter((quote) => quote.status.toLowerCase().includes("review")).length > 0 && <span className="nav-count">{data.quotes.filter((quote) => quote.status.toLowerCase().includes("review")).length}</span>}
             </button>
           ))}
         </nav>
@@ -791,8 +804,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           <button className="mobile-menu icon-button" aria-label="Open navigation" onClick={() => setMobileNavOpen(!mobileNavOpen)}>☰</button>
           <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{page}</strong></div>
           <div className="topbar-actions">
-            <div className={`api-indicator api-${apiStatus}`} title={apiStatus === "offline" ? "API unavailable — local demo data shown" : "Dashboard API status"}>
-              <span />{apiStatus === "connected" ? "Demo API connected" : apiStatus === "offline" ? "Using local preview" : "Connecting"}
+            <ModeToggle />
+            <div className={`api-indicator api-${apiStatus}`} title={demoMode ? "Frontend-only demo data" : apiStatus === "offline" ? "SQLite API unavailable — no demo data is used" : "Workspace data stored in SQLite"}>
+              <span />{demoMode ? "Local demo" : apiStatus === "connected" ? "SQLite connected" : apiStatus === "offline" ? "SQLite unavailable" : "Connecting"}
             </div>
             <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>♧<i /></button>
             {role === "Client" ? <div className="top-avatar" aria-label={`${currentUser} avatar`}>{initials(currentUser)}</div> : <Link className="top-avatar" to={pagePath(role, "Profile")} aria-label={`View profile for ${currentUser}`}>{profileImage ? <img src={profileImage} alt="" /> : initials(currentUser)}</Link>}

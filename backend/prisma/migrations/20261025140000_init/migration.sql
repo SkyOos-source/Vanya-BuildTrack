@@ -1,10 +1,4 @@
-CREATE TABLE "Project" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "description" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'PLANNING',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
+CREATE TABLE "AppState" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "payload" TEXT NOT NULL
 );

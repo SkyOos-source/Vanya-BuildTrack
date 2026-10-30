@@ -97,11 +97,9 @@ export async function sendPushNotification(message: PushMessage): Promise<void> 
         typeof error.statusCode === "number" ? error.statusCode : undefined;
       if (statusCode === 404 || statusCode === 410) {
         removePushSubscription(subscription.endpoint);
-        try {
-          saveStore();
-        } catch (saveError) {
-          console.error("Unable to remove an expired Web Push subscription from the data store:", saveError);
-        }
+        void saveStore().catch((saveError: unknown) => {
+          console.error("Unable to remove an expired Web Push subscription from the SQLite data store:", saveError);
+        });
         return;
       }
       console.error(`Unable to send Web Push notification to ${subscription.role} ${subscription.userName}:`, error);

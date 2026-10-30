@@ -150,6 +150,14 @@
 					"description": {
 						"type": "string"
 					},
+					"stage": {
+						"type": "string",
+						"enum": [
+							"Start",
+							"Progress",
+							"Completion"
+						]
+					},
 					"kind": {
 						"type": "string"
 					},

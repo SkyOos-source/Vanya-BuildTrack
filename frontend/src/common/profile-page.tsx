@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import type { Role } from "./types";
 import { roleId } from "./data";
 import { initials } from "./utils";
+import { apiFetch } from "./api";
 
 type UserProfile = {
   id: string;
@@ -84,7 +85,7 @@ function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: Pro
     setSaving(true);
     setSaveError("");
     try {
-      const response = await fetch(`/api/profiles/me?role=${encodeURIComponent(roleId(editable.role))}&email=${encodeURIComponent(editable.email)}`, {
+      const response = await apiFetch(`/api/profiles/me?role=${encodeURIComponent(roleId(editable.role))}&email=${encodeURIComponent(editable.email)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone })
@@ -105,7 +106,7 @@ function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: Pro
     setSavingPhoto(true);
     try {
       const image = await prepareProfilePhoto(file);
-      const response = await fetch(`/api/profiles/me?role=${encodeURIComponent(roleId(editable.role))}&email=${encodeURIComponent(editable.email)}`, {
+      const response = await apiFetch(`/api/profiles/me?role=${encodeURIComponent(roleId(editable.role))}&email=${encodeURIComponent(editable.email)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image })
@@ -157,7 +158,7 @@ function useProfile(url: string): LoadState {
     setState(null);
     const loadProfile = async () => {
       try {
-        const response = await fetch(url);
+        const response = await apiFetch(url);
         const result = await response.json() as ProfileResponse & { error?: string };
         if (!response.ok || !result.profile) throw new Error(result.error || `Profile request failed (${response.status})`);
         if (active) setState({ profile: result.profile, qrCode: result.qrCode });

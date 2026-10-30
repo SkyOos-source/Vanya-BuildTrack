@@ -1,5 +1,5 @@
-export const demoUsers = {
-  owner: { email: "owner@vanya.com", password: "owner123", name: "John Smith" },
-  employee: { email: "employee@vanya.com", password: "employee123", name: "Arjun Mehta" },
-  client: { email: "client@vanya.com", password: "client123", name: "Ananya Rao" }
+export const initialOwnerAccount = {
+  email: process.env.OWNER_EMAIL?.trim() || "owner@vanya.com",
+  password: process.env.OWNER_PASSWORD || "owner123",
+  name: process.env.OWNER_NAME?.trim() || "John Smith"
 };

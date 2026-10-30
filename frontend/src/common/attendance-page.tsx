@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type { Attendance, AttendanceLeave, AttendanceProof, DashboardData, Role } from "./types";
 import { StatusBadge } from "./components";
+import { apiFetch } from "./api";
 
 type AttendancePageProps = {
   data: DashboardData;
@@ -158,7 +159,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     let active = true;
     const loadLeaves = async () => {
       try {
-        const response = await fetch("/api/attendance/leaves");
+        const response = await apiFetch("/api/attendance/leaves");
         const result = await response.json() as AttendanceLeave[] | { error?: string };
         if (!response.ok || !Array.isArray(result)) {
           throw new Error(!Array.isArray(result) ? result.error || "Could not load the leave calendar." : `Leave calendar request failed (${response.status}).`);
@@ -210,7 +211,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     setLeaveBusy(true);
     setLeaveError("");
     try {
-      const response = await fetch("/api/attendance/leaves", {
+      const response = await apiFetch("/api/attendance/leaves", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: form.get("title"), date: form.get("date") })
@@ -231,7 +232,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     setLeaveBusy(true);
     setLeaveError("");
     try {
-      const response = await fetch(`/api/attendance/leaves/${leave.id}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/attendance/leaves/${leave.id}`, { method: "DELETE" });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || `Could not remove leave (${response.status}).`);
       setLeaves((current) => current.filter((item) => item.id !== leave.id));
