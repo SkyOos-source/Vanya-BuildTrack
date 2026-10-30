@@ -3,7 +3,7 @@ import "reflect-metadata";
 import cors from "cors";
 import express from "express";
 import { RegisterRoutes } from "./generated/routes";
-import { saveStore } from "./data/store";
+import { initializeStore, saveStore } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 
@@ -18,15 +18,8 @@ app.use((request, response, next) => {
     return;
   }
   const sendJson = response.json.bind(response);
-  response.json = ((body: unknown) => {
+  const sendResponse = (body: unknown) => {
     if (response.statusCode < 400) {
-      try {
-        saveStore();
-      } catch (error) {
-        console.error("Unable to persist JSON data store:", error);
-        response.status(500);
-        return sendJson({ error: "The record could not be saved to the JSON data file." });
-      }
       const record = (body as { record?: Record<string, unknown> } | null)?.record;
       if (request.method === "POST" && request.path === "/api/materials") {
         publishWorkspaceUpdate({ resource: "materials" });
@@ -45,7 +38,7 @@ app.use((request, response, next) => {
           ...(record?.status === "Pending review" ? {
             push: {
               title: "Vanya BuildTrack",
-              body: "Expense request received. An engineer submitted a request for your review.",
+              body: "Expense request received. An engineer submitted an expense request for your review.",
               targets: [{ role: "owner", url: "/admin/expenses" }]
             }
           } : {})
@@ -53,6 +46,15 @@ app.use((request, response, next) => {
       }
     }
     return sendJson(body);
+  };
+  response.json = ((body: unknown) => {
+    if (response.statusCode >= 400) return sendResponse(body);
+    void saveStore().then(() => sendResponse(body)).catch((error: unknown) => {
+      console.error("Unable to persist SQLite workspace data:", error);
+      response.status(500);
+      sendJson({ error: "The record could not be saved to the SQLite database." });
+    });
+    return response;
   }) as typeof response.json;
   next();
 });
@@ -113,10 +115,15 @@ app.delete("/api/push/subscriptions", (request, response) => {
 RegisterRoutes(app);
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  console.error("Mock API request failed:", error);
-  response.status(500).json({ error: "The mock API could not process this request." });
+  console.error("API request failed:", error);
+  response.status(500).json({ error: "The API could not process this request." });
 });
 
-app.listen(port, () => {
-  console.log(`BuildTrack mock API listening on http://localhost:${port}`);
+void initializeStore().then(() => {
+  app.listen(port, () => {
+    console.log(`BuildTrack API listening on http://localhost:${port}`);
+  });
+}).catch((error: unknown) => {
+  console.error("Unable to initialize the SQLite workspace database:", error);
+  process.exitCode = 1;
 });

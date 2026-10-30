@@ -85,6 +85,31 @@ export const demoCredentials: Record<RoleId, { email: string; password: string; 
   client: { email: "client@vanya.com", password: "client123", label: "Client" }
 };
 
+export const emptyDashboardData: DashboardData = {
+  projects: [],
+  quotes: [],
+  expenses: [],
+  siteVisits: [],
+  activities: [],
+  materials: [],
+  materialRequests: [],
+  attendance: [],
+  feedback: [],
+  backups: [],
+  people: []
+};
+
+const modeStorageKey = "buildtrack-mode";
+
+export function isDemoMode(): boolean {
+  return localStorage.getItem(modeStorageKey) === "demo";
+}
+
+export function setDemoMode(enabled: boolean): void {
+  localStorage.setItem(modeStorageKey, enabled ? "demo" : "real");
+  localStorage.removeItem("buildtrack-session");
+}
+
 export function readSession(): SessionUser | null {
   const session = localStorage.getItem("buildtrack-session");
   if (!session) return null;

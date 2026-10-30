@@ -66,6 +66,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .breadcrumb-slash { color: #c9c3bd; }
 .breadcrumb strong { color: #49443f; font-weight: 600; }
 .topbar-actions { display: flex; align-items: center; gap: 17px; }
+.mode-toggle { display: inline-flex; min-height: 30px; align-items: center; gap: 7px; padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: #625b55; cursor: pointer; font-size: 9px; font-weight: 700; }
+.mode-toggle-label { color: #827a73; letter-spacing: .45px; }
+.mode-toggle-switch { display: inline-flex; width: 25px; height: 14px; align-items: center; padding: 2px; border-radius: 9px; background: #c9c4bf; transition: background .16s ease; }
+.mode-toggle-switch i { width: 10px; height: 10px; border-radius: 50%; background: #fff; transition: transform .16s ease; }
+.mode-toggle-switch.mode-toggle-enabled { background: var(--orange); }
+.mode-toggle-switch.mode-toggle-enabled i { transform: translateX(11px); }
+.mode-toggle-state { min-width: 16px; }
 .api-indicator { display: flex; align-items: center; gap: 7px; color: #77716b; font-size: 10px; }
 .api-indicator > span, .footer-status i { width: 7px; height: 7px; border-radius: 50%; background: #c3a351; }
 .api-connected > span, .footer-status i { background: var(--green); }
@@ -540,6 +547,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .landing-page { min-height: 100vh; padding: 0 clamp(22px, 9vw, 132px); background: #fbfaf8; }
 .landing-nav { display: flex; height: 82px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.landing-nav-actions, .signin-nav-actions { display: flex; align-items: center; gap: 14px; }
 .landing-brand { padding: 0; border: 0; }
 .landing-hero { display: flex; min-height: 650px; flex-direction: column; align-items: center; justify-content: center; padding: 58px 0 66px; text-align: center; }
 .landing-symbol { display: grid; width: 66px; height: 66px; margin-bottom: 25px; place-items: center; border: 1px solid #f2dfd0; border-radius: 18px; background: #fff1e5; color: var(--orange); }
@@ -700,6 +708,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .api-indicator { width: 9px; overflow: hidden; white-space: nowrap; font-size: 0; }
   .api-indicator > span { width: 8px; height: 8px; flex: 0 0 8px; }
   .topbar-actions { gap: 9px; }
+  .mode-toggle { gap: 5px; padding: 4px 6px; }
+  .mode-toggle-label { display: none; }
   .content-area { padding: 21px 14px 12px; }
   .page-heading { align-items: start; flex-direction: column; gap: 13px; margin-bottom: 18px; }
   .page-heading h1 { font-size: 22px; }

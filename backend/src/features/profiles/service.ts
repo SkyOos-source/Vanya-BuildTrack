@@ -1,6 +1,5 @@
 import QRCode from "qrcode";
-import { ownerProfile, people, readText } from "../../data/store";
-import { demoUsers } from "../auth/data";
+import { ownerAccount, ownerProfile, people, readText } from "../../data/store";
 import { failure, result } from "../shared";
 
 type PublicProfile = {
@@ -14,11 +13,11 @@ type PublicProfile = {
 
 function findProfile(role: string, email: string): PublicProfile | undefined {
   const normalizedEmail = email.trim().toLowerCase();
-  if (role === "owner" && normalizedEmail === demoUsers.owner.email) {
+  if (role === "owner" && normalizedEmail === ownerAccount.email) {
     return {
       id: "owner",
-      name: demoUsers.owner.name,
-      email: demoUsers.owner.email,
+      name: ownerAccount.name,
+      email: ownerAccount.email,
       role: "Owner",
       phone: ownerProfile.phone,
       image: ownerProfile.image || null
@@ -99,8 +98,8 @@ export function getPublicProfile(id: string) {
     return result({
       profile: {
         id,
-        name: demoUsers.owner.name,
-        email: demoUsers.owner.email,
+        name: ownerAccount.name,
+        email: ownerAccount.email,
         role: "Owner",
         phone: ownerProfile.phone,
         image: ownerProfile.image || null

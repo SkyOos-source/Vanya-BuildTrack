@@ -1,1 +1,1 @@
-export const healthStatus = { status: "ok", data: "mock", database: "not-required" };
+export const healthStatus = { status: "ok", data: "live", database: "sqlite" };
