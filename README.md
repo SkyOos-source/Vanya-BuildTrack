@@ -1,6 +1,6 @@
 # Vanya BuildTrack
 
-A construction project management SaaS starter with role-based Owner, Site Engineer, and Client portals. The frontend is React + TypeScript; the backend is Node.js, Express, and TypeScript.
+A construction project management SaaS starter with role-based Owner, Site Engineer, and Client portals. The frontend is a React + TypeScript single-page application; the backend is Node.js, Express, and TypeScript.
 
 ## Run BuildTrack
 
@@ -21,7 +21,7 @@ The Vite frontend runs at http://localhost:5173 and the Express API runs at http
 
 Use the **Demo mode** toggle in the header to choose between:
 
-- **Demo mode:** sample data and sign-in are handled entirely in the browser. No backend API requests are made; demo changes are stored in that browser.
+- **Demo mode:** sample data and sign-in are handled entirely in the browser. CRUD operations work and changes persist in that browser's local storage; no backend API requests are made.
 - **Real mode (default):** sign-in and workspace data use the SQLite database at `backend/data/buildtrack.db`. The real database starts empty except for the initial owner account.
 
 Demo credentials are available when Demo mode is on:
