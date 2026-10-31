@@ -3,6 +3,7 @@ import type { DashboardData, Role, RoleId, SessionUser } from "./types";
 export const navigation: Record<Role, { label: string; icon: string }[]> = {
   Owner: [
     { label: "Dashboard", icon: "◫" }, { label: "Projects & Sites", icon: "▦" },
+    { label: "Work Progress", icon: "▥" },
     { label: "Materials", icon: "◈" }, { label: "Expenses", icon: "＄" },
     { label: "Quotations", icon: "▤" }, { label: "People", icon: "♙" },
     { label: "Attendance", icon: "◷" }, { label: "Reports", icon: "▥" },

@@ -8,10 +8,15 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
   const [showCompletionReport, setShowCompletionReport] = useState(false);
   const materials = data.materials.filter((item) => item.project === project.name);
   const quotations = data.quotes.filter((item) => item.project === project.name);
+  const displayedQuotationAmount = quotations.length > 0
+    ? quotations.reduce((total, quotation) => total + quotation.amount, 0)
+    : project.quotationAmount ?? 0;
   const expenses = data.expenses.filter((item) => item.project === project.name);
+  const assignedEngineer = data.people.find((person) => person.role === "Site Engineer" && person.name === project.engineer);
   const activities = data.activities.filter((item) => item.project === project.name && item.kind === "progress");
   const sitePhotos = activities
-    .filter((item) => item.attachment)
+    .flatMap((item) => (item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : [])
+      .map((attachment, index) => ({ ...item, id: `${item.id}-${index}`, attachment })))
     .sort((left, right) => {
       const leftTime = left.createdAt ? Date.parse(left.createdAt) : Number.NaN;
       const rightTime = right.createdAt ? Date.parse(right.createdAt) : Number.NaN;
@@ -73,10 +78,10 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
     </div>
     <div className="project-details-overview">
       <div><span>Project location</span><strong>{project.site}</strong></div>
-      <div><span>Assigned engineer</span><strong>{project.engineer}</strong></div>
+      <div><span>Assigned engineer</span><strong>{project.engineer}</strong>{role === "Client" && assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}</div>
       <div><span>Status</span><StatusBadge status={project.status} /></div>
       <div><span>Progress</span><strong>{project.progress}%</strong></div>
-      <div><span>Quotation</span><strong>{formatCurrency(project.quotationAmount ?? 0)}</strong></div>
+      <div><span>Quotation</span><strong>{formatCurrency(role === "Client" ? displayedQuotationAmount : project.quotationAmount ?? 0)}</strong></div>
       {role !== "Client" && <>
         <div><span>Budget</span><strong>{formatCurrency(project.budget)}</strong></div>
         <div><span>Spent</span><strong>{formatCurrency(project.spent)}</strong></div>
@@ -85,18 +90,21 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
     </div>
 
     <div className="project-details-sections">
-      <section><h3>Materials</h3>{materials.length > 0
+      {role !== "Client" && <section><h3>Materials</h3>{materials.length > 0
         ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Received</th><th>Used</th><th>In stock</th></tr></thead><tbody>{materials.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.received}</td><td>{item.used}</td><td>{item.stock}</td></tr>)}</tbody></table></div>
-        : <p className="project-details-empty">No materials recorded for this project.</p>}</section>
+        : <p className="project-details-empty">No materials recorded for this project.</p>}</section>}
       <section><h3>Quotations</h3>{quotations.length > 0
         ? <div className="project-details-list">{quotations.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.id} · {item.date}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} />{item.attachment && <QuotationPdfPreview attachment={item.attachment} title={item.title} />}</article>)}</div>
         : <p className="project-details-empty">No additional quotations recorded.</p>}</section>
       {role !== "Client" && <section><h3>Expenses</h3>{expenses.length > 0
         ? <div className="project-details-list">{expenses.map((item) => <article key={item.id}><div><strong>{item.description}</strong><span>{item.date} · {item.submittedBy}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} /></article>)}</div>
         : <p className="project-details-empty">No expenses recorded for this project.</p>}</section>}
-      <section><h3>Progress updates</h3>{activities.length > 0
-        ? <div className="project-details-list">{activities.map((item) => <article key={item.id}><div><strong>{item.description || item.action}</strong><span>{item.actor} · {item.time}</span></div></article>)}</div>
-        : <p className="project-details-empty">No progress updates recorded.</p>}</section>
+      {role !== "Client" && <section><h3>Progress updates</h3>{activities.length > 0
+        ? <div className="project-details-list">{activities.map((item) => {
+          const photos = item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : [];
+          return <article key={item.id}><div><strong>{item.description || item.action}</strong><span>{item.actor} · {item.time}</span>{photos.map((attachment, index) => <a key={`${item.id}-photo-${index}`} href={attachment} target="_blank" rel="noreferrer"><img className="client-work-progress-thumbnail" src={attachment} alt={`Progress photo ${index + 1} for ${item.project}`} /></a>)}</div></article>;
+        })}</div>
+        : <p className="project-details-empty">No progress updates recorded.</p>}</section>}
       <section><h3>Site visits</h3>{visits.length > 0
         ? <div className="project-details-list">{visits.map((item) => <article key={item.id}><div><strong>{item.date} · {item.time}</strong><span>{item.site} · {item.engineer}</span></div><StatusBadge status={item.status} /></article>)}</div>
         : <p className="project-details-empty">No site visits scheduled.</p>}</section>

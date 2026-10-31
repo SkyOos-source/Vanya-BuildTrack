@@ -211,7 +211,7 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
     } else if (collection === "siteVisits") {
       record = { id: nextId("VIS-", demoState.siteVisits), project: projectName, site: project?.site ?? "", engineer: text(body.engineer), date: text(body.date, "To be scheduled"), time: text(body.time, "To be scheduled"), status: "Scheduled" };
     } else if (collection === "activities") {
-      record = { id: nextId("UPD-", demoState.activities), actor: text(body.submittedBy), action: "shared a progress update", project: projectName, description: text(body.description), time: "Just now", kind: "progress", stage: body.stage, attachment: body.attachment, createdAt: new Date().toISOString() };
+      record = { id: nextId("UPD-", demoState.activities), actor: text(body.submittedBy), action: "shared a progress update", project: projectName, description: text(body.description), time: "Just now", kind: "progress", stage: body.stage, attachment: body.attachment, attachments: body.attachments, createdAt: new Date().toISOString() };
       if (project && typeof body.progress === "number") project.progress = body.progress;
     } else if (collection === "materials") {
       record = { id: nextId("MAT-", demoState.materials), material: text(body.material), project: projectName, received: text(body.received), used: text(body.used, "0"), stock: text(body.stock, text(body.received)), lastUpdated: "Just now", submittedBy: text(body.submittedBy) };

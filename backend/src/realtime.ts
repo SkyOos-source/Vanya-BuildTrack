@@ -1,6 +1,6 @@
 import { sendPushNotification, type PushMessage } from "./push";
 
-export type WorkspaceUpdate = { resource: "materials" | "materialRequests" | "expenses" | "progress"; push?: PushMessage };
+export type WorkspaceUpdate = { resource: "materials" | "materialRequests" | "expenses" | "progress" | "quotations"; push?: PushMessage };
 
 type WorkspaceUpdateListener = (update: WorkspaceUpdate) => void;
 

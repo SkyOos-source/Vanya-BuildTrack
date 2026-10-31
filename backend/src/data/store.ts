@@ -61,6 +61,7 @@ export type Activity = {
   stage?: "Start" | "Progress" | "Completion";
   description?: string;
   attachment?: string;
+  attachments?: string[];
   createdAt?: string;
 };
 export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };

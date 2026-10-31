@@ -211,11 +211,11 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         console.error("Unable to parse a real-time workspace update:", error);
         return;
       }
-      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress") {
+      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress" && resource !== "quotations") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
-      if (role === "Client" && resource !== "progress") return;
+      if (role === "Client" && resource !== "progress" && resource !== "quotations") return;
       void (async () => {
         try {
           if (resource === "progress") {
@@ -238,12 +238,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           const endpoint = resource === "materialRequests" ? "/api/material-requests" : `/api/${resource}`;
           const response = await apiFetch(endpoint);
           if (!response.ok) throw new Error(`${resource} refresh failed (${response.status})`);
-          const records = await response.json() as DashboardData[typeof resource];
+          const records: unknown = await response.json();
           if (!Array.isArray(records)) throw new Error(`${resource} refresh returned invalid data.`);
           if (resource === "materials") {
             setData((current) => ({ ...current, materials: records as DashboardData["materials"] }));
           } else if (resource === "materialRequests") {
             setData((current) => ({ ...current, materialRequests: records as DashboardData["materialRequests"] }));
+          } else if (resource === "quotations") {
+            setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
           } else {
             setData((current) => ({ ...current, expenses: records as DashboardData["expenses"] }));
           }
@@ -410,6 +412,13 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           time: quote.date,
           icon: "▤",
           page: "Quotations"
+        })),
+        ...data.quotes.filter((quote) => quote.status === "Approved").map((quote) => ({
+          title: "Quotation approved by client",
+          detail: `${quote.title} · ${quote.project}`,
+          time: quote.date,
+          icon: "▤",
+          page: "Quotations"
         }))
       ].slice(0, 8);
     }
@@ -443,7 +452,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         icon: activity.kind === "progress" ? "▥" : "◷",
         page: "Timeline"
       })),
-      ...data.quotes.filter((quote) => (quote.client === userName || clientProjectNames.has(quote.project)) && (quote.status === "Sent to client" || quote.status === "Changes requested")).map((quote) => ({
+      ...data.quotes.filter((quote) => (quote.client === userName || clientProjectNames.has(quote.project)) && (quote.status === "Sent to client" || quote.status === "Awaiting review" || quote.status === "Changes requested")).map((quote) => ({
         title: quote.status === "Sent to client" ? "Quotation ready for review" : "Quotation updated",
         detail: `${quote.title} · ${quote.project}`,
         time: quote.date,
@@ -483,6 +492,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     });
   };
 
+  const readFileDataUrls = async (entries: FormDataEntryValue[]) => {
+    const files = entries.filter((entry): entry is File => entry instanceof File && entry.size > 0);
+    if (files.length > 5) throw new Error("You can upload up to 5 progress photos.");
+    if (files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
+      throw new Error("Progress photos must be JPEG, PNG, or WebP images.");
+    }
+    return Promise.all(files.map((file) => readFileDataUrl(file)));
+  };
+
   const createRecord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!modal) return;
@@ -491,7 +509,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     const amount = Number(form.get("amount") || 0);
     try {
       const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
-      const attachment = modal === "expense" || modal === "expense-log" || modal === "progress" ? await readFileDataUrl(form.get("attachment")) : undefined;
+      const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
+      const attachment = modal === "expense" || modal === "expense-log" ? await readFileDataUrl(form.get("attachment")) : progressAttachments?.[0];
       const quotationFile = form.get("quotationFile");
       if (modal === "quote" && quotationFile instanceof File && quotationFile.size > 0) {
         if (!/\.pdf$/i.test(quotationFile.name) || (quotationFile.type && quotationFile.type !== "application/pdf")) {
@@ -524,6 +543,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         submittedBy: currentUser,
         entryType: modal === "expense-log" ? "log" : "request",
         attachment,
+        attachments: progressAttachments,
         quotationAttachment,
         stage: modal === "progress" ? form.get("stage") : undefined,
         progress: modal === "progress" ? form.get("progress") : undefined
@@ -750,7 +770,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     Expenses: "Keep project spending and receipt reviews in view.",
     Quotations: "Manage project quotations and additional work approvals.",
     "Progress Updates": "Share the latest site progress with your project team.",
-    "Work Progress": "Follow construction updates and photos from your project.",
+    "Work Progress": role === "Owner" ? "Review site updates and photos shared by engineers." : "Follow construction updates and photos from your project.",
     Attendance: "Review daily attendance across your construction sites.",
     Reports: "Project-wise progress, expenses, materials, and activity.",
     "Site Visits": "Plan and follow up on engineer site visits.",
@@ -855,7 +875,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             <div><span className="panel-kicker">{role.toUpperCase()} WORKSPACE</span><h2 id="notification-title">Notifications</h2><p>Updates that need your attention.</p></div>
             <button className="icon-button notification-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button>
           </header>
-          <div className="push-notification-control"><div><strong>Browser push notifications</strong><span>{pushStatus === "enabled" ? "Enabled on this device." : pushStatus === "checking" ? "Checking browser and server support…" : pushStatus === "unsupported" ? "This browser does not support push notifications." : pushStatus === "unconfigured" ? "Push delivery needs server VAPID configuration." : pushStatus === "denied" ? "Permission is blocked in browser settings." : pushStatus === "error" ? "Could not update push settings. Try again." : role === "Owner" ? "Get expense and material requests outside the app." : role === "Employee" ? "Get project and work update alerts on this device." : "Get work updates for your project outside the app."}</span></div><button className="button button-outline" disabled={pushStatus === "checking" || pushStatus === "unsupported" || pushStatus === "unconfigured" || pushStatus === "denied"} onClick={() => void togglePushNotifications()}>{pushStatus === "enabled" ? "Turn off" : pushStatus === "checking" ? "Checking…" : pushStatus === "unconfigured" ? "Unavailable" : pushStatus === "denied" ? "Blocked" : pushStatus === "error" ? "Try again" : "Enable"}</button></div>
+          <div className="push-notification-control"><div><strong>Browser push notifications</strong><span>{pushStatus === "enabled" ? "Enabled on this device." : pushStatus === "checking" ? "Checking browser and server support…" : pushStatus === "unsupported" ? "This browser does not support push notifications." : pushStatus === "unconfigured" ? "Push delivery needs server VAPID configuration." : pushStatus === "denied" ? "Permission is blocked in browser settings." : pushStatus === "error" ? "Could not update push settings. Try again." : role === "Owner" ? "Get quotation approvals, expense and material requests outside the app." : role === "Employee" ? "Get project and work update alerts on this device." : "Get new quotation and work updates for your project outside the app."}</span></div><button className="button button-outline" disabled={pushStatus === "checking" || pushStatus === "unsupported" || pushStatus === "unconfigured" || pushStatus === "denied"} onClick={() => void togglePushNotifications()}>{pushStatus === "enabled" ? "Turn off" : pushStatus === "checking" ? "Checking…" : pushStatus === "unconfigured" ? "Unavailable" : pushStatus === "denied" ? "Blocked" : pushStatus === "error" ? "Try again" : "Enable"}</button></div>
           {notifications.length > 0
             ? <div className="notification-list">{notifications.map((item, index) => (
               <button className="notification-item" key={`${item.title}-${item.detail}-${index}`} onClick={() => { setNotificationsOpen(false); navigateToPage(item.page); }}>

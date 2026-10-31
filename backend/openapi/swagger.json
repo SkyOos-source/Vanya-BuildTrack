@@ -144,6 +144,12 @@
 					"createdAt": {
 						"type": "string"
 					},
+					"attachments": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
 					"attachment": {
 						"type": "string"
 					},
