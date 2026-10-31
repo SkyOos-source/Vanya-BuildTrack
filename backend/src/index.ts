@@ -32,6 +32,15 @@ app.use((request, response, next) => {
             targets: [{ role: "owner", url: "/admin/materials" }]
           }
         });
+      } else if (request.method === "POST" && request.path === "/api/attendance/regularization-requests") {
+        publishWorkspaceUpdate({
+          resource: "attendance",
+          push: {
+            title: "Attendance regularization requested",
+            body: `${request.body?.engineer ?? "An engineer"} requested a missed check-out correction.`,
+            targets: [{ role: "owner", url: "/admin/attendance" }]
+          }
+        });
       } else if (request.method === "POST" && request.path === "/api/expenses") {
         publishWorkspaceUpdate({
           resource: "expenses",

@@ -74,6 +74,7 @@ export type AttendanceProof = { image: string; capturedAt: string; latitude: num
 export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
 export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
 export type AttendanceLeave = { id: string; title: string; date: string };
+export type AttendanceRegularizationRequest = { id: string; attendanceId: string; engineer: string; date: string; capturedAt: string; reason: string; requestedAt: string; status: "Pending review" | "Approved" | "Declined"; reviewedBy?: string; reviewedAt?: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string; image?: string };
@@ -96,6 +97,7 @@ export const materials: Material[] = [];
 export const materialRequests: MaterialRequest[] = [];
 export const attendance: Attendance[] = [];
 export const attendanceLeaves: AttendanceLeave[] = [];
+export const attendanceRegularizationRequests: AttendanceRegularizationRequest[] = [];
 export const feedback: Feedback[] = [];
 export const backups: Backup[] = [];
 export const people: Person[] = [];
@@ -105,13 +107,14 @@ export const clientCredentials: EmployeeCredential[] = [];
 export const pushSubscriptions: PushSubscriptionRecord[] = [];
 export const ownerAccount: OwnerAccount = { email: "", name: "", salt: "", passwordHash: "" };
 
-export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, feedback, backups, people, pushSubscriptions, ownerProfile, ownerAccount };
+export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfile, ownerAccount };
 let projectSequence = 1;
 let quotationSequence = 1;
 let expenseSequence = 1;
 let visitSequence = 1;
 let updateSequence = 1;
 let attendanceSequence = 1;
+let attendanceRegularizationRequestSequence = 1;
 let materialSequence = 1;
 let materialRequestSequence = 1;
 let personSequence = 1;
@@ -234,6 +237,7 @@ export async function initializeStore() {
   restore(materialRequests, "materialRequests");
   restore(attendance, "attendance");
   restore(attendanceLeaves, "attendanceLeaves");
+  restore(attendanceRegularizationRequests, "attendanceRegularizationRequests");
   restore(feedback, "feedback");
   restore(backups, "backups");
   restore(people, "people");
@@ -255,6 +259,7 @@ export async function initializeStore() {
   expenseSequence = nextSequence(expenses, "EXP-", expenseSequence);
   visitSequence = nextSequence(siteVisits, "VIS-", visitSequence);
   attendanceSequence = nextSequence(attendance, "ATT-", attendanceSequence);
+  attendanceRegularizationRequestSequence = nextSequence(attendanceRegularizationRequests, "AREQ-", attendanceRegularizationRequestSequence);
   materialSequence = nextSequence(materials, "MAT-", materialSequence);
   materialRequestSequence = nextSequence(materialRequests, "MREQ-", materialRequestSequence);
   personSequence = nextSequence(people, "USR-", personSequence);
@@ -342,6 +347,7 @@ export function nextId(kind: string): string {
     visit: { prefix: "VIS-", next: () => visitSequence++ },
     progress: { prefix: "UPD-", next: () => updateSequence++ },
     attendance: { prefix: "ATT-", next: () => attendanceSequence++ },
+    "attendance-regularization-request": { prefix: "AREQ-", next: () => attendanceRegularizationRequestSequence++ },
     material: { prefix: "MAT-", next: () => materialSequence++ },
     "material-request": { prefix: "MREQ-", next: () => materialRequestSequence++ },
     person: { prefix: "USR-", next: () => personSequence++ }

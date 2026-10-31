@@ -49,11 +49,14 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
   const [photo, setPhoto] = useState<File | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [engineerFilter, setEngineerFilter] = useState("All");
+  const [projectFilter, setProjectFilter] = useState("All");
   const [visitDateFilter, setVisitDateFilter] = useState("");
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const cameraRequestRef = useRef(0);
   const [previewUrl, setPreviewUrl] = useState("");
 
   useEffect(() => {
@@ -73,6 +76,7 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
   }, [photo]);
 
   const openCamera = async (facingMode: "user" | "environment") => {
+    const requestId = ++cameraRequestRef.current;
     setError("");
     setCameraOpen(false);
     setCameraStream(null);
@@ -80,17 +84,34 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
       setError("Camera access is unavailable. Open this page over HTTPS and allow camera access.");
       return;
     }
+    setCameraLoading(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false });
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       setPhoto(null);
       setCameraStream(stream);
       setCameraOpen(true);
     } catch (cameraError) {
+      if (requestId !== cameraRequestRef.current) return;
       console.error("Unable to open the site visit camera:", cameraError);
       setError(cameraError instanceof DOMException && cameraError.name === "NotAllowedError"
         ? "Camera permission was denied. Allow camera access in your browser settings."
         : "Could not open the camera. Check that it is connected and not being used by another app.");
+    } finally {
+      if (requestId === cameraRequestRef.current) setCameraLoading(false);
     }
+  };
+
+  const closeCapture = () => {
+    cameraRequestRef.current += 1;
+    setCapture(null);
+    setPhoto(null);
+    setCameraOpen(false);
+    setCameraLoading(false);
+    setCameraStream(null);
   };
 
   const capturePhoto = async () => {
@@ -129,10 +150,14 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
     return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
   };
   const availableEngineers = [...new Set(visits.map((visit) => visit.engineer))].sort((left, right) => left.localeCompare(right));
+  const availableProjects = [...new Set(visits
+    .filter((visit) => role !== "Employee" || visit.engineer === currentUser)
+    .map((visit) => visit.project))].sort((left, right) => left.localeCompare(right));
   const visibleVisits = visits
     .filter((visit) => role !== "Employee" || visit.engineer === currentUser)
     .filter((visit) => role !== "Owner" || engineerFilter === "All" || visit.engineer === engineerFilter)
-    .filter((visit) => role !== "Owner" || !visitDateFilter || visitDateKey(visit.date) === visitDateFilter)
+    .filter((visit) => role !== "Employee" || projectFilter === "All" || visit.project === projectFilter)
+    .filter((visit) => !visitDateFilter || visitDateKey(visit.date) === visitDateFilter)
     .slice()
     .sort((left, right) => visitDateKey(left.date).localeCompare(visitDateKey(right.date)));
 
@@ -162,13 +187,18 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
     <section className="panel feature-panel">
       <div className="list-toolbar">
         <div><span className="panel-kicker">FIELD SCHEDULE</span><h2 className="list-title">{role === "Employee" ? "My site visits" : "Engineer site visits"}</h2></div>
-        {role === "Owner" && <div className="toolbar-actions">
-          <select className="select-button" aria-label="Filter site visits by engineer" value={engineerFilter} onChange={(event) => setEngineerFilter(event.target.value)}>
-            <option value="All">All engineers</option>
-            {availableEngineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
-          </select>
+        {(role === "Owner" || role === "Employee") && <div className="toolbar-actions">
+          {role === "Owner"
+            ? <select className="select-button" aria-label="Filter site visits by engineer" value={engineerFilter} onChange={(event) => setEngineerFilter(event.target.value)}>
+              <option value="All">All engineers</option>
+              {availableEngineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
+            </select>
+            : <select className="select-button" aria-label="Filter site visits by project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+              <option value="All">All projects</option>
+              {availableProjects.map((project) => <option key={project} value={project}>{project}</option>)}
+            </select>}
           <label className="work-progress-date-filter"><input aria-label="Filter site visits by date" type="date" value={visitDateFilter} onChange={(event) => setVisitDateFilter(event.target.value)} /></label>
-          <button className="button button-primary" onClick={onSchedule}>＋ Schedule visit</button>
+          {role === "Owner" && <button className="button button-primary" onClick={onSchedule}>＋ Schedule visit</button>}
         </div>}
       </div>
       {visibleVisits.length
@@ -184,31 +214,29 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
           </div>
           <div className="visit-card-end">
             <StatusBadge status={visit.status} />
-            {role === "Employee" && visit.status === "Scheduled" && <button className="button button-primary" onClick={() => { setError(""); setPhoto(null); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-in" }); }}>Check in with photo</button>}
-            {role === "Employee" && visit.status === "Checked in" && <button className="button button-primary" onClick={() => { setError(""); setPhoto(null); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-out" }); }}>Check out with photo</button>}
+            {role === "Employee" && visit.status === "Scheduled" && <button className="button button-primary" onClick={() => { setError(""); setPhoto(null); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-in" }); void openCamera("user"); }}>Check in with photo</button>}
+            {role === "Employee" && visit.status === "Checked in" && <button className="button button-primary" onClick={() => { setError(""); setPhoto(null); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-out" }); void openCamera("user"); }}>Check out with photo</button>}
           </div>
         </article>;
         })}</div>
-        : <div className="inline-empty">{role === "Employee" ? "No site visits have been scheduled for you yet." : engineerFilter !== "All" || visitDateFilter ? "No site visits match these filters." : "No site visits have been scheduled yet."}</div>}
+        : <div className="inline-empty">{role === "Employee" ? projectFilter !== "All" || visitDateFilter ? "No site visits match these filters." : "No site visits have been scheduled for you yet." : engineerFilter !== "All" || visitDateFilter ? "No site visits match these filters." : "No site visits have been scheduled yet."}</div>}
     </section>
 
     {capture && <div className="attendance-preview-scrim" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !saving) { setCapture(null); setPhoto(null); setCameraOpen(false); setCameraStream(null); }
+      if (event.target === event.currentTarget && !saving) closeCapture();
     }}>
       <form className="attendance-capture-dialog site-visit-capture-dialog" onSubmit={(event) => void submitProof(event)} role="dialog" aria-modal="true" aria-labelledby="site-visit-capture-title">
         <div className="attendance-preview-heading"><strong id="site-visit-capture-title">{capture.action === "check-in" ? "Site visit check-in" : "Site visit check-out"}</strong>
-          <button type="button" aria-label="Close dialog" disabled={saving} onClick={() => { setCapture(null); setPhoto(null); }}>×</button>
+          <button type="button" aria-label="Close dialog" disabled={saving} onClick={closeCapture}>×</button>
         </div>
         <p>{capture.visit.project} · {capture.visit.site}<br />{capture.action === "check-in" ? "Take a photo when you arrive at the site." : "Take a photo before leaving the site."}</p>
-        <div className="attendance-photo-options" aria-label="Choose a site visit camera">
-          <button className="button button-outline attendance-photo-option" type="button" disabled={saving} onClick={() => void openCamera("user")}>▣ Take Selfie</button>
-          <button className="button button-outline attendance-photo-option" type="button" disabled={saving} onClick={() => void openCamera("environment")}>▣ Take Site Photo</button>
-        </div>
+        {cameraLoading && <p>Opening selfie camera…</p>}
         {cameraOpen && <div className="attendance-live-camera"><video ref={cameraVideoRef} autoPlay muted playsInline aria-label="Live camera preview" /><button className="button button-primary" type="button" onClick={() => void capturePhoto()}>Capture Photo</button></div>}
+        {!cameraOpen && !cameraLoading && error && <button className="button button-outline attendance-photo-option" type="button" disabled={saving} onClick={() => void openCamera("user")}>Retry selfie camera</button>}
         {previewUrl && photo && <img className="attendance-capture-preview" src={previewUrl} alt="Selected site visit photo" />}
         {photo && <p className="site-visit-selected-photo">{photo.name}</p>}
         {error && <p className="attendance-error" role="alert">{error}</p>}
-        <div className="attendance-dialog-actions"><button className="button button-outline" type="button" disabled={saving} onClick={() => { setCapture(null); setPhoto(null); setCameraOpen(false); setCameraStream(null); }}>Cancel</button><button className="button button-primary" type="submit" disabled={saving || !photo}>{saving ? "Saving…" : capture.action === "check-in" ? "Save check-in" : "Save check-out"}</button></div>
+        <div className="attendance-dialog-actions"><button className="button button-outline" type="button" disabled={saving} onClick={closeCapture}>Cancel</button><button className="button button-primary" type="submit" disabled={saving || !photo}>{saving ? "Saving…" : capture.action === "check-in" ? "Save check-in" : "Save check-out"}</button></div>
       </form>
     </div>}
   </>;

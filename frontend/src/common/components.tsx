@@ -1,15 +1,40 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { Expense, Person, Project, RecordModalType } from "./types";
 import { formatCurrency } from "./utils";
 
-export function ProjectCards({ projects, onOpen, showBudget = true }: { projects: Project[]; onOpen: (project: Project) => void; showBudget?: boolean }) {
+export function ProjectCards({ projects, onOpen }: { projects: Project[]; onOpen: (project: Project) => void }) {
   if (!projects.length) return <div className="inline-empty">No projects match this search. Try another name or status.</div>;
-  return <div className="project-cards">{projects.map((project) => <button className="portfolio-card" key={project.id} onClick={() => onOpen(project)}><div className="portfolio-image" style={{ backgroundImage: `linear-gradient(0deg, rgba(33,30,28,.78), transparent 72%), url(https://images.unsplash.com/${project.image}?auto=format&fit=crop&w=700&q=80)` }}><span className="portfolio-id">{project.id}</span><span className="portfolio-status"><i /> {project.status}</span><div className="portfolio-title"><h3>{project.name}</h3><span>⌖ {project.site}</span></div></div><div className="portfolio-details"><div className="portfolio-progress"><span>Progress</span><strong>{project.progress}%</strong></div><div className="progress-track"><i style={{ width: `${project.progress}%` }} /></div><div className="portfolio-foot">{showBudget && <span>Budget <strong>{formatCurrency(project.budget)}</strong></span>}<span>Due <strong>{project.dueDate}</strong></span></div></div></button>)}</div>;
+  return <div className="project-cards">{projects.map((project) => <button className="portfolio-card" key={project.id} onClick={() => onOpen(project)}><div className="portfolio-image" style={{ backgroundImage: `linear-gradient(0deg, rgba(33,30,28,.78), transparent 72%), url(https://images.unsplash.com/${project.image}?auto=format&fit=crop&w=700&q=80)` }}><span className="portfolio-id">{project.id}</span><span className="portfolio-status"><i /> {project.status}</span><div className="portfolio-title"><h3>{project.name}</h3><span>⌖ {project.site}</span></div></div><div className="portfolio-details"><div className="portfolio-progress"><span>Progress</span><strong>{project.progress}%</strong></div><div className="progress-track"><i style={{ width: `${project.progress}%` }} /></div><div className="portfolio-foot"><span>Due <strong>{project.dueDate}</strong></span></div></div></button>)}</div>;
 }
 
 export function ExpenseRows({ expenses, detailed = false, onAction, onApprove, onDecline }: { expenses: Expense[]; detailed?: boolean; onAction?: (expense: Expense) => void; onApprove?: (expense: Expense) => void; onDecline?: (expense: Expense) => void }) {
+  const [receipt, setReceipt] = useState<Expense | null>(null);
+  useEffect(() => {
+    if (!receipt) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setReceipt(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [receipt]);
   if (!expenses.length) return <div className="inline-empty">No expenses to show yet.</div>;
-  return <div className={`expense-list ${detailed ? "expense-list-detailed" : ""}`}>{expenses.map((expense) => <div className="expense-row" key={expense.id}><span className={`expense-icon ${expense.category === "Labour" ? "expense-labour" : ""}`}>{expense.category === "Materials" ? "◈" : expense.category === "Labour" ? "♙" : "▧"}</span><div className="expense-main"><strong>{expense.description}</strong><span>{expense.project} · {expense.submittedBy}</span></div><time>{expense.date.split(" ").slice(0, 2).join(" ")}</time><strong className="expense-amount">{formatCurrency(expense.amount)}</strong><StatusBadge status={expense.status} />{detailed && <><button className="text-link receipt-action" onClick={() => onAction?.(expense)}>{expense.status === "Pending review" && onApprove ? "View" : "Receipt"} ↗</button>{expense.status === "Pending review" && onApprove && onDecline && <div className="inline-actions expense-review-actions"><button onClick={() => onApprove(expense)}>Approve</button><button onClick={() => onDecline(expense)}>Decline</button></div>}</>}</div>)}</div>;
+  return <>
+    <div className={`expense-list ${detailed ? "expense-list-detailed" : ""}`}>{expenses.map((expense) => <div className="expense-row" key={expense.id}><span className={`expense-icon ${expense.category === "Labour" ? "expense-labour" : ""}`}>{expense.category === "Materials" ? "◈" : expense.category === "Labour" ? "♙" : "▧"}</span><div className="expense-main"><strong>{expense.description}</strong><span>{expense.project} · {expense.submittedBy}</span></div><time>{expense.date.split(" ").slice(0, 2).join(" ")}</time><strong className="expense-amount">{formatCurrency(expense.amount)}</strong><StatusBadge status={expense.status} />{detailed && <><button className="text-link receipt-action" onClick={() => expense.attachment ? setReceipt(expense) : onAction?.(expense)}>{expense.status === "Pending review" && onApprove ? "View" : "Receipt"} ↗</button>{expense.status === "Pending review" && onApprove && onDecline && <div className="inline-actions expense-review-actions"><button onClick={() => onApprove(expense)}>Approve</button><button onClick={() => onDecline(expense)}>Decline</button></div>}</>}</div>)}</div>
+    {receipt?.attachment && <div className="pdf-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReceipt(null); }}>
+      <section className="pdf-preview-dialog expense-receipt-dialog" role="dialog" aria-modal="true" aria-label={`${receipt.description} receipt`}>
+        <header className="pdf-preview-header">
+          <strong>{receipt.description} · {receipt.project}</strong>
+          <div>
+            <a className="button button-outline" href={receipt.attachment} download={`${receipt.id}-receipt${receipt.attachment.startsWith("data:application/pdf") ? ".pdf" : ".jpg"}`}>Download</a>
+            <button className="icon-button" type="button" aria-label="Close receipt preview" onClick={() => setReceipt(null)}>×</button>
+          </div>
+        </header>
+        {receipt.attachment.startsWith("data:application/pdf")
+          ? <iframe title={`${receipt.description} receipt PDF`} src={receipt.attachment} />
+          : <div className="expense-receipt-image"><img src={receipt.attachment} alt={`${receipt.description} receipt`} /></div>}
+      </section>
+    </div>}
+  </>;
 }
 
 export function StatCard({ label, value, note, icon, trend, attention = false }: { label: string; value: string; note: string; icon: string; trend: string; attention?: boolean }) {
@@ -38,7 +63,7 @@ export function RecordModal({ modal, projects, people, onClose, onSubmit }: { mo
     } : undefined}>{projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select></label>}
     {modal === "progress" && <label>Site photo stage<select name="stage" defaultValue="Progress"><option value="Start">Project start</option><option value="Progress">Progress update</option><option value="Completion">Project completion</option></select></label>}
     {modal === "progress" && <label>Overall project completion (%)<input name="progress" type="number" min="0" max="100" step="1" placeholder="Optional, from 0 to 100" /></label>}
-    {modal === "project" && <><label>Project location<input name="site" required placeholder="e.g. Whitefield, Bengaluru" /></label><label>Assign engineer<select name="engineer" required defaultValue=""><option value="" disabled>Select a site engineer</option>{people.filter((person) => person.role === "Site Engineer").map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Quotation (INR)<input name="quotationAmount" type="number" min="0" required placeholder="0" /></label><label>Budget (INR)<input name="budget" type="number" min="0" required placeholder="0" /></label></>}
+    {modal === "project" && <><label>Project location<input name="site" required placeholder="e.g. Whitefield, Bengaluru" /></label><label>Assign engineer<select name="engineer" required defaultValue=""><option value="" disabled>Select a site engineer</option>{people.filter((person) => person.role === "Site Engineer").map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Quotation (INR)<input name="quotationAmount" type="number" min="0" required placeholder="0" /></label></>}
     {modal === "quote" && <label>Upload quotation<input name="quotationFile" type="file" accept="application/pdf,.pdf" /></label>}
     {modal === "person" && <><label>Full name<input name="name" required /></label><label>Email<input name="email" type="email" required /></label><label>Phone number<input name="phone" type="tel" inputMode="tel" placeholder="+91 98765 43210" /></label><label>Role<select name="role" value={personRole} onChange={(event) => setPersonRole(event.target.value as "Site Engineer" | "Client")}><option>Site Engineer</option><option>Client</option></select></label><label>{personRole === "Client" ? "Client password" : "Temporary password"}<input name="password" type="password" autoComplete="new-password" minLength={8} required /><small>At least 8 characters. Share it securely with the {personRole === "Client" ? "client" : "employee"}.</small></label>{personRole === "Client" && <label>Assign project<select name="project" required defaultValue=""><option value="" disabled>Select a project</option>{projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select></label>}</>}
     {modal === "material" && <><label>Material name<input name="material" required placeholder="e.g. M25 ready-mix concrete" /></label><label>Received quantity<input name="received" required placeholder="e.g. 12 m³" /></label><label>Used quantity<input name="used" defaultValue="0" /></label><label>Remaining stock<input name="stock" placeholder="Defaults to received quantity" /></label></>}

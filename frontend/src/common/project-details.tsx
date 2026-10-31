@@ -46,7 +46,6 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
         <div><span>Site</span><strong>{project.site}</strong></div>
         <div><span>Client</span><strong>{currentUser}</strong></div>
         <div><span>Completion</span><strong>{project.progress}%</strong></div>
-        {role !== "Client" && <div><span>Project value</span><strong>{formatCurrency(project.budget)}</strong></div>}
         <div><span>Engineer</span><strong>{project.engineer}</strong></div>
       </div>
       <section className="completion-report-photos" aria-label="Before and after site photos">
@@ -88,10 +87,6 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
       <div><span>Status</span><StatusBadge status={project.status} /></div>
       <div><span>Progress</span><strong>{project.progress}%</strong></div>
       <div><span>Quotation</span><strong>{formatCurrency(role === "Owner" ? project.quotationAmount ?? 0 : displayedQuotationAmount)}</strong></div>
-      {role !== "Client" && <>
-        <div><span>Budget</span><strong>{formatCurrency(project.budget)}</strong></div>
-        <div><span>Spent</span><strong>{formatCurrency(project.spent)}</strong></div>
-      </>}
       <div><span>Due date</span><strong>{project.dueDate}</strong></div>
     </div>
 

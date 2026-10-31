@@ -61,7 +61,7 @@ Use the warm **construction orange, charcoal, and off-white** combination from t
 | Primary orange | `#E94F0B` | Primary actions, active navigation, brand mark, progress and revenue highlights |
 | Deep orange | `#C9430B` | Hover/pressed states and active indicators on light surfaces |
 | Soft orange | `#FFF0DC` | Subtle icon backgrounds, selected states, and supporting highlights |
-| Charcoal | `#211E1C` | Strong emphasis surfaces, such as the dashboard budget card |
+| Charcoal | `#211E1C` | Strong emphasis surfaces and secondary chart series |
 | Graphite | `#494541` | Primary text and secondary chart series |
 | Warm gray | `#77736F` | Muted text and supporting labels |
 | Page background | `#FAF9F7` | Main application canvas |

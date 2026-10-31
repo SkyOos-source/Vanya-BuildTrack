@@ -1,4 +1,4 @@
-import { Attendance, attendanceLeaves, nextAttendanceLeaveId, nextId, readAttendanceProof, readText } from "../../data/store";
+import { Attendance, AttendanceRegularizationRequest, attendanceLeaves, attendanceRegularizationRequests, nextAttendanceLeaveId, nextId, readAttendanceProof, readText } from "../../data/store";
 import { failure, result } from "../shared";
 import { attendance } from "./data";
 
@@ -15,6 +15,71 @@ export const listAttendance = () => attendance.map((record) => ({
     : hasMissedCheckOutDeadline(record) ? "Absent" : record.status
 }));
 export const listAttendanceLeaves = () => attendanceLeaves;
+export const listAttendanceRegularizationRequests = (engineer?: string) => attendanceRegularizationRequests
+  .filter((request) => !engineer || request.engineer === engineer);
+
+export function createAttendanceRegularizationRequest(body: any) {
+  const attendanceId = readText(body?.attendanceId);
+  const engineer = readText(body?.engineer);
+  const capturedAt = readText(body?.capturedAt);
+  const reason = readText(body?.reason);
+  const record = attendance.find((item) => item.id === attendanceId && item.engineer === engineer);
+  if (!attendanceId || !engineer || !capturedAt || !reason || !record) {
+    return failure(400, "A valid attendance record, engineer, check-out time, and reason are required.");
+  }
+  if (!record.date || !record.checkIn || record.checkOut || record.checkoutRegularization) {
+    return failure(409, "Only attendance with a check-in and no recorded check-out can be requested for regularization.");
+  }
+  if (!hasMissedCheckOutDeadline(record)) {
+    return failure(409, "A regularization request is available after the check-out deadline has passed.");
+  }
+  if (attendanceRegularizationRequests.some((request) => request.attendanceId === record.id && request.status === "Pending review")) {
+    return failure(409, "A regularization request for this attendance is already pending review.");
+  }
+  const checkInTime = Date.parse(record.checkIn.capturedAt);
+  const checkOutTime = Date.parse(capturedAt);
+  if (!Number.isFinite(checkOutTime) || !Number.isFinite(checkInTime) ||
+    checkOutTime <= checkInTime || checkOutTime > checkInTime + 24 * 60 * 60 * 1000 || checkOutTime > Date.now()) {
+    return failure(400, "Enter a past check-out time within 24 hours of check-in.");
+  }
+  const request: AttendanceRegularizationRequest = {
+    id: nextId("attendance-regularization-request"),
+    attendanceId: record.id,
+    engineer,
+    date: record.date,
+    capturedAt: new Date(checkOutTime).toISOString(),
+    reason,
+    requestedAt: new Date().toISOString(),
+    status: "Pending review"
+  };
+  attendanceRegularizationRequests.unshift(request);
+  return result({ request }, 201);
+}
+
+export function reviewAttendanceRegularizationRequest(id: string, body: any) {
+  const request = attendanceRegularizationRequests.find((item) => item.id === id);
+  if (!request) return failure(404, "Attendance regularization request was not found.");
+  if (request.status !== "Pending review") return failure(409, "This request has already been reviewed.");
+  const decision = body?.decision;
+  const reviewedBy = readText(body?.reviewedBy);
+  if ((decision !== "Approved" && decision !== "Declined") || !reviewedBy) {
+    return failure(400, "Choose an approval decision and provide the reviewing owner.");
+  }
+  let record: Attendance | undefined;
+  if (decision === "Approved") {
+    const regularization = regularizeAttendance(request.attendanceId, {
+      capturedAt: request.capturedAt,
+      reason: `Engineer request: ${request.reason}`,
+      regularizedBy: reviewedBy
+    });
+    if (regularization.status && regularization.status >= 400) return regularization;
+    record = attendance.find((item) => item.id === request.attendanceId);
+  }
+  request.status = decision;
+  request.reviewedBy = reviewedBy;
+  request.reviewedAt = new Date().toISOString();
+  return result({ request, ...(record ? { record } : {}) });
+}
 
 export function createAttendanceLeave(body: any) {
   const title = readText(body?.title);
