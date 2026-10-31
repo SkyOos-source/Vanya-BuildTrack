@@ -18,7 +18,8 @@ export type Project = {
 };
 export type Quote = { id: string; project: string; title: string; client: string; amount: number; date: string; status: string; attachment?: string };
 export type Expense = { id: string; project: string; category: string; description: string; amount: number; date: string; submittedBy: string; status: string; attachment?: string };
-export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; time: string; status: string };
+export type SiteVisitProof = { image: string; capturedAt: string };
+export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; status: string; purpose?: string; checkIn?: SiteVisitProof; checkOut?: SiteVisitProof };
 export type Activity = { id: string; actor: string; action: string; project: string; time: string; kind: string; description?: string; attachment?: string; attachments?: string[]; createdAt?: string; stage?: "Start" | "Progress" | "Completion" };
 export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };
 export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string };

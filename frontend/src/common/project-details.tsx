@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { DashboardData, Project, Role } from "./types";
-import { formatCurrency, googleReviewUrl } from "./utils";
+import { formatCurrency, googleReviewUrl, siteVisitDateParts } from "./utils";
 import { StatusBadge } from "./components";
 import { QuotationPdfPreview } from "./quotation-pdf-preview";
 
@@ -13,6 +13,7 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
     : project.quotationAmount ?? 0;
   const expenses = data.expenses.filter((item) => item.project === project.name);
   const assignedEngineer = data.people.find((person) => person.role === "Site Engineer" && person.name === project.engineer);
+  const assignedClient = data.people.find((person) => person.role === "Client" && person.name === project.client);
   const activities = data.activities.filter((item) => item.project === project.name && item.kind === "progress");
   const sitePhotos = activities
     .flatMap((item) => (item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : [])
@@ -78,10 +79,15 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
     </div>
     <div className="project-details-overview">
       <div><span>Project location</span><strong>{project.site}</strong></div>
-      <div><span>Assigned engineer</span><strong>{project.engineer}</strong>{role === "Client" && assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}</div>
+      <div>
+        <span>{role === "Client" ? "Assigned engineer" : "Client"}</span>
+        <strong>{role === "Client" ? project.engineer : project.client}</strong>
+        {role === "Client" && assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}
+        {role === "Employee" && assignedClient?.phone && <a href={`tel:${assignedClient.phone}`}>{assignedClient.phone}</a>}
+      </div>
       <div><span>Status</span><StatusBadge status={project.status} /></div>
       <div><span>Progress</span><strong>{project.progress}%</strong></div>
-      <div><span>Quotation</span><strong>{formatCurrency(role === "Client" ? displayedQuotationAmount : project.quotationAmount ?? 0)}</strong></div>
+      <div><span>Quotation</span><strong>{formatCurrency(role === "Owner" ? project.quotationAmount ?? 0 : displayedQuotationAmount)}</strong></div>
       {role !== "Client" && <>
         <div><span>Budget</span><strong>{formatCurrency(project.budget)}</strong></div>
         <div><span>Spent</span><strong>{formatCurrency(project.spent)}</strong></div>
@@ -96,18 +102,18 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
       <section><h3>Quotations</h3>{quotations.length > 0
         ? <div className="project-details-list">{quotations.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.id} · {item.date}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} />{item.attachment && <QuotationPdfPreview attachment={item.attachment} title={item.title} />}</article>)}</div>
         : <p className="project-details-empty">No additional quotations recorded.</p>}</section>
-      {role !== "Client" && <section><h3>Expenses</h3>{expenses.length > 0
+      {role === "Owner" && <section><h3>Expenses</h3>{expenses.length > 0
         ? <div className="project-details-list">{expenses.map((item) => <article key={item.id}><div><strong>{item.description}</strong><span>{item.date} · {item.submittedBy}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} /></article>)}</div>
         : <p className="project-details-empty">No expenses recorded for this project.</p>}</section>}
-      {role !== "Client" && <section><h3>Progress updates</h3>{activities.length > 0
+      {role === "Owner" && <section><h3>Progress updates</h3>{activities.length > 0
         ? <div className="project-details-list">{activities.map((item) => {
           const photos = item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : [];
           return <article key={item.id}><div><strong>{item.description || item.action}</strong><span>{item.actor} · {item.time}</span>{photos.map((attachment, index) => <a key={`${item.id}-photo-${index}`} href={attachment} target="_blank" rel="noreferrer"><img className="client-work-progress-thumbnail" src={attachment} alt={`Progress photo ${index + 1} for ${item.project}`} /></a>)}</div></article>;
         })}</div>
         : <p className="project-details-empty">No progress updates recorded.</p>}</section>}
-      <section><h3>Site visits</h3>{visits.length > 0
-        ? <div className="project-details-list">{visits.map((item) => <article key={item.id}><div><strong>{item.date} · {item.time}</strong><span>{item.site} · {item.engineer}</span></div><StatusBadge status={item.status} /></article>)}</div>
-        : <p className="project-details-empty">No site visits scheduled.</p>}</section>
+      {role !== "Employee" && <section><h3>Site visits</h3>{visits.length > 0
+        ? <div className="project-details-list">{visits.map((item) => <article key={item.id}><div><strong>{siteVisitDateParts(item.date).label}</strong><span>{item.site} · {item.engineer}</span></div><StatusBadge status={item.status} /></article>)}</div>
+        : <p className="project-details-empty">No site visits scheduled.</p>}</section>}
     </div>
   </section>;
 }

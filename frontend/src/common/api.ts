@@ -90,6 +90,17 @@ function readDemoAttendanceProof(value: unknown): AttendanceProof | null {
   };
 }
 
+function readDemoSiteVisitProof(value: unknown): { image: string; capturedAt: string } | null {
+  if (!value || typeof value !== "object") return null;
+  const proof = value as Record<string, unknown>;
+  if (typeof proof.image !== "string" ||
+    !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(proof.image) ||
+    proof.image.length > 2_500_000 ||
+    typeof proof.capturedAt !== "string" ||
+    !Number.isFinite(Date.parse(proof.capturedAt))) return null;
+  return { image: proof.image, capturedAt: new Date(proof.capturedAt).toISOString() };
+}
+
 function demoProfile(role: RoleId, email: string) {
   const credential = demoCredentials[role];
   if (email.toLowerCase() !== credential.email) return undefined;
@@ -106,6 +117,7 @@ function demoProfile(role: RoleId, email: string) {
 }
 
 async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  restoreDemoData();
   const rawUrl = typeof input === "string" ? input : input instanceof Request ? input.url : input.toString();
   const url = new URL(rawUrl, window.location.origin);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -209,7 +221,15 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
     } else if (collection === "expenses") {
       record = { id: nextId("EXP-", demoState.expenses), project: projectName, category: "Other", description: text(body.description), amount: Number(body.amount) || 0, date, submittedBy: text(body.submittedBy), status: body.entryType === "log" ? "Logged" : "Pending review", attachment: body.attachment };
     } else if (collection === "siteVisits") {
-      record = { id: nextId("VIS-", demoState.siteVisits), project: projectName, site: project?.site ?? "", engineer: text(body.engineer), date: text(body.date, "To be scheduled"), time: text(body.time, "To be scheduled"), status: "Scheduled" };
+      const engineer = text(body.engineer);
+      const visitDate = text(body.date);
+      const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(visitDate) ? new Date(`${visitDate}T00:00:00.000Z`) : null;
+      if (!project || !/^\d{4}-\d{2}-\d{2}$/.test(visitDate) ||
+        !parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== visitDate ||
+        !engineer || !demoState.people.some((person) => person.role === "Site Engineer" && person.name === engineer) && project.engineer !== engineer) {
+        return response({ error: "A valid project, assigned engineer, and visit date are required." }, 400);
+      }
+      record = { id: nextId("VIS-", demoState.siteVisits), project: projectName, site: project.site, engineer, date: visitDate, purpose: text(body.description), status: "Scheduled" };
     } else if (collection === "activities") {
       record = { id: nextId("UPD-", demoState.activities), actor: text(body.submittedBy), action: "shared a progress update", project: projectName, description: text(body.description), time: "Just now", kind: "progress", stage: body.stage, attachment: body.attachment, attachments: body.attachments, createdAt: new Date().toISOString() };
       if (project && typeof body.progress === "number") project.progress = body.progress;
@@ -218,7 +238,7 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
     } else if (collection === "materialRequests") {
       record = { id: nextId("MREQ-", demoState.materialRequests), material: text(body.material), project: projectName, quantity: text(body.quantity), requestedBy: text(body.requestedBy, text(body.submittedBy)), note: text(body.note), requestedAt: date, status: "Pending review" };
     } else if (collection === "people") {
-      record = { id: nextId("USR-", demoState.people), name: text(body.name), email: text(body.email), role: body.role === "Client" ? "Client" : "Site Engineer", project: text(body.project, "No assigned sites") };
+      record = { id: nextId("USR-", demoState.people), name: text(body.name), email: text(body.email), phone: text(body.phone), role: body.role === "Client" ? "Client" : "Site Engineer", project: text(body.project, "No assigned sites") };
     } else if (collection === "feedback") {
       record = { id: nextId("FDB-", demoState.feedback), project: projectName, client: text(body.client), rating: Number(body.rating) || 5, comment: text(body.comment), date };
     } else if (collection === "backups") {
@@ -257,9 +277,30 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
     return saveResponse({ record }, 201);
   }
 
-  const updateMatch = path.match(/^\/api\/(quotations|expenses|site-visits)\/([^/]+)$/);
+  const updateMatch = path.match(/^\/api\/(quotations|expenses)\/([^/]+)$/);
+  const siteVisitMatch = path.match(/^\/api\/site-visits\/([^/]+)$/);
+  if (siteVisitMatch && method === "PATCH") {
+    const visit = demoState.siteVisits.find((item) => item.id === siteVisitMatch[1]);
+    if (!visit) return response({ error: "Site visit not found." }, 404);
+    if (!text(body.engineer) || text(body.engineer) !== visit.engineer) return response({ error: "This site visit is assigned to another engineer." }, 403);
+    const proof = readDemoSiteVisitProof(body.proof);
+    if (!proof) return response({ error: "A valid site photo and capture time are required." }, 400);
+    if (body.action === "check-in") {
+      if (visit.status !== "Scheduled") return response({ error: "This visit is no longer scheduled for check-in." }, 409);
+      visit.checkIn = proof;
+      visit.status = "Checked in";
+    } else if (body.action === "check-out") {
+      if (visit.status !== "Checked in" || !visit.checkIn) return response({ error: "Check in with a photo before checking out." }, 409);
+      if (Date.parse(proof.capturedAt) <= Date.parse(visit.checkIn.capturedAt)) return response({ error: "The check-out photo must be captured after check-in." }, 400);
+      visit.checkOut = proof;
+      visit.status = "Completed";
+    } else {
+      return response({ error: "Choose check-in or check-out for this site visit." }, 400);
+    }
+    return saveResponse({ record: visit });
+  }
   if (updateMatch && method === "PATCH") {
-    const key = updateMatch[1] === "quotations" ? "quotes" : updateMatch[1] === "expenses" ? "expenses" : "siteVisits";
+    const key = updateMatch[1] === "quotations" ? "quotes" : "expenses";
     const records = demoState[key] as Array<{ id: string; status: string }>;
     const record = records.find((item) => item.id === updateMatch[2]);
     if (!record) return response({ error: "Record not found." }, 404);
@@ -275,6 +316,39 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
     return saveResponse({ record });
   }
   const personMatch = path.match(/^\/api\/people\/([^/]+)$/);
+  if (personMatch && method === "PATCH") {
+    const person = demoState.people.find((item) => item.id === personMatch[1]);
+    if (!person) return response({ error: "Person not found." }, 404);
+    const name = text(body.name).trim();
+    const email = text(body.email).trim();
+    const phone = text(body.phone).trim();
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      (phone && (!/^\+?[\d\s().-]+$/.test(phone) || phoneDigits.length < 7 || phoneDigits.length > 15))) {
+      return response({ error: "Enter a valid name, email, and phone number." }, 400);
+    }
+    if (demoState.people.some((item) => item.id !== person.id && item.email.toLowerCase() === email.toLowerCase())) {
+      return response({ error: "A person with this email already exists." }, 409);
+    }
+    const previousName = person.name;
+    person.name = name;
+    person.email = email;
+    person.phone = phone;
+    if (person.role === "Client") {
+      demoState.projects.forEach((project) => { if (project.client === previousName) project.client = name; });
+      demoState.quotes.forEach((quote) => { if (quote.client === previousName) quote.client = name; });
+      demoState.feedback.forEach((item) => { if (item.client === previousName) item.client = name; });
+    } else {
+      demoState.projects.forEach((project) => { if (project.engineer === previousName) project.engineer = name; });
+      demoState.siteVisits.forEach((visit) => { if (visit.engineer === previousName) visit.engineer = name; });
+      demoState.activities.forEach((activity) => { if (activity.actor === previousName) activity.actor = name; });
+      demoState.expenses.forEach((expense) => { if (expense.submittedBy === previousName) expense.submittedBy = name; });
+      demoState.attendance.forEach((record) => { if (record.engineer === previousName) record.engineer = name; });
+      demoState.materials.forEach((material) => { if (material.submittedBy === previousName) material.submittedBy = name; });
+      demoState.materialRequests.forEach((request) => { if (request.requestedBy === previousName) request.requestedBy = name; });
+    }
+    return saveResponse({ record: person });
+  }
   if (personMatch && method === "DELETE") {
     const index = demoState.people.findIndex((person) => person.id === personMatch[1]);
     if (index < 0) return response({ error: "Person not found." }, 404);

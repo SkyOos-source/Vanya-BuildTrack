@@ -47,9 +47,13 @@ export type SiteVisit = {
   site: string;
   engineer: string;
   date: string;
-  time: string;
   status: string;
+  purpose?: string;
+  checkIn?: SiteVisitProof;
+  checkOut?: SiteVisitProof;
 };
+
+export type SiteVisitProof = { image: string; capturedAt: string };
 
 export type Activity = {
   id: string;
@@ -296,6 +300,12 @@ export function verifyEmployeeCredential(email: string, password: string) {
 export function deleteEmployeeCredential(email: string) {
   const index = employeeCredentials.findIndex((item) => item.email === email);
   if (index >= 0) employeeCredentials.splice(index, 1);
+}
+
+export function updatePersonCredentialEmail(role: "Client" | "Site Engineer", currentEmail: string, nextEmail: string) {
+  const credentials = role === "Site Engineer" ? employeeCredentials : clientCredentials;
+  const credential = credentials.find((item) => item.email === currentEmail);
+  if (credential) credential.email = nextEmail;
 }
 
 export function createClientCredential(email: string, password: string) {

@@ -13,7 +13,7 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
     { label: "Dashboard", icon: "◫" }, { label: "My Sites", icon: "▦" },
     { label: "Progress Updates", icon: "▥" }, { label: "Materials", icon: "◈" },
     { label: "Expenses", icon: "＄" }, { label: "Attendance", icon: "◷" },
-    { label: "Site Visits", icon: "⌖" }, { label: "Instructions", icon: "▤" }
+    { label: "Site Visits", icon: "⌖" }
   ],
   Client: [
     { label: "Dashboard", icon: "◫" }, { label: "My Projects", icon: "▦" },
@@ -43,9 +43,9 @@ export const fallbackData: DashboardData = {
     { id: "EXP-771", project: "Cedar & Stone Café", category: "Materials", description: "Powder-coated steel sections", amount: 58200, date: "22 Oct 2026", submittedBy: "Dev Patel", status: "Approved" }
   ],
   siteVisits: [
-    { id: "VIS-218", project: "Riverside Residence", site: "Whitefield", engineer: "Arjun Mehta", date: "26 Oct 2026", time: "10:30 AM", status: "Scheduled" },
-    { id: "VIS-216", project: "Northstar Office Campus", site: "Hebbal", engineer: "Priya Nair", date: "27 Oct 2026", time: "02:00 PM", status: "Scheduled" },
-    { id: "VIS-211", project: "Gardenia Villas — Phase II", site: "Sarjapur Road", engineer: "Arjun Mehta", date: "24 Oct 2026", time: "09:00 AM", status: "Completed" }
+    { id: "VIS-218", project: "Riverside Residence", site: "Whitefield", engineer: "Arjun Mehta", date: "2026-11-02", status: "Scheduled" },
+    { id: "VIS-216", project: "Northstar Office Campus", site: "Hebbal", engineer: "Priya Nair", date: "2026-11-05", status: "Scheduled" },
+    { id: "VIS-211", project: "Gardenia Villas — Phase II", site: "Sarjapur Road", engineer: "Arjun Mehta", date: "2026-10-24", status: "Completed" }
   ],
   activities: [
     { id: "ACT-1", actor: "Arjun Mehta", action: "submitted a progress update: Ground-floor slab work is underway.", description: "Ground-floor slab work is underway.", project: "Riverside Residence", time: "12 min ago", kind: "progress", stage: "Progress", createdAt: "2026-10-31T09:00:00.000Z", attachment: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&q=80" },
@@ -75,11 +75,11 @@ export const fallbackData: DashboardData = {
     { id: "BKP-008", status: "Ready to download", requestedAt: "20 Oct 2026", requestedBy: "John Smith" }
   ],
   people: [
-    { id: "USR-001", name: "Ananya Rao", role: "Client", project: "Riverside Residence", email: "client@vanya.com" },
-    { id: "USR-002", name: "Northstar Labs", role: "Client", project: "Northstar Office Campus", email: "northstar@example.com" },
-    { id: "USR-003", name: "Arjun Mehta", role: "Site Engineer", project: "2 active sites", email: "employee@vanya.com" },
-    { id: "USR-004", name: "Priya Nair", role: "Site Engineer", project: "Northstar Office Campus", email: "priya@example.com" },
-    { id: "USR-005", name: "Dev Patel", role: "Site Engineer", project: "Cedar & Stone Café", email: "dev@example.com" }
+    { id: "USR-001", name: "Ananya Rao", role: "Client", project: "Riverside Residence", email: "client@vanya.com", phone: "+91 98765 43210" },
+    { id: "USR-002", name: "Northstar Labs", role: "Client", project: "Northstar Office Campus", email: "northstar@example.com", phone: "+91 98100 22334" },
+    { id: "USR-003", name: "Arjun Mehta", role: "Site Engineer", project: "2 active sites", email: "employee@vanya.com", phone: "+91 99887 11223" },
+    { id: "USR-004", name: "Priya Nair", role: "Site Engineer", project: "Northstar Office Campus", email: "priya@example.com", phone: "+91 98990 77661" },
+    { id: "USR-005", name: "Dev Patel", role: "Site Engineer", project: "Cedar & Stone Café", email: "dev@example.com", phone: "+91 97654 33445" }
   ]
 };
 
