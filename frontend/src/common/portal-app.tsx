@@ -11,6 +11,7 @@ import ClientDashboard from "../client/dashboard/page";
 import { FeaturePage } from "./feature-page";
 import OwnerProjectsPage from "../owner/projects/page";
 import OwnerMaterialsPage from "../owner/material/page";
+import OwnerFinancialReport from "../owner/dashboard/financial-report";
 import { NotFoundPage } from "./legal-pages";
 import { AccountProfilePage } from "./profile-page";
 import { ModeToggle } from "./mode-toggle";
@@ -576,7 +577,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         site: form.get("site"),
         client: modal === "person" && form.get("role") === "Client" ? name : form.get("client"),
         quotationAmount: Number(form.get("quotationAmount") || 0),
-        budget: Number(form.get("budget") || 0),
         dueDate: form.get("dueDate"),
         material: form.get("material"),
         quantity: form.get("quantity"),
@@ -885,6 +885,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     "Work Progress": role === "Owner" ? "Review site updates and photos shared by engineers." : "Follow construction updates and photos from your project.",
     Attendance: "Review daily attendance across your construction sites.",
     Reports: "Project-wise progress, expenses, materials, and activity.",
+    "Financial Overview": "Review revenue, expenses, quotations, and profit across your projects.",
     "Site Visits": "Plan and follow up on engineer site visits.",
     "Settings & Backup": "Manage your profile and request an account data backup.",
     Profile: "Manage your BuildTrack contact details and profile photo.",
@@ -970,9 +971,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
           {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} />}
           {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} onQuote={updateQuote} />}
+          {page === "Financial Overview" && role === "Owner" && <OwnerFinancialReport data={data} onBack={() => navigateToPage("Dashboard")} />}
           {page !== "Dashboard" && role === "Owner" && page === "Projects & Sites" && <OwnerProjectsPage {...featurePageProps} />}
           {page !== "Dashboard" && role === "Owner" && page === "Materials" && <OwnerMaterialsPage {...featurePageProps} />}
-          {page !== "Dashboard" && page !== "Profile" && !(role === "Owner" && (page === "Projects & Sites" || page === "Materials")) && <FeaturePage {...featurePageProps} page={page} role={role} />}
+          {page !== "Dashboard" && page !== "Profile" && !(role === "Owner" && (page === "Projects & Sites" || page === "Materials" || page === "Financial Overview")) && <FeaturePage {...featurePageProps} page={page} role={role} />}
 
           <footer className="footer"><span>© 2026 Vanya BuildTrack</span><span>Built for the people who build.</span><nav className="footer-legal" aria-label="Legal"><Link to="/privacy-policy">Privacy</Link><Link to="/data-usage">Data Usage</Link></nav><span className="footer-status"><i /> All systems operational</span></footer>
         </div>

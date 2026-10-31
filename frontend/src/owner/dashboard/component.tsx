@@ -3,11 +3,17 @@ import { formatCurrency, siteVisitDateParts } from "../../common/utils";
 import { ExpenseRows, ProjectCards, StatCard } from "../../common/components";
 
 export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { data: DashboardData; onNavigate: (page: string) => void; onCreate: (modal: RecordModalType | null) => void; onOpenProject: (project: Project) => void }) {
-  const totalBudget = data.projects.reduce((sum, item) => sum + item.budget, 0);
-  const totalSpent = data.projects.reduce((sum, item) => sum + item.spent, 0);
   const pendingExpenses = data.expenses.filter((item) => item.status === "Pending review").length;
   const activeSites = data.projects.filter((item) => item.status !== "Completed" && item.status !== "Cancelled").length;
-  const utilization = totalBudget ? Math.round(totalSpent / totalBudget * 100) : 0;
+  const totalRevenue = data.projects.reduce((total, project) => {
+    const projectQuotes = data.quotes.filter((quote) => quote.project === project.name);
+    return total + (projectQuotes.length
+      ? projectQuotes.reduce((quoteTotal, quote) => quoteTotal + quote.amount, 0)
+      : project.quotationAmount ?? 0);
+  }, 0);
+  const totalExpenditure = data.expenses.reduce((total, expense) => total + expense.amount, 0);
+  const profit = totalRevenue - totalExpenditure;
+  const expenditureRatio = totalRevenue > 0 ? Math.min(Math.max(totalExpenditure / totalRevenue * 100, 0), 100) : 0;
   const chart = data.projects.map((project) => {
     const projectQuotes = data.quotes.filter((quote) => quote.project === project.name);
     return {
@@ -24,15 +30,22 @@ export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { 
   const chartAxisMax = chartMax > 0 ? Math.ceil(chartMax / 4) * 4 : 4;
   const chartAxisLabels = Array.from({ length: 5 }, (_, index) => Math.round(chartAxisMax * (4 - index) / 4));
   return <>
-    <div className="stat-grid">
-      <article className="stat-card budget-card"><div className="budget-top"><div><span className="stat-label">Total project budget</span><strong>{formatCurrency(totalBudget)}</strong><small>Across {activeSites} active projects</small></div><div className="budget-revenue"><span>Utilized</span><strong>{utilization}%</strong><small>{formatCurrency(totalSpent)} spent</small></div></div><div className="budget-track"><span style={{ width: `${utilization}%` }} /></div><div className="budget-foot"><span><i className="legend-orange" /> Spent</span><span>{formatCurrency(totalBudget - totalSpent)} remaining</span></div></article>
+    <div className="stat-grid owner-stat-grid">
+      <article className="financial-summary-card">
+        <div className="financial-summary-top">
+          <div><span>Total revenue</span><strong>{formatCurrency(totalRevenue)}</strong><small>Across {data.projects.length} active projects</small></div>
+          <div className="financial-summary-profit"><span>Profit</span><strong>{formatCurrency(profit)}</strong><small>Revenue less expenditure</small></div>
+        </div>
+        <div className="financial-summary-track" role="progressbar" aria-label="Expenditure as a share of revenue" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(expenditureRatio)}><span style={{ width: `${expenditureRatio}%` }} /></div>
+        <div className="financial-summary-foot"><span><i /> Expenditure</span><strong>{formatCurrency(totalExpenditure)}</strong></div>
+      </article>
       <StatCard label="Active projects" value={String(activeSites).padStart(2, "0")} note="Across your portfolio" icon="▦" trend={`${data.projects.length} total projects`} />
       <StatCard label="Active sites" value={String(activeSites).padStart(2, "0")} note="Not completed or cancelled" icon="⌖" trend={`${activeSites} active sites`} />
       <StatCard label="Needs your review" value={String(pendingExpenses + data.quotes.filter((item) => item.status === "Awaiting review").length).padStart(2, "0")} note="Expenses & quotations" icon="◷" trend={`${pendingExpenses} pending expenses`} attention />
     </div>
     <div className="dashboard-grid">
       <section className="panel chart-panel">
-        <div className="panel-heading"><div><span className="panel-kicker">FINANCIAL OVERVIEW</span><h2>Revenue vs expenses</h2><p>Project quotation vs amount spent</p></div></div>
+        <div className="panel-heading"><div><span className="panel-kicker">FINANCIAL OVERVIEW</span><h2>Revenue vs expenses</h2><p>Project quotation vs recorded expenses</p></div><button className="text-link" onClick={() => onNavigate("Financial Overview")}>View all ↗</button></div>
         {chart.length ? <>
           <div className="chart-legend"><span><i className="legend-orange" /> Revenue</span><span><i className="legend-charcoal" /> Expenses</span><span className="chart-total">INR · thousands</span></div>
           <div className="chart" role="img" aria-label={`Bar chart comparing revenue and expenses for ${chart.map((item) => item.project).join(", ")}`}>

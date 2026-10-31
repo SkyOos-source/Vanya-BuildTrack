@@ -22,7 +22,7 @@ export function PrivacyPolicyPage() {
   return <LegalLayout title="Privacy Policy" eyebrow="YOUR PRIVACY">
     <p>BuildTrack helps construction teams manage projects, site activity, and communication. This page describes the information handled by the application and how it is used.</p>
     <h2>Information in the workspace</h2>
-    <p>Workspace records may include project and site details, budgets, quotations, material and expense records, team member names and email addresses, client feedback, and site visit schedules.</p>
+    <p>Workspace records may include project and site details, quotations, material and expense records, team member names and email addresses, client feedback, and site visit schedules.</p>
     <p>When an engineer records attendance, the app may collect a check-in or check-out photo and the device’s location coordinates, if the user grants location access. These details are attached to the attendance record.</p>
     <h2>How information is used</h2>
     <p>Information is used to display the workspace features: project progress, assignments, financial records, attendance, and updates to the relevant workspace roles. The app does not use this information for advertising.</p>
@@ -39,7 +39,7 @@ export function DataUsagePage() {
     <p>BuildTrack uses information submitted to the workspace to provide project management features. Demo mode is intended for sample data and evaluation. Use live mode only with the security and operational controls appropriate for your organization.</p>
     <h2>Workspace data</h2>
     <ul>
-      <li><strong>Projects:</strong> project names, locations, assigned engineers, status, budget, and progress.</li>
+      <li><strong>Projects:</strong> project names, locations, assigned engineers, status, and progress.</li>
       <li><strong>People:</strong> names, email addresses, roles, and project assignments.</li>
       <li><strong>Project activity:</strong> quotations and uploaded quotation PDFs, expenses, materials, progress updates, site visits, and feedback.</li>
       <li><strong>Attendance:</strong> check-in and check-out timestamps, photos, and location coordinates when attendance is submitted.</li>

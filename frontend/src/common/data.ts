@@ -25,10 +25,10 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
 
 export const fallbackData: DashboardData = {
   projects: [
-    { id: "PRJ-024", name: "Riverside Residence", site: "Whitefield, Bengaluru", client: "Ananya Rao", engineer: "Arjun Mehta", status: "In progress", progress: 68, budget: 12500000, spent: 8240000, dueDate: "18 Dec 2026", image: "photo-1600585154340-be6161a56a0c" },
-    { id: "PRJ-021", name: "Northstar Office Campus", site: "Hebbal, Bengaluru", client: "Northstar Labs", engineer: "Priya Nair", status: "In progress", progress: 42, budget: 28600000, spent: 11350000, dueDate: "02 Mar 2027", image: "photo-1486406146926-c627a92ad1ab" },
-    { id: "PRJ-018", name: "Gardenia Villas — Phase II", site: "Sarjapur Road, Bengaluru", client: "Gardenia Estates", engineer: "Arjun Mehta", status: "On track", progress: 86, budget: 19400000, spent: 15620000, dueDate: "29 Nov 2026", image: "photo-1600607687939-ce8a6c25118c" },
-    { id: "PRJ-016", name: "Cedar & Stone Café", site: "Indiranagar, Bengaluru", client: "Mira Hospitality", engineer: "Dev Patel", status: "At risk", progress: 31, budget: 6800000, spent: 2410000, dueDate: "14 Jan 2027", image: "photo-1600210492486-724fe5c67fb0" }
+    { id: "PRJ-024", name: "Riverside Residence", site: "Whitefield, Bengaluru", client: "Ananya Rao", engineer: "Arjun Mehta", status: "In progress", progress: 68, dueDate: "18 Dec 2026", image: "photo-1600585154340-be6161a56a0c" },
+    { id: "PRJ-021", name: "Northstar Office Campus", site: "Hebbal, Bengaluru", client: "Northstar Labs", engineer: "Priya Nair", status: "In progress", progress: 42, dueDate: "02 Mar 2027", image: "photo-1486406146926-c627a92ad1ab" },
+    { id: "PRJ-018", name: "Gardenia Villas — Phase II", site: "Sarjapur Road, Bengaluru", client: "Gardenia Estates", engineer: "Arjun Mehta", status: "On track", progress: 86, dueDate: "29 Nov 2026", image: "photo-1600607687939-ce8a6c25118c" },
+    { id: "PRJ-016", name: "Cedar & Stone Café", site: "Indiranagar, Bengaluru", client: "Mira Hospitality", engineer: "Dev Patel", status: "At risk", progress: 31, dueDate: "14 Jan 2027", image: "photo-1600210492486-724fe5c67fb0" }
   ],
   quotes: [
     { id: "QT-1042", project: "Riverside Residence", title: "Kitchen island — add-on work", client: "Ananya Rao", amount: 285000, date: "24 Oct 2026", status: "Awaiting review", attachment: "/sample-quotations/riverside-residence.pdf" },
@@ -152,6 +152,6 @@ export function pageFromPath(pathname: string, role: Role): string {
   const base = rolePath(roleId(role));
   const slug = pathname.slice(base.length).replace(/^\/+|\/+$/g, "");
   if (!slug) return "Dashboard";
-  const pages = [...(role !== "Client" ? ["Profile"] : []), ...navigation[role].map((item) => item.label), ...(role === "Owner" ? ["Settings & Backup"] : [])];
+  const pages = [...(role !== "Client" ? ["Profile"] : []), ...navigation[role].map((item) => item.label), ...(role === "Owner" ? ["Settings & Backup", "Financial Overview"] : [])];
   return pages.find((page) => pageSlug(page) === slug) ?? "Dashboard";
 }

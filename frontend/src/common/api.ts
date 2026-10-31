@@ -290,7 +290,7 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
     const project = demoState.projects.find((item) => item.name === projectName);
     let record: Record<string, unknown>;
     if (collection === "projects") {
-      record = { id: nextId("PRJ-", demoState.projects), name: text(body.name), site: text(body.site), client: text(body.client, "Unassigned"), engineer: text(body.engineer, "Unassigned"), status: "Planning", progress: 0, budget: Number(body.budget) || 0, spent: 0, dueDate: text(body.dueDate, "To be confirmed"), image: "photo-1600585154340-be6161a56a0c" };
+      record = { id: nextId("PRJ-", demoState.projects), name: text(body.name), site: text(body.site), client: text(body.client, "Unassigned"), engineer: text(body.engineer, "Unassigned"), status: "Planning", progress: 0, dueDate: text(body.dueDate, "To be confirmed"), image: "photo-1600585154340-be6161a56a0c" };
     } else if (collection === "quotes") {
       record = { id: nextId("QT-", demoState.quotes), project: projectName, title: text(body.title), client: project?.client ?? "Unassigned", amount: Number(body.amount) || 0, date, status: "Awaiting review", attachment: body.quotationAttachment };
     } else if (collection === "expenses") {

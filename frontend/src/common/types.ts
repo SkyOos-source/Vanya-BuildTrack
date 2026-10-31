@@ -11,8 +11,6 @@ export type Project = {
   status: string;
   progress: number;
   quotationAmount?: number;
-  budget: number;
-  spent: number;
   dueDate: string;
   image: string;
 };
