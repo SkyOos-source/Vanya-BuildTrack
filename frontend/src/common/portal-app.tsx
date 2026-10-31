@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceProof, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, Activity, NotificationItem } from "./types";
 import { emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch } from "./api";
-import { formatCurrency, initials } from "./utils";
+import { formatCurrency, googleReviewUrl, initials } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
 import OwnerDashboard from "../owner/dashboard/page";
 import EngineerDashboard from "../engineer/dashboard/page";
@@ -684,6 +684,11 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const reviewWindow = window.open("about:blank", "_blank");
+    if (reviewWindow) {
+      reviewWindow.document.title = "Posting your review";
+      reviewWindow.document.body.textContent = "Saving your review to BuildTrack…";
+    }
     try {
       const response = await apiFetch("/api/feedback", {
         method: "POST",
@@ -698,9 +703,12 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       const result = await response.json() as { record?: Feedback; error?: string };
       if (!response.ok || !result.record) throw new Error(result.error || `Feedback request failed (${response.status}).`);
       setData((current) => ({ ...current, feedback: [result.record!, ...current.feedback] }));
-      showToast("Your review was saved for the project owner. You can also post it on Google.");
+      showToast("Your review was saved for the project owner and opened on Google.");
       formElement.reset();
+      if (reviewWindow) reviewWindow.location.replace(googleReviewUrl);
+      else window.location.assign(googleReviewUrl);
     } catch (error) {
+      if (reviewWindow && !reviewWindow.closed) reviewWindow.close();
       console.error("Unable to submit client feedback:", error);
       showToast(error instanceof Error ? error.message : "Could not save your review.");
     }
