@@ -16,8 +16,9 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
   ],
   Client: [
     { label: "Dashboard", icon: "◫" }, { label: "My Projects", icon: "▦" },
-    { label: "Quotations", icon: "▤" }, { label: "Expenses", icon: "＄" },
-    { label: "Timeline", icon: "◷" }, { label: "Feedback", icon: "☆" }
+    { label: "Work Progress", icon: "▥" }, { label: "Quotations", icon: "▤" },
+    { label: "Timeline", icon: "◷" },
+    { label: "Feedback", icon: "☆" }
   ]
 };
 
@@ -46,7 +47,9 @@ export const fallbackData: DashboardData = {
     { id: "VIS-211", project: "Gardenia Villas — Phase II", site: "Sarjapur Road", engineer: "Arjun Mehta", date: "24 Oct 2026", time: "09:00 AM", status: "Completed" }
   ],
   activities: [
-    { id: "ACT-1", actor: "Arjun Mehta", action: "submitted today's progress update", project: "Riverside Residence", time: "12 min ago", kind: "progress" },
+    { id: "ACT-1", actor: "Arjun Mehta", action: "submitted a progress update: Ground-floor slab work is underway.", description: "Ground-floor slab work is underway.", project: "Riverside Residence", time: "12 min ago", kind: "progress", stage: "Progress", createdAt: "2026-10-31T09:00:00.000Z", attachment: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&q=80" },
+    { id: "DEMO-PROGRESS-02", actor: "Arjun Mehta", action: "submitted a progress update: Reinforcement and formwork inspection completed.", description: "Reinforcement and formwork inspection completed.", project: "Riverside Residence", time: "Yesterday", kind: "progress", stage: "Progress", createdAt: "2026-10-30T11:30:00.000Z", attachment: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1200&q=80" },
+    { id: "DEMO-PROGRESS-03", actor: "Arjun Mehta", action: "submitted a progress update: Site preparation and foundation work completed.", description: "Site preparation and foundation work completed.", project: "Riverside Residence", time: "2 days ago", kind: "progress", stage: "Start", createdAt: "2026-10-29T08:15:00.000Z", attachment: "https://images.unsplash.com/photo-1541976590-713941681591?auto=format&fit=crop&w=1200&q=80" },
     { id: "ACT-2", actor: "Priya Nair", action: "submitted an expense for review", project: "Northstar Office Campus", time: "48 min ago", kind: "expense" },
     { id: "ACT-3", actor: "Ananya Rao", action: "viewed add-on quotation QT-1042", project: "Riverside Residence", time: "1 hr ago", kind: "quote" },
     { id: "ACT-4", actor: "Dev Patel", action: "marked site attendance for 14 workers", project: "Cedar & Stone Café", time: "2 hrs ago", kind: "attendance" },

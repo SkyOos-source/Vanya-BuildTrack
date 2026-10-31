@@ -26,6 +26,10 @@ function restoreDemoData() {
     if (value.profiles && typeof value.profiles !== "object") throw new Error("Saved demo profile data is invalid.");
     Object.assign(demoState, value);
     demoState.attendance = Array.from(new Map(demoState.attendance.map((record) => [record.id, record])).values());
+    const savedActivityIds = new Set(demoState.activities.map((activity) => activity.id));
+    demoState.activities.push(...fallbackData.activities.filter((activity) =>
+      activity.id.startsWith("DEMO-PROGRESS-") && !savedActivityIds.has(activity.id)
+    ));
   } catch (error) {
     console.error("Unable to restore the local demo workspace:", error);
     localStorage.removeItem(demoDataKey);

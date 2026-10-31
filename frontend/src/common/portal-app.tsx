@@ -311,6 +311,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       Quotations: "/api/quotations",
       Attendance: "/api/attendance",
       "Progress Updates": "/api/progress",
+      "Work Progress": "/api/progress",
       Timeline: "/api/progress",
       "Site Visits": "/api/site-visits",
       Feedback: "/api/feedback",
@@ -342,6 +343,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             case "Attendance":
               return { ...current, attendance: result as DashboardData["attendance"] };
             case "Progress Updates":
+            case "Work Progress":
             case "Timeline":
               return { ...current, activities: [...result as DashboardData["activities"], ...current.activities.filter((item) => item.kind !== "progress")] };
             case "Site Visits":
@@ -680,7 +682,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     try {
       const response = await apiFetch("/api/feedback", {
         method: "POST",
@@ -692,13 +695,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           client: currentUser
         })
       });
-      if (!response.ok) throw new Error(`Feedback request failed (${response.status})`);
-      const result = await response.json() as { record: Feedback };
-      setData((current) => ({ ...current, feedback: [result.record, ...current.feedback] }));
-      showToast("Thank you — your feedback has been shared with the project team.");
+      const result = await response.json() as { record?: Feedback; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Feedback request failed (${response.status}).`);
+      setData((current) => ({ ...current, feedback: [result.record!, ...current.feedback] }));
+      showToast("Your review was saved for the project owner. You can also post it on Google.");
+      formElement.reset();
     } catch (error) {
-      console.error("Unable to submit feedback:", error);
-      showToast("Could not submit feedback. Check the API connection and try again.");
+      console.error("Unable to submit client feedback:", error);
+      showToast(error instanceof Error ? error.message : "Could not save your review.");
     }
   };
 
@@ -735,9 +739,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     "My Sites": "Your assigned sites, site tasks, and latest progress.",
     "My Projects": "Your construction projects, progress, and project payments.",
     Materials: "Track materials received, used, and remaining across your sites.",
-    Expenses: role === "Client" ? "Review approved expenses for your projects." : "Keep project spending and receipt reviews in view.",
+    Expenses: "Keep project spending and receipt reviews in view.",
     Quotations: "Manage project quotations and additional work approvals.",
     "Progress Updates": "Share the latest site progress with your project team.",
+    "Work Progress": "Follow construction updates and photos from your project.",
     Attendance: "Review daily attendance across your construction sites.",
     Reports: "Project-wise progress, expenses, materials, and activity.",
     "Site Visits": "Plan and follow up on engineer site visits.",
@@ -745,7 +750,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     Profile: "Manage your BuildTrack contact details and profile photo.",
     People: "Manage clients and engineers across your projects.",
     Timeline: "Follow project milestones and site updates.",
-    Feedback: "Share feedback and follow project reviews.",
+    Feedback: "Rate your experience on Google.",
     Instructions: "Owner instructions and recent project updates."
   };
   const pageTitle = page === "Dashboard" ? `${role} Dashboard` : page;

@@ -24,7 +24,7 @@ Views assigned sites and project information; submits construction progress and 
 
 ### Client
 
-Views assigned projects, timelines, progress photos, quotations, and approved expenses; responds to quotations and submits project feedback.
+Views assigned projects, timelines, progress photos, and quotations; responds to quotations and can open the Google review page.
 
 ### Access boundaries
 
@@ -102,8 +102,8 @@ See `README.md` for the fuller endpoint and behavior list. Follow the existing c
 - The backend validates and stores the progress activity, updates the matching project's percentage when a percentage is supplied, persists the response, and publishes a progress workspace update.
 - The client project details page shows **Get the project report** only when the project progress is at least 100%.
 - The completion report displays project facts and compares photos marked `Start` and `Completion`. Where a stage is not marked, the first/last chronological photo is used. If only one image exists, the report explains the limitation.
-- The report includes a print/save action, a Google review link, and a star-rating/comment form. Client feedback is submitted to the existing `/api/feedback` API and is visible in the owner feedback view.
-- Set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env` to the business's direct Google Business Profile review URL. Without it, the link opens a Google Maps search for Vanya BuildTrack. Do not invent a direct business review URL.
+- The report includes a print/save action and a link that opens the configured Google review page. The client Feedback page lets clients save a rating and comment to the existing `/api/feedback` API for the owner, then open the same Google review link to post it publicly.
+- The default review link opens the verified Google Maps listing for Vanya Concrete Technologies; clients can choose **Write a review** there. Set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env` to override it with a direct review-form URL.
 - The engineer progress form is in `frontend/src/common/components.tsx`; payload handling is in `frontend/src/common/portal-app.tsx`; backend validation/update logic is in `backend/src/features/progress/service.ts`.
 
 ## Data, persistence, and uploads
