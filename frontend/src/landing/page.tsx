@@ -68,7 +68,7 @@ export function LandingPage() {
 
   return <main className="landing-page">
     <header className="landing-nav">
-      <Link className="brand landing-brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>BuildTrack</strong><small>Construction Manager</small></span></Link>
+      <Link className="brand landing-brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>Vanya BuildTrack</strong><small>Construction Manager</small></span></Link>
       <div className="landing-nav-actions"><ModeToggle /><Link className="button button-outline" to="/signin">Sign in <span>↗</span></Link></div>
     </header>
     <section className="landing-hero">

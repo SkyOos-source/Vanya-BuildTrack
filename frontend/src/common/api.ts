@@ -1,8 +1,9 @@
-import type { AttendanceLeave, AttendanceProof, DashboardData, RoleId } from "./types";
+import type { Attendance, AttendanceLeave, AttendanceProof, AttendanceRegularizationRequest, DashboardData, RoleId } from "./types";
 import { demoCredentials, fallbackData, isDemoMode } from "./data";
 
 type DemoState = DashboardData & {
   attendanceLeaves: AttendanceLeave[];
+  attendanceRegularizationRequests: AttendanceRegularizationRequest[];
   profiles: Record<string, { phone: string; image: string | null }>;
 };
 
@@ -10,6 +11,7 @@ const demoDataKey = "buildtrack-demo-data";
 const demoState: DemoState = {
   ...JSON.parse(JSON.stringify(fallbackData)) as DashboardData,
   attendanceLeaves: [],
+  attendanceRegularizationRequests: [],
   profiles: {}
 };
 
@@ -20,7 +22,7 @@ function restoreDemoData() {
     const parsed: unknown = JSON.parse(saved);
     if (!parsed || typeof parsed !== "object") throw new Error("Saved demo workspace has an invalid format.");
     const value = parsed as Partial<DemoState>;
-    for (const key of ["projects", "quotes", "expenses", "siteVisits", "activities", "materials", "materialRequests", "attendance", "feedback", "backups", "people", "attendanceLeaves"] as const) {
+    for (const key of ["projects", "quotes", "expenses", "siteVisits", "activities", "materials", "materialRequests", "attendance", "feedback", "backups", "people", "attendanceLeaves", "attendanceRegularizationRequests"] as const) {
       if (value[key] !== undefined && !Array.isArray(value[key])) throw new Error(`Saved demo workspace field '${key}' is invalid.`);
     }
     if (value.profiles && typeof value.profiles !== "object") throw new Error("Saved demo profile data is invalid.");
@@ -139,6 +141,79 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   if (path.startsWith("/api/push/subscriptions")) return response({ enabled: false });
   if (path === "/api/dashboard") return response(demoState);
   if (path === "/api/events") return response({ error: "Live updates are disabled in demo mode." }, 503);
+
+  if (path === "/api/attendance/regularization-requests") {
+    if (method === "GET") {
+      const engineer = url.searchParams.get("engineer");
+      return response(demoState.attendanceRegularizationRequests.filter((request) => !engineer || request.engineer === engineer));
+    }
+    if (method === "POST") {
+      const attendanceId = text(body.attendanceId);
+      const engineer = text(body.engineer);
+      const capturedAt = text(body.capturedAt);
+      const reason = text(body.reason).trim();
+      const record = demoState.attendance.find((item) => item.id === attendanceId && item.engineer === engineer);
+      if (!record || !record.date || !record.checkIn || record.checkOut || record.checkoutRegularization || !reason ||
+        !Number.isFinite(Date.parse(capturedAt))) {
+        return response({ error: "A valid attendance record, engineer, check-out time, and reason are required." }, 400);
+      }
+      const checkInTime = Date.parse(record.checkIn.capturedAt);
+      const checkOutTime = Date.parse(capturedAt);
+      if (Date.now() < checkInTime + 24 * 60 * 60 * 1000) {
+        return response({ error: "A regularization request is available after the check-out deadline has passed." }, 409);
+      }
+      if (checkOutTime <= checkInTime || checkOutTime > checkInTime + 24 * 60 * 60 * 1000 || checkOutTime > Date.now()) {
+        return response({ error: "Enter a past check-out time within 24 hours of check-in." }, 400);
+      }
+      if (demoState.attendanceRegularizationRequests.some((request) => request.attendanceId === record.id && request.status === "Pending review")) {
+        return response({ error: "A regularization request for this attendance is already pending review." }, 409);
+      }
+      const request: AttendanceRegularizationRequest = {
+        id: nextId("AREQ-", demoState.attendanceRegularizationRequests),
+        attendanceId: record.id,
+        engineer,
+        date: record.date,
+        capturedAt: new Date(checkOutTime).toISOString(),
+        reason,
+        requestedAt: new Date().toISOString(),
+        status: "Pending review"
+      };
+      demoState.attendanceRegularizationRequests.unshift(request);
+      return saveResponse({ request }, 201);
+    }
+  }
+  const regularizationRequestMatch = path.match(/^\/api\/attendance\/regularization-requests\/([^/]+)$/);
+  if (regularizationRequestMatch && method === "PATCH") {
+    const request = demoState.attendanceRegularizationRequests.find((item) => item.id === regularizationRequestMatch[1]);
+    if (!request) return response({ error: "Attendance regularization request was not found." }, 404);
+    if (request.status !== "Pending review") return response({ error: "This request has already been reviewed." }, 409);
+    const reviewedBy = text(body.reviewedBy).trim();
+    if ((body.decision !== "Approved" && body.decision !== "Declined") || !reviewedBy) {
+      return response({ error: "Choose an approval decision and provide the reviewing owner." }, 400);
+    }
+    let updatedRecord: Attendance | undefined;
+    if (body.decision === "Approved") {
+      const record = demoState.attendance.find((item) => item.id === request.attendanceId);
+      if (!record || !record.checkIn || record.checkOut || record.checkoutRegularization ||
+        Date.parse(request.capturedAt) <= Date.parse(record.checkIn.capturedAt) ||
+        Date.parse(request.capturedAt) > Date.parse(record.checkIn.capturedAt) + 24 * 60 * 60 * 1000) {
+        return response({ error: "This attendance can no longer be regularized." }, 409);
+      }
+      record.checkoutRegularization = {
+        capturedAt: request.capturedAt,
+        reason: `Engineer request: ${request.reason}`,
+        regularizedBy: reviewedBy,
+        regularizedAt: new Date().toISOString()
+      };
+      record.status = "Present";
+      record.evidence = "Check-in photo; check-out regularized by owner";
+      updatedRecord = record;
+    }
+    request.status = body.decision;
+    request.reviewedBy = reviewedBy;
+    request.reviewedAt = new Date().toISOString();
+    return saveResponse({ request, ...(updatedRecord ? { record: updatedRecord } : {}) });
+  }
 
   if (path === "/api/attendance/leaves") {
     if (method === "GET") return response(demoState.attendanceLeaves);

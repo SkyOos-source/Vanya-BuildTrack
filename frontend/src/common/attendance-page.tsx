@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { Attendance, AttendanceLeave, AttendanceProof, DashboardData, Role } from "./types";
+import type { Attendance, AttendanceLeave, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
 import { StatusBadge } from "./components";
 import { apiFetch } from "./api";
 
@@ -9,6 +9,7 @@ type AttendancePageProps = {
   currentUser: string;
   onSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>;
   onRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>;
+  onReviewRequest: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>;
 };
 
 function localDateKey(date: Date) {
@@ -91,11 +92,13 @@ function AttendanceProofCell({ proof, label, onPreview }: { proof?: AttendancePr
   </div>;
 }
 
-function AttendanceTable({ records, leaves, now, owner, onPreview, onRegularize }: { records: Attendance[]; leaves: AttendanceLeave[]; now: number; owner: boolean; onPreview: (proof: AttendanceProof, label: string) => void; onRegularize: (record: Attendance) => void }) {
+function AttendanceTable({ records, leaves, requests, now, owner, employee, onPreview, onRegularize, onRequestRegularization }: { records: Attendance[]; leaves: AttendanceLeave[]; requests: AttendanceRegularizationRequest[]; now: number; owner: boolean; employee: boolean; onPreview: (proof: AttendanceProof, label: string) => void; onRegularize: (record: Attendance) => void; onRequestRegularization: (record: Attendance) => void }) {
   if (!records.length) return <div className="inline-empty">No attendance records have been submitted yet.</div>;
   return <div className="data-table-wrap"><table className="data-table attendance-table">
-    <thead><tr><th>Date</th><th>Engineer</th><th>Locations</th><th>Check-in time</th><th>Check-in photo</th><th>Check-out time</th><th>Check-out photo</th><th>Status</th>{owner && <th>Owner action</th>}</tr></thead>
+    <thead><tr><th>Date</th><th>Engineer</th><th>Locations</th><th>Check-in time</th><th>Check-in photo</th><th>Check-out time</th><th>Check-out photo</th><th>Status</th>{employee && <th>Regularization request</th>}{owner && <th>Owner action</th>}</tr></thead>
     <tbody>{records.map((record) => {
+      const request = requests.find((item) => item.attendanceId === record.id);
+      const canRequestRegularization = employee && Boolean(record.checkIn && !record.checkOut && !record.checkoutRegularization && attendanceStatus(record, now) === "Absent");
       return <tr key={record.id}>
         <td>{record.date ? new Date(`${record.date}T00:00:00`).toLocaleDateString() : "—"}</td>
         <td>{record.engineer}</td>
@@ -121,6 +124,13 @@ function AttendanceTable({ records, leaves, now, owner, onPreview, onRegularize 
           : !record.checkOut
           ? leaves.find((leave) => leave.date === record.date)?.title ?? (record.date && isSunday(record.date) ? "Weekly Off" : record.status)
           : record.status} /></td>
+        {employee && <td>{request?.status === "Declined"
+          ? <div className="attendance-dialog-actions"><StatusBadge status={request.status} /><button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request again</button></div>
+          : request
+            ? <StatusBadge status={request.status} />
+            : canRequestRegularization
+              ? <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request regularization</button>
+              : <span className="attendance-missing">—</span>}</td>}
         {owner && <td>{record.checkIn && !record.checkOut && !record.checkoutRegularization
           ? <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRegularize(record)}>Regularize</button>
           : <span className="attendance-missing">—</span>}</td>}
@@ -129,16 +139,18 @@ function AttendanceTable({ records, leaves, now, owner, onPreview, onRegularize 
   </table></div>;
 }
 
-export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize }: AttendancePageProps) {
+export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize, onReviewRequest }: AttendancePageProps) {
   const today = localDateKey(new Date());
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [historyDate, setHistoryDate] = useState("");
+  const [historyEngineer, setHistoryEngineer] = useState("All");
   const [preview, setPreview] = useState<{ proof: AttendanceProof; label: string } | null>(null);
   const [leaves, setLeaves] = useState<AttendanceLeave[]>([]);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -148,7 +160,13 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const [regularizationRecord, setRegularizationRecord] = useState<Attendance | null>(null);
   const [regularizationError, setRegularizationError] = useState("");
   const [regularizing, setRegularizing] = useState(false);
+  const [regularizationRequests, setRegularizationRequests] = useState<AttendanceRegularizationRequest[]>([]);
+  const [requestRecord, setRequestRecord] = useState<Attendance | null>(null);
+  const [requestError, setRequestError] = useState("");
+  const [requestingRegularization, setRequestingRegularization] = useState(false);
+  const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const cameraRequestRef = useRef(0);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -173,6 +191,26 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     void loadLeaves();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const query = role === "Employee" ? `?engineer=${encodeURIComponent(currentUser)}` : "";
+    const loadRequests = async () => {
+      try {
+        const response = await apiFetch(`/api/attendance/regularization-requests${query}`);
+        const result = await response.json() as AttendanceRegularizationRequest[] | { error?: string };
+        if (!response.ok || !Array.isArray(result)) {
+          throw new Error(!Array.isArray(result) ? result.error || "Could not load attendance regularization requests." : `Regularization request list failed (${response.status}).`);
+        }
+        if (active) setRegularizationRequests(result);
+      } catch (loadError) {
+        console.error("Unable to load attendance regularization requests:", loadError);
+        if (active) setRequestError(loadError instanceof Error ? loadError.message : "Could not load attendance regularization requests.");
+      }
+    };
+    void loadRequests();
+    return () => { active = false; };
+  }, [currentUser, data.attendance, role]);
 
   useEffect(() => {
     if (!cameraStream) return;
@@ -260,26 +298,85 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     }
   };
 
+  const submitRegularizationRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!requestRecord || !requestRecord.date) return;
+    const form = new FormData(event.currentTarget);
+    setRequestingRegularization(true);
+    setRequestError("");
+    try {
+      const response = await apiFetch("/api/attendance/regularization-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attendanceId: requestRecord.id,
+          engineer: currentUser,
+          capturedAt: new Date(String(form.get("capturedAt"))).toISOString(),
+          reason: form.get("reason")
+        })
+      });
+      const result = await response.json() as { request?: AttendanceRegularizationRequest; error?: string };
+      if (!response.ok || !result.request) throw new Error(result.error || `Could not submit regularization request (${response.status}).`);
+      setRegularizationRequests((current) => [result.request!, ...current.filter((item) => item.attendanceId !== result.request!.attendanceId)]);
+      setRequestRecord(null);
+    } catch (submitError) {
+      console.error("Unable to submit attendance regularization request:", submitError);
+      setRequestError(submitError instanceof Error ? submitError.message : "Could not submit regularization request.");
+    } finally {
+      setRequestingRegularization(false);
+    }
+  };
+
+  const reviewRequest = async (request: AttendanceRegularizationRequest, decision: "Approved" | "Declined") => {
+    setReviewingRequestId(request.id);
+    setRequestError("");
+    try {
+      const reviewed = await onReviewRequest(request.id, decision);
+      setRegularizationRequests((current) => current.map((item) => item.id === reviewed.id ? reviewed : item));
+    } catch (reviewError) {
+      setRequestError(reviewError instanceof Error ? reviewError.message : "Could not review the attendance request.");
+    } finally {
+      setReviewingRequestId(null);
+    }
+  };
+
   const openCamera = async (facingMode: "user" | "environment") => {
+    const requestId = ++cameraRequestRef.current;
     setError("");
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access is unavailable. Open this page over HTTPS and allow camera access.");
       return;
     }
+    setCameraLoading(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: facingMode } },
         audio: false
       });
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       setPhoto(null);
       setCameraOpen(true);
       setCameraStream(stream);
     } catch (cameraError) {
+      if (requestId !== cameraRequestRef.current) return;
       console.error("Unable to open attendance camera:", cameraError);
       setError(cameraError instanceof DOMException && cameraError.name === "NotAllowedError"
         ? "Camera permission was denied. Allow camera access in your browser settings."
         : "Could not open the camera. Check that it is connected and not being used by another app.");
+    } finally {
+      if (requestId === cameraRequestRef.current) setCameraLoading(false);
     }
+  };
+
+  const closeCapture = () => {
+    cameraRequestRef.current += 1;
+    setCaptureOpen(false);
+    setCameraOpen(false);
+    setCameraLoading(false);
+    setCameraStream(null);
   };
 
   const capturePhoto = async () => {
@@ -340,8 +437,10 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const todayRecords = data.attendance.filter((record) => record.date === today);
   const checkedIn = todayRecords.filter((record) => record.checkIn).length;
   const checkedOut = todayRecords.filter((record) => record.checkOut).length;
+  const engineers = [...new Set(data.attendance.map((record) => record.engineer))].sort((left, right) => left.localeCompare(right));
   const history = data.attendance
     .filter((record) => role === "Owner" || record.engineer === currentUser)
+    .filter((record) => role !== "Owner" || historyEngineer === "All" || record.engineer === historyEngineer)
     .filter((record) => !historyDate || record.date === historyDate);
 
   return <div className="feature-page">
@@ -356,7 +455,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
               ? `You checked in at ${formatTime(currentRecord.checkIn.capturedAt)}. Check out when you finish.`
               : "You haven't checked in yet today."}</span>
         </div>
-        {!currentRecord?.checkOut && !(todayIsOff && !currentRecord?.checkIn) && <button className="button button-primary attendance-submit" type="button" onClick={() => { setError(""); setPhoto(null); setCaptureOpen(true); setCameraOpen(false); setCameraStream(null); }}>
+        {!currentRecord?.checkOut && !(todayIsOff && !currentRecord?.checkIn) && <button className="button button-primary attendance-submit" type="button" onClick={() => { setError(""); setPhoto(null); setCaptureOpen(true); setCameraOpen(false); setCameraStream(null); void openCamera("user"); }}>
           ◷ {action === "check-in" ? "Check In" : "Check Out"}
         </button>}
       </div>
@@ -366,6 +465,30 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       <div><strong>{checkedIn}</strong><span>Engineers checked in today</span></div>
       <div><strong>{todayRecords.length}</strong><span>Attendance records today</span></div>
       <div><strong>{checkedOut}</strong><span>Check-outs completed</span></div>
+    </section>}
+
+    {role === "Owner" && <section className="panel feature-panel">
+      <div className="list-toolbar"><div><span className="panel-kicker">ENGINEER REQUESTS</span><h2 className="list-title">Attendance regularization requests</h2></div></div>
+      {requestError && <p className="attendance-error" role="alert">{requestError}</p>}
+      {regularizationRequests.length
+        ? <div className="data-table-wrap"><table className="data-table">
+          <thead><tr><th>Engineer</th><th>Attendance date</th><th>Requested check-out</th><th>Reason</th><th>Requested</th><th>Status</th><th>Review</th></tr></thead>
+          <tbody>{regularizationRequests.map((request) => <tr key={request.id}>
+            <td>{request.engineer}</td>
+            <td>{dateLabel(request.date)}</td>
+            <td>{new Date(request.capturedAt).toLocaleString()}</td>
+            <td>{request.reason}</td>
+            <td>{new Date(request.requestedAt).toLocaleString()}</td>
+            <td><StatusBadge status={request.status} /></td>
+            <td>{request.status === "Pending review"
+              ? <div className="attendance-dialog-actions">
+                <button className="button button-primary" type="button" disabled={reviewingRequestId !== null} onClick={() => void reviewRequest(request, "Approved")}>{reviewingRequestId === request.id ? "Reviewing…" : "Approve"}</button>
+                <button className="button button-outline" type="button" disabled={reviewingRequestId !== null} onClick={() => void reviewRequest(request, "Declined")}>Decline</button>
+              </div>
+              : request.reviewedBy ? `By ${request.reviewedBy}` : "—"}</td>
+          </tr>)}</tbody>
+        </table></div>
+        : <div className="inline-empty">No attendance regularization requests have been submitted.</div>}
     </section>}
 
     <section className="panel feature-panel attendance-calendar-panel">
@@ -406,20 +529,44 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
 
     <section className="panel feature-panel">
       <div className="attendance-history-heading">
-        <h2>{role === "Owner" ? "Attendance History" : "Attendance History"}</h2>
-        <label>Filter Date:
-          <input aria-label="Filter attendance by date" type="date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} />
-        </label>
+        <h2>Attendance History</h2>
+        <div className="attendance-history-filters">
+          {role === "Owner" && <label>Filter Engineer:
+            <select aria-label="Filter attendance by engineer" className="select-button" value={historyEngineer} onChange={(event) => setHistoryEngineer(event.target.value)}>
+              <option value="All">All engineers</option>
+              {engineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
+            </select>
+          </label>}
+          <label>Filter Date:
+            <input aria-label="Filter attendance by date" type="date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} />
+          </label>
+        </div>
       </div>
       <AttendanceTable
         records={history}
         leaves={leaves}
+        requests={regularizationRequests}
         now={now}
         owner={role === "Owner"}
+        employee={role === "Employee"}
         onPreview={(proof, label) => setPreview({ proof, label })}
         onRegularize={(record) => { setRegularizationError(""); setRegularizationRecord(record); }}
+        onRequestRegularization={(record) => { setRequestError(""); setRequestRecord(record); }}
       />
     </section>
+
+    {requestRecord && requestRecord.checkIn && requestRecord.date && <div className="attendance-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !requestingRegularization) setRequestRecord(null); }}>
+      <form className="attendance-capture-dialog attendance-regularization-dialog" onSubmit={(event) => void submitRegularizationRequest(event)} role="dialog" aria-modal="true" aria-labelledby="attendance-request-title">
+        <div className="attendance-preview-heading"><strong id="attendance-request-title">Request attendance regularization</strong><button type="button" aria-label="Close request" disabled={requestingRegularization} onClick={() => setRequestRecord(null)}>×</button></div>
+        <p>Attendance date: <strong>{dateLabel(requestRecord.date)}</strong>. Enter the check-out date and time you actually left the site. The owner will review your request.</p>
+        <label>Actual check-out date and time
+          <input name="capturedAt" type="datetime-local" required min={localDateTimeValue(requestRecord.checkIn.capturedAt)} max={localDateTimeValue(new Date(Math.min(Date.parse(requestRecord.checkIn.capturedAt) + 24 * 60 * 60 * 1000, now)).toISOString())} defaultValue={localDateTimeValue(new Date(Date.parse(requestRecord.checkIn.capturedAt) + 8 * 60 * 60 * 1000).toISOString())} />
+        </label>
+        <label>Reason<textarea name="reason" required maxLength={500} rows={3} placeholder="Explain why you missed check-out." /></label>
+        {requestError && <p className="attendance-error" role="alert">{requestError}</p>}
+        <div className="attendance-dialog-actions"><button className="button button-outline" type="button" disabled={requestingRegularization} onClick={() => setRequestRecord(null)}>Cancel</button><button className="button button-primary" type="submit" disabled={requestingRegularization}>{requestingRegularization ? "Sending…" : "Send request"}</button></div>
+      </form>
+    </div>}
 
     {regularizationRecord && <div className="attendance-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !regularizing) setRegularizationRecord(null); }}>
       <form className="attendance-capture-dialog attendance-regularization-dialog" onSubmit={(event) => void submitRegularization(event)} role="dialog" aria-modal="true" aria-labelledby="regularization-title">
@@ -432,22 +579,20 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       </form>
     </div>}
 
-    {captureOpen && <div className="attendance-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) { setCaptureOpen(false); setCameraOpen(false); setCameraStream(null); } }}>
+    {captureOpen && <div className="attendance-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) closeCapture(); }}>
       <section className="attendance-capture-dialog" role="dialog" aria-modal="true" aria-labelledby="attendance-capture-title">
-        <div className="attendance-preview-heading"><strong id="attendance-capture-title">{action === "check-in" ? "Check In Photo" : "Check Out Photo"}</strong><button type="button" aria-label="Close photo capture" disabled={submitting} onClick={() => { setCaptureOpen(false); setCameraOpen(false); setCameraStream(null); }}>×</button></div>
-        <div className="attendance-photo-options" aria-label="Choose attendance photo">
-          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("user")}>▣ Take Selfie</button>
-          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("environment")}>▣ Take Site Photo</button>
-        </div>
+        <div className="attendance-preview-heading"><strong id="attendance-capture-title">{action === "check-in" ? "Check In Selfie" : "Check Out Selfie"}</strong><button type="button" aria-label="Close photo capture" disabled={submitting} onClick={closeCapture}>×</button></div>
+        {cameraLoading && <p>Opening selfie camera…</p>}
         {cameraOpen && <div className="attendance-live-camera">
           <video ref={cameraVideoRef} autoPlay muted playsInline aria-label="Live camera preview" />
           <button className="button button-primary" type="button" onClick={() => void capturePhoto()}>Capture Photo</button>
         </div>}
+        {!cameraOpen && !cameraLoading && error && <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("user")}>Retry selfie camera</button>}
         {previewUrl && <img className="attendance-capture-preview" src={previewUrl} alt="Selected attendance photo" />}
         <p className="attendance-location-note">Your current location will be recorded when you confirm.</p>
         {error && <p className="attendance-error" role="alert">{error}</p>}
         <div className="attendance-dialog-actions">
-          <button className="button button-outline" type="button" disabled={submitting} onClick={() => { setCaptureOpen(false); setCameraOpen(false); setCameraStream(null); }}>Cancel</button>
+          <button className="button button-outline" type="button" disabled={submitting} onClick={closeCapture}>Cancel</button>
           <button className="button button-primary" type="button" disabled={submitting || !photo} onClick={() => void submit()}>
             {submitting ? "Recording…" : `Confirm ${action === "check-in" ? "Check In" : "Check Out"}`}
           </button>

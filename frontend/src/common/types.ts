@@ -27,6 +27,7 @@ export type AttendanceProof = { image: string; capturedAt: string; latitude: num
 export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
 export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
 export type AttendanceLeave = { id: string; title: string; date: string };
+export type AttendanceRegularizationRequest = { id: string; attendanceId: string; engineer: string; date: string; capturedAt: string; reason: string; requestedAt: string; status: "Pending review" | "Approved" | "Declined"; reviewedBy?: string; reviewedAt?: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string };

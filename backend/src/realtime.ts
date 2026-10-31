@@ -2,7 +2,7 @@ import { sendPushNotification, type PushMessage } from "./push";
 import type { SiteVisit } from "./data/store";
 
 export type WorkspaceUpdate = {
-  resource: "materials" | "materialRequests" | "expenses" | "progress" | "quotations" | "siteVisits";
+  resource: "materials" | "materialRequests" | "expenses" | "progress" | "quotations" | "siteVisits" | "attendance";
   push?: PushMessage;
   visit?: SiteVisit;
   action?: "scheduled" | "check-in" | "check-out";

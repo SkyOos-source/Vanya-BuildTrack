@@ -5,7 +5,7 @@ import { BuildingIcon } from "./components";
 function LegalLayout({ title, eyebrow, children }: { title: string; eyebrow: string; children: ReactNode }) {
   return <main className="legal-page">
     <header className="landing-nav">
-      <Link className="brand landing-brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>BuildTrack</strong><small>Construction Manager</small></span></Link>
+      <Link className="brand landing-brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>Vanya BuildTrack</strong><small>Construction Manager</small></span></Link>
       <Link className="button button-outline" to="/">Home</Link>
     </header>
     <article className="legal-content">

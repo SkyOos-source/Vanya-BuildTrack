@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { Expense, Person, Project, RecordModalType } from "./types";
 import { formatCurrency } from "./utils";
 
@@ -8,8 +8,33 @@ export function ProjectCards({ projects, onOpen, showBudget = true }: { projects
 }
 
 export function ExpenseRows({ expenses, detailed = false, onAction, onApprove, onDecline }: { expenses: Expense[]; detailed?: boolean; onAction?: (expense: Expense) => void; onApprove?: (expense: Expense) => void; onDecline?: (expense: Expense) => void }) {
+  const [receipt, setReceipt] = useState<Expense | null>(null);
+  useEffect(() => {
+    if (!receipt) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setReceipt(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [receipt]);
   if (!expenses.length) return <div className="inline-empty">No expenses to show yet.</div>;
-  return <div className={`expense-list ${detailed ? "expense-list-detailed" : ""}`}>{expenses.map((expense) => <div className="expense-row" key={expense.id}><span className={`expense-icon ${expense.category === "Labour" ? "expense-labour" : ""}`}>{expense.category === "Materials" ? "◈" : expense.category === "Labour" ? "♙" : "▧"}</span><div className="expense-main"><strong>{expense.description}</strong><span>{expense.project} · {expense.submittedBy}</span></div><time>{expense.date.split(" ").slice(0, 2).join(" ")}</time><strong className="expense-amount">{formatCurrency(expense.amount)}</strong><StatusBadge status={expense.status} />{detailed && <><button className="text-link receipt-action" onClick={() => onAction?.(expense)}>{expense.status === "Pending review" && onApprove ? "View" : "Receipt"} ↗</button>{expense.status === "Pending review" && onApprove && onDecline && <div className="inline-actions expense-review-actions"><button onClick={() => onApprove(expense)}>Approve</button><button onClick={() => onDecline(expense)}>Decline</button></div>}</>}</div>)}</div>;
+  return <>
+    <div className={`expense-list ${detailed ? "expense-list-detailed" : ""}`}>{expenses.map((expense) => <div className="expense-row" key={expense.id}><span className={`expense-icon ${expense.category === "Labour" ? "expense-labour" : ""}`}>{expense.category === "Materials" ? "◈" : expense.category === "Labour" ? "♙" : "▧"}</span><div className="expense-main"><strong>{expense.description}</strong><span>{expense.project} · {expense.submittedBy}</span></div><time>{expense.date.split(" ").slice(0, 2).join(" ")}</time><strong className="expense-amount">{formatCurrency(expense.amount)}</strong><StatusBadge status={expense.status} />{detailed && <><button className="text-link receipt-action" onClick={() => expense.attachment ? setReceipt(expense) : onAction?.(expense)}>{expense.status === "Pending review" && onApprove ? "View" : "Receipt"} ↗</button>{expense.status === "Pending review" && onApprove && onDecline && <div className="inline-actions expense-review-actions"><button onClick={() => onApprove(expense)}>Approve</button><button onClick={() => onDecline(expense)}>Decline</button></div>}</>}</div>)}</div>
+    {receipt?.attachment && <div className="pdf-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReceipt(null); }}>
+      <section className="pdf-preview-dialog expense-receipt-dialog" role="dialog" aria-modal="true" aria-label={`${receipt.description} receipt`}>
+        <header className="pdf-preview-header">
+          <strong>{receipt.description} · {receipt.project}</strong>
+          <div>
+            <a className="button button-outline" href={receipt.attachment} download={`${receipt.id}-receipt${receipt.attachment.startsWith("data:application/pdf") ? ".pdf" : ".jpg"}`}>Download</a>
+            <button className="icon-button" type="button" aria-label="Close receipt preview" onClick={() => setReceipt(null)}>×</button>
+          </div>
+        </header>
+        {receipt.attachment.startsWith("data:application/pdf")
+          ? <iframe title={`${receipt.description} receipt PDF`} src={receipt.attachment} />
+          : <div className="expense-receipt-image"><img src={receipt.attachment} alt={`${receipt.description} receipt`} /></div>}
+      </section>
+    </div>}
+  </>;
 }
 
 export function StatCard({ label, value, note, icon, trend, attention = false }: { label: string; value: string; note: string; icon: string; trend: string; attention?: boolean }) {

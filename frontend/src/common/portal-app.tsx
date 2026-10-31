@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceProof, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch } from "./api";
 import { formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
@@ -48,7 +48,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const demoMode = isDemoMode();
   const [data, setData] = useState<DashboardData>(demoMode ? fallbackData : emptyDashboardData);
   const page = pageFromPath(location.pathname, role);
-  const [apiStatus, setApiStatus] = useState<"connecting" | "connected" | "offline">(demoMode ? "connected" : "connecting");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState("");
@@ -183,18 +182,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     if (page !== "Dashboard") return;
     let active = true;
     const load = async () => {
-      setApiStatus("connecting");
       try {
         const response = await apiFetch("/api/dashboard");
         if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
         const result: DashboardData = await response.json();
         if (active) {
           setData(result);
-          setApiStatus("connected");
         }
       } catch (error) {
         console.error("Unable to load workspace data from the SQLite API:", error);
-        if (active) setApiStatus("offline");
       }
     };
     void load();
@@ -222,20 +218,18 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             const visits: unknown = await response.json();
             if (!Array.isArray(visits)) throw new Error("Site visit refresh returned invalid data.");
             setData((current) => ({ ...current, siteVisits: visits as DashboardData["siteVisits"] }));
-            setApiStatus("connected");
             if (role === "Employee" && update.action === "scheduled") {
               showToast(`New site visit scheduled for ${visit.project} on ${visit.date}.`);
             }
           } catch (error) {
             console.error("Unable to refresh site visits after a real-time update:", error);
-            setApiStatus("offline");
           }
         })();
         return;
       }
       if (role === "Employee") return;
       const resource = update.resource;
-      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress" && resource !== "quotations") {
+      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
@@ -256,7 +250,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
               ? activities.filter((activity) => clientProjectNames.includes(activity.project) || activity.project === assignedClientProject)
               : activities;
             setData((current) => ({ ...current, activities: visibleActivities, projects }));
-            setApiStatus("connected");
             return;
           }
           const endpoint = resource === "materialRequests" ? "/api/material-requests" : `/api/${resource}`;
@@ -270,13 +263,13 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             setData((current) => ({ ...current, materialRequests: records as DashboardData["materialRequests"] }));
           } else if (resource === "quotations") {
             setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
+          } else if (resource === "attendance") {
+            setData((current) => ({ ...current, attendance: records as DashboardData["attendance"] }));
           } else {
             setData((current) => ({ ...current, expenses: records as DashboardData["expenses"] }));
           }
-          setApiStatus("connected");
         } catch (error) {
           console.error(`Unable to refresh ${resource} after a real-time update:`, error);
-          setApiStatus("offline");
         }
       })();
     };
@@ -335,7 +328,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (active) setData((current) => ({ ...current, activities: visibleActivities }));
       } catch (error) {
         console.error("Unable to load progress photos for the client project report:", error);
-        if (active) setApiStatus("offline");
       }
     };
     void loadClientProgress();
@@ -354,7 +346,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (active) setData((current) => ({ ...current, materialRequests: requests }));
       } catch (error) {
         console.error("Unable to load material requests:", error);
-        if (active) setApiStatus("offline");
       }
     };
     void loadMaterialRequests();
@@ -387,7 +378,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
         const result: unknown = await response.json();
         if (!active || !Array.isArray(result)) return;
-        setApiStatus("connected");
         setData((current) => {
           switch (page) {
             case "Projects & Sites":
@@ -420,7 +410,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         });
       } catch (error) {
         console.error(`Unable to load ${page} API:`, error);
-        if (active) setApiStatus("offline");
       }
     };
     void loadPageData();
@@ -800,6 +789,29 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     }
   };
 
+  const reviewAttendanceRequest = async (requestId: string, decision: "Approved" | "Declined"): Promise<AttendanceRegularizationRequest> => {
+    try {
+      const response = await apiFetch(`/api/attendance/regularization-requests/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, reviewedBy: currentUser })
+      });
+      const result = await response.json() as { request?: AttendanceRegularizationRequest; record?: Attendance; error?: string };
+      if (!response.ok || !result.request) throw new Error(result.error || `Attendance request review failed (${response.status}).`);
+      if (result.record) {
+        setData((current) => ({
+          ...current,
+          attendance: current.attendance.map((record) => record.id === result.record!.id ? result.record! : record)
+        }));
+      }
+      showToast(decision === "Approved" ? "Attendance request approved and regularized." : "Attendance request declined.");
+      return result.request;
+    } catch (error) {
+      console.error("Unable to review attendance regularization request:", error);
+      throw error instanceof Error ? error : new Error("Could not review attendance request.");
+    }
+  };
+
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -897,6 +909,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     onRemovePerson: removePerson,
     onAttendanceSubmit: submitAttendance,
     onAttendanceRegularize: regularizeAttendance,
+    onAttendanceRequestReview: reviewAttendanceRequest,
     onToast: showToast,
     onFeedback: submitFeedback,
     onBackup: requestBackup
@@ -938,10 +951,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{page}</strong></div>
           <div className="topbar-actions">
             <ModeToggle />
-            <div className={`api-indicator api-${apiStatus}`} title={demoMode ? "Frontend-only demo data" : apiStatus === "offline" ? "SQLite API unavailable — no demo data is used" : "Workspace data stored in SQLite"}>
-              <span />{demoMode ? "Local demo" : apiStatus === "connected" ? "SQLite connected" : apiStatus === "offline" ? "SQLite unavailable" : "Connecting"}
-            </div>
-            <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>♧<i /></button>
+            <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0" /></svg><i /></button>
             {role === "Client" ? <div className="top-avatar" aria-label={`${currentUser} avatar`}>{initials(currentUser)}</div> : <Link className="top-avatar" to={pagePath(role, "Profile")} aria-label={`View profile for ${currentUser}`}>{profileImage ? <img src={profileImage} alt="" /> : initials(currentUser)}</Link>}
           </div>
         </header>
