@@ -274,7 +274,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     setPhoto(file);
   };
 
-  const openCamera = async () => {
+  const openCamera = async (facingMode: "user" | "environment") => {
     setError("");
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access is unavailable. Open this page over HTTPS or use Upload Photo.");
@@ -282,7 +282,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+        video: { facingMode: { ideal: facingMode } },
         audio: false
       });
       setPhoto(null);
@@ -450,7 +450,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       <section className="attendance-capture-dialog" role="dialog" aria-modal="true" aria-labelledby="attendance-capture-title">
         <div className="attendance-preview-heading"><strong id="attendance-capture-title">{action === "check-in" ? "Check In Photo" : "Check Out Photo"}</strong><button type="button" aria-label="Close photo capture" disabled={submitting} onClick={() => { setCaptureOpen(false); setCameraOpen(false); setCameraStream(null); }}>×</button></div>
         <div className="attendance-photo-options" aria-label="Choose attendance photo">
-          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera()}>▣ Take Photo</button>
+          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("user")}>▣ Take Selfie</button>
+          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("environment")}>▣ Take Site Photo</button>
           <label className="button button-outline attendance-photo-option">↑ Upload Photo
             <input type="file" accept="image/*" onChange={selectPhoto} />
           </label>

@@ -1,4 +1,4 @@
-import type { Attendance, AttendanceLeave, DashboardData, RoleId } from "./types";
+import type { AttendanceLeave, AttendanceProof, DashboardData, RoleId } from "./types";
 import { demoCredentials, fallbackData, isDemoMode } from "./data";
 
 type DemoState = DashboardData & {
@@ -25,6 +25,7 @@ function restoreDemoData() {
     }
     if (value.profiles && typeof value.profiles !== "object") throw new Error("Saved demo profile data is invalid.");
     Object.assign(demoState, value);
+    demoState.attendance = Array.from(new Map(demoState.attendance.map((record) => [record.id, record])).values());
   } catch (error) {
     console.error("Unable to restore the local demo workspace:", error);
     localStorage.removeItem(demoDataKey);
@@ -61,6 +62,28 @@ function readBody(init?: RequestInit): Record<string, unknown> {
 
 function text(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
+}
+
+function readDemoAttendanceProof(value: unknown): AttendanceProof | null {
+  if (!value || typeof value !== "object") return null;
+  const proof = value as Record<string, unknown>;
+  if (typeof proof.image !== "string" ||
+    !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(proof.image) ||
+    proof.image.length > 2_500_000 ||
+    typeof proof.capturedAt !== "string" ||
+    !Number.isFinite(Date.parse(proof.capturedAt)) ||
+    typeof proof.latitude !== "number" || proof.latitude < -90 || proof.latitude > 90 ||
+    typeof proof.longitude !== "number" || proof.longitude < -180 || proof.longitude > 180 ||
+    typeof proof.accuracy !== "number" || !Number.isFinite(proof.accuracy) || proof.accuracy < 0) {
+    return null;
+  }
+  return {
+    image: proof.image,
+    capturedAt: proof.capturedAt,
+    latitude: proof.latitude,
+    longitude: proof.longitude,
+    accuracy: proof.accuracy
+  };
 }
 
 function demoProfile(role: RoleId, email: string) {
@@ -199,21 +222,34 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
     } else {
       const engineer = text(body.engineer);
       const attendanceDate = text(body.date);
+      const proof = readDemoAttendanceProof(body.proof);
+      if (!engineer || !/^\d{4}-\d{2}-\d{2}$/.test(attendanceDate) ||
+        (body.action !== "check-in" && body.action !== "check-out") || !proof) {
+        return response({ error: "Engineer, date, action, photo, and location are required." }, 400);
+      }
       let existing = demoState.attendance.find((item) => item.engineer === engineer && item.date === attendanceDate);
+      if (body.action === "check-in" && existing?.checkIn) {
+        return response({ error: "A check-in is already recorded for today." }, 409);
+      }
+      if (body.action === "check-out" && (!existing?.checkIn || existing.checkOut || existing.checkoutRegularization)) {
+        return response({ error: "Check in before recording a check-out." }, 409);
+      }
       if (!existing) {
         existing = { id: nextId("ATT-", demoState.attendance), engineer, date: attendanceDate, present: "—", shift: "Full day", status: "Checked in", evidence: "Check-in photo" };
         demoState.attendance.unshift(existing);
       }
       if (body.action === "check-in") {
-        existing.checkIn = body.proof as Attendance["checkIn"];
+        existing.checkIn = proof;
         existing.status = "Checked in";
       } else {
-        existing.checkOut = body.proof as Attendance["checkOut"];
+        existing.checkOut = proof;
         existing.status = "Present";
       }
       record = existing;
     }
-    (demoState[collection] as unknown as Record<string, unknown>[]).unshift(record);
+    if (collection !== "attendance") {
+      (demoState[collection] as unknown as Record<string, unknown>[]).unshift(record);
+    }
     return saveResponse({ record }, 201);
   }
 
