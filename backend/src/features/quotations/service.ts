@@ -1,4 +1,5 @@
 import { nextId, projects, readAmount, readPdfAttachment, readText } from "../../data/store";
+import { publishWorkspaceUpdate } from "../../realtime";
 import { quotations } from "./data";
 import { failure, result, today } from "../shared";
 
@@ -22,6 +23,16 @@ export function createQuotation(body: any) {
     ...(attachment ? { attachment } : {})
   };
   quotations.unshift(quote);
+  publishWorkspaceUpdate({
+    resource: "quotations",
+    ...(quote.client !== "Unassigned" ? {
+      push: {
+        title: "New quotation from Vanya BuildTrack",
+        body: `A quotation for ${quote.project} is ready for your review.`,
+        targets: [{ role: "client" as const, userName: quote.client, url: "/client/my-projects" }]
+      }
+    } : {})
+  });
   return result({ record: quote }, 201);
 }
 
@@ -30,6 +41,17 @@ export function updateQuotation(id: string, body: any) {
   if (status !== "Approved" && status !== "Declined") return failure(400, "Quotation status must be Approved or Declined.");
   const quote = quotations.find((item) => item.id === id);
   if (!quote) return failure(404, "Quotation not found.");
+  const newlyApproved = status === "Approved" && quote.status !== "Approved";
   quote.status = status;
+  publishWorkspaceUpdate({
+    resource: "quotations",
+    ...(newlyApproved ? {
+      push: {
+        title: "Quotation approved",
+        body: `The quotation for ${quote.project} was approved by the client.`,
+        targets: [{ role: "owner" as const, url: "/admin/quotations" }]
+      }
+    } : {})
+  });
   return result({ record: quote });
 }

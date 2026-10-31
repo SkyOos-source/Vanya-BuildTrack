@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceProof, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceProof, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch } from "./api";
-import { formatCurrency, initials } from "./utils";
+import { formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
 import OwnerDashboard from "../owner/dashboard/page";
 import EngineerDashboard from "../engineer/dashboard/page";
@@ -14,6 +14,7 @@ import OwnerMaterialsPage from "../owner/material/page";
 import { NotFoundPage } from "./legal-pages";
 import { AccountProfilePage } from "./profile-page";
 import { ModeToggle } from "./mode-toggle";
+import type { SiteVisitAction } from "./site-visits-page";
 
 type PushStatus = "checking" | "ready" | "enabled" | "unsupported" | "unconfigured" | "denied" | "error";
 
@@ -201,21 +202,44 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, [page]);
 
   useEffect(() => {
-    if (role === "Employee" || demoMode) return;
+    if (demoMode) return;
     const events = new EventSource("/api/events");
     events.onmessage = (event) => {
-      let resource: unknown;
+      let update: { resource?: unknown; visit?: SiteVisit; action?: unknown };
       try {
-        resource = (JSON.parse(event.data) as { resource?: unknown }).resource;
+        update = JSON.parse(event.data) as typeof update;
       } catch (error) {
         console.error("Unable to parse a real-time workspace update:", error);
         return;
       }
-      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress") {
+      if (update.resource === "siteVisits") {
+        const visit = update.visit;
+        if (!visit || role === "Client" || (role === "Employee" && visit.engineer !== userName)) return;
+        void (async () => {
+          try {
+            const response = await apiFetch("/api/site-visits");
+            if (!response.ok) throw new Error(`Site visit refresh failed (${response.status})`);
+            const visits: unknown = await response.json();
+            if (!Array.isArray(visits)) throw new Error("Site visit refresh returned invalid data.");
+            setData((current) => ({ ...current, siteVisits: visits as DashboardData["siteVisits"] }));
+            setApiStatus("connected");
+            if (role === "Employee" && update.action === "scheduled") {
+              showToast(`New site visit scheduled for ${visit.project} on ${visit.date}.`);
+            }
+          } catch (error) {
+            console.error("Unable to refresh site visits after a real-time update:", error);
+            setApiStatus("offline");
+          }
+        })();
+        return;
+      }
+      if (role === "Employee") return;
+      const resource = update.resource;
+      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress" && resource !== "quotations") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
-      if (role === "Client" && resource !== "progress") return;
+      if (role === "Client" && resource !== "progress" && resource !== "quotations") return;
       void (async () => {
         try {
           if (resource === "progress") {
@@ -238,12 +262,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           const endpoint = resource === "materialRequests" ? "/api/material-requests" : `/api/${resource}`;
           const response = await apiFetch(endpoint);
           if (!response.ok) throw new Error(`${resource} refresh failed (${response.status})`);
-          const records = await response.json() as DashboardData[typeof resource];
+          const records: unknown = await response.json();
           if (!Array.isArray(records)) throw new Error(`${resource} refresh returned invalid data.`);
           if (resource === "materials") {
             setData((current) => ({ ...current, materials: records as DashboardData["materials"] }));
           } else if (resource === "materialRequests") {
             setData((current) => ({ ...current, materialRequests: records as DashboardData["materialRequests"] }));
+          } else if (resource === "quotations") {
+            setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
           } else {
             setData((current) => ({ ...current, expenses: records as DashboardData["expenses"] }));
           }
@@ -259,6 +285,40 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     };
     return () => events.close();
   }, [data.people, data.projects, demoMode, role, userName]);
+
+  useEffect(() => {
+    if (!demoMode || role === "Client") return;
+    const refreshDemoSiteVisits = (event: StorageEvent) => {
+      if (event.key !== "buildtrack-demo-data") return;
+      void (async () => {
+        try {
+          const response = await apiFetch("/api/site-visits");
+          if (!response.ok) throw new Error(`Site visit refresh failed (${response.status})`);
+          const visits: unknown = await response.json();
+          if (!Array.isArray(visits)) throw new Error("Site visit refresh returned invalid data.");
+          const updatedVisits = visits as SiteVisit[];
+          const previousById = new Map(data.siteVisits.map((visit) => [visit.id, visit]));
+          const changedVisit = updatedVisits.find((visit) => {
+            const previous = previousById.get(visit.id);
+            return (role === "Employee" && visit.engineer === userName && (!previous || previous.status !== visit.status)) ||
+              (role === "Owner" && previous && previous.status !== visit.status);
+          });
+          setData((current) => ({ ...current, siteVisits: updatedVisits }));
+          if (changedVisit && role === "Employee" && !previousById.has(changedVisit.id)) {
+            showToast(`New site visit scheduled for ${changedVisit.project} on ${changedVisit.date}.`);
+          } else if (changedVisit && role === "Employee") {
+            showToast(`Your site visit at ${changedVisit.site} was updated.`);
+          } else if (changedVisit && role === "Owner") {
+            showToast(`${changedVisit.engineer} updated the site visit at ${changedVisit.site}.`);
+          }
+        } catch (error) {
+          console.error("Unable to refresh demo site visits after a workspace change:", error);
+        }
+      })();
+    };
+    window.addEventListener("storage", refreshDemoSiteVisits);
+    return () => window.removeEventListener("storage", refreshDemoSiteVisits);
+  }, [data.siteVisits, demoMode, role, userName]);
 
   useEffect(() => {
     if (role !== "Client" || page !== "My Projects") return;
@@ -311,6 +371,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       Quotations: "/api/quotations",
       Attendance: "/api/attendance",
       "Progress Updates": "/api/progress",
+      "Work Progress": "/api/progress",
       Timeline: "/api/progress",
       "Site Visits": "/api/site-visits",
       Feedback: "/api/feedback",
@@ -342,6 +403,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             case "Attendance":
               return { ...current, attendance: result as DashboardData["attendance"] };
             case "Progress Updates":
+            case "Work Progress":
             case "Timeline":
               return { ...current, activities: [...result as DashboardData["activities"], ...current.activities.filter((item) => item.kind !== "progress")] };
             case "Site Visits":
@@ -408,15 +470,22 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           time: quote.date,
           icon: "▤",
           page: "Quotations"
+        })),
+        ...data.quotes.filter((quote) => quote.status === "Approved").map((quote) => ({
+          title: "Quotation approved by client",
+          detail: `${quote.title} · ${quote.project}`,
+          time: quote.date,
+          icon: "▤",
+          page: "Quotations"
         }))
       ].slice(0, 8);
     }
     if (role === "Employee") {
       return [
-        ...data.siteVisits.filter((visit) => visit.status === "Scheduled" && visit.engineer === userName).map((visit) => ({
-          title: "Upcoming site visit",
+        ...data.siteVisits.filter((visit) => visit.status !== "Completed" && visit.status !== "Cancelled" && visit.engineer === userName).map((visit) => ({
+          title: visit.status === "Checked in" ? "Site visit in progress" : "Upcoming site visit",
           detail: `${visit.project} · ${visit.site}`,
-          time: `${visit.date} at ${visit.time}`,
+          time: siteVisitDateParts(visit.date).label,
           icon: "⌖",
           page: "Site Visits"
         })),
@@ -441,7 +510,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         icon: activity.kind === "progress" ? "▥" : "◷",
         page: "Timeline"
       })),
-      ...data.quotes.filter((quote) => (quote.client === userName || clientProjectNames.has(quote.project)) && (quote.status === "Sent to client" || quote.status === "Changes requested")).map((quote) => ({
+      ...data.quotes.filter((quote) => (quote.client === userName || clientProjectNames.has(quote.project)) && (quote.status === "Sent to client" || quote.status === "Awaiting review" || quote.status === "Changes requested")).map((quote) => ({
         title: quote.status === "Sent to client" ? "Quotation ready for review" : "Quotation updated",
         detail: `${quote.title} · ${quote.project}`,
         time: quote.date,
@@ -481,6 +550,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     });
   };
 
+  const readFileDataUrls = async (entries: FormDataEntryValue[]) => {
+    const files = entries.filter((entry): entry is File => entry instanceof File && entry.size > 0);
+    if (files.length > 5) throw new Error("You can upload up to 5 progress photos.");
+    if (files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
+      throw new Error("Progress photos must be JPEG, PNG, or WebP images.");
+    }
+    return Promise.all(files.map((file) => readFileDataUrl(file)));
+  };
+
   const createRecord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!modal) return;
@@ -489,7 +567,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     const amount = Number(form.get("amount") || 0);
     try {
       const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
-      const attachment = modal === "expense" || modal === "expense-log" || modal === "progress" ? await readFileDataUrl(form.get("attachment")) : undefined;
+      const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
+      const attachment = modal === "expense" || modal === "expense-log" ? await readFileDataUrl(form.get("attachment")) : progressAttachments?.[0];
       const quotationFile = form.get("quotationFile");
       if (modal === "quote" && quotationFile instanceof File && quotationFile.size > 0) {
         if (!/\.pdf$/i.test(quotationFile.name) || (quotationFile.type && quotationFile.type !== "application/pdf")) {
@@ -517,11 +596,13 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         used: form.get("used"),
         stock: form.get("stock"),
         email: form.get("email"),
+        phone: form.get("phone"),
         role: form.get("role"),
         password: form.get("password"),
         submittedBy: currentUser,
         entryType: modal === "expense-log" ? "log" : "request",
         attachment,
+        attachments: progressAttachments,
         quotationAttachment,
         stage: modal === "progress" ? form.get("stage") : undefined,
         progress: modal === "progress" ? form.get("progress") : undefined
@@ -604,20 +685,22 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     }
   };
 
-  const updateVisit = async (visit: SiteVisit, status: "Scheduled" | "Completed" | "Cancelled") => {
+  const updateVisit = async (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => {
     try {
       const response = await apiFetch(`/api/site-visits/${visit.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ action, engineer: currentUser, proof })
       });
       const result = await response.json() as { record?: SiteVisit; error?: string };
       if (!response.ok || !result.record) throw new Error(result.error || `Site visit update failed (${response.status})`);
       setData((current) => ({ ...current, siteVisits: current.siteVisits.map((item) => item.id === visit.id ? result.record! : item) }));
-      showToast(`Site visit marked ${status.toLowerCase()}.`);
+      showToast(`Site visit ${action === "check-in" ? "check-in" : "check-out"} saved.`);
     } catch (error) {
       console.error("Unable to update site visit:", error);
-      showToast(error instanceof Error ? error.message : "Could not update site visit.");
+      const message = error instanceof Error ? error.message : "Could not update site visit.";
+      showToast(message);
+      throw error instanceof Error ? error : new Error(message);
     }
   };
 
@@ -631,6 +714,45 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to remove person:", error);
       showToast(error instanceof Error ? error.message : "Could not remove this person.");
+    }
+  };
+
+  const updatePerson = async (person: Person, event: FormEvent<HTMLFormElement>) => {
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await apiFetch(`/api/people/${person.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: String(form.get("name") ?? "").trim(),
+          email: String(form.get("email") ?? "").trim(),
+          phone: String(form.get("phone") ?? "").trim()
+        })
+      });
+      const result = await response.json() as { record?: Person; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Could not update ${person.name} (${response.status})`);
+      const updatedPerson = result.record;
+      setData((current) => ({
+        ...current,
+        people: current.people.map((item) => item.id === person.id ? updatedPerson : item),
+        projects: current.projects.map((project) => person.role === "Client"
+          ? project.client === person.name ? { ...project, client: updatedPerson.name } : project
+          : project.engineer === person.name ? { ...project, engineer: updatedPerson.name } : project),
+        quotes: person.role === "Client" ? current.quotes.map((quote) => quote.client === person.name ? { ...quote, client: updatedPerson.name } : quote) : current.quotes,
+        feedback: person.role === "Client" ? current.feedback.map((item) => item.client === person.name ? { ...item, client: updatedPerson.name } : item) : current.feedback,
+        siteVisits: person.role === "Site Engineer" ? current.siteVisits.map((visit) => visit.engineer === person.name ? { ...visit, engineer: updatedPerson.name } : visit) : current.siteVisits,
+        activities: person.role === "Site Engineer" ? current.activities.map((activity) => activity.actor === person.name ? { ...activity, actor: updatedPerson.name } : activity) : current.activities,
+        expenses: person.role === "Site Engineer" ? current.expenses.map((expense) => expense.submittedBy === person.name ? { ...expense, submittedBy: updatedPerson.name } : expense) : current.expenses,
+        attendance: person.role === "Site Engineer" ? current.attendance.map((record) => record.engineer === person.name ? { ...record, engineer: updatedPerson.name } : record) : current.attendance,
+        materials: person.role === "Site Engineer" ? current.materials.map((material) => material.submittedBy === person.name ? { ...material, submittedBy: updatedPerson.name } : material) : current.materials,
+        materialRequests: person.role === "Site Engineer" ? current.materialRequests.map((request) => request.requestedBy === person.name ? { ...request, requestedBy: updatedPerson.name } : request) : current.materialRequests
+      }));
+      showToast(`${updatedPerson.name} updated.`);
+      return true;
+    } catch (error) {
+      console.error("Unable to update person:", error);
+      showToast(error instanceof Error ? error.message : "Could not update this person.");
+      return false;
     }
   };
 
@@ -680,7 +802,13 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const reviewWindow = window.open("about:blank", "_blank");
+    if (reviewWindow) {
+      reviewWindow.document.title = "Posting your review";
+      reviewWindow.document.body.textContent = "Saving your review to BuildTrack…";
+    }
     try {
       const response = await apiFetch("/api/feedback", {
         method: "POST",
@@ -692,13 +820,17 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           client: currentUser
         })
       });
-      if (!response.ok) throw new Error(`Feedback request failed (${response.status})`);
-      const result = await response.json() as { record: Feedback };
-      setData((current) => ({ ...current, feedback: [result.record, ...current.feedback] }));
-      showToast("Thank you — your feedback has been shared with the project team.");
+      const result = await response.json() as { record?: Feedback; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Feedback request failed (${response.status}).`);
+      setData((current) => ({ ...current, feedback: [result.record!, ...current.feedback] }));
+      showToast("Your review was saved for the project owner and opened on Google.");
+      formElement.reset();
+      if (reviewWindow) reviewWindow.location.replace(googleReviewUrl);
+      else window.location.assign(googleReviewUrl);
     } catch (error) {
-      console.error("Unable to submit feedback:", error);
-      showToast("Could not submit feedback. Check the API connection and try again.");
+      if (reviewWindow && !reviewWindow.closed) reviewWindow.close();
+      console.error("Unable to submit client feedback:", error);
+      showToast(error instanceof Error ? error.message : "Could not save your review.");
     }
   };
 
@@ -735,9 +867,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     "My Sites": "Your assigned sites, site tasks, and latest progress.",
     "My Projects": "Your construction projects, progress, and project payments.",
     Materials: "Track materials received, used, and remaining across your sites.",
-    Expenses: role === "Client" ? "Review approved expenses for your projects." : "Keep project spending and receipt reviews in view.",
+    Expenses: "Keep project spending and receipt reviews in view.",
     Quotations: "Manage project quotations and additional work approvals.",
     "Progress Updates": "Share the latest site progress with your project team.",
+    "Work Progress": role === "Owner" ? "Review site updates and photos shared by engineers." : "Follow construction updates and photos from your project.",
     Attendance: "Review daily attendance across your construction sites.",
     Reports: "Project-wise progress, expenses, materials, and activity.",
     "Site Visits": "Plan and follow up on engineer site visits.",
@@ -745,8 +878,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     Profile: "Manage your BuildTrack contact details and profile photo.",
     People: "Manage clients and engineers across your projects.",
     Timeline: "Follow project milestones and site updates.",
-    Feedback: "Share feedback and follow project reviews.",
-    Instructions: "Owner instructions and recent project updates."
+    Feedback: "Rate your experience on Google."
   };
   const pageTitle = page === "Dashboard" ? `${role} Dashboard` : page;
   const featurePageProps = {
@@ -761,6 +893,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     onQuote: updateQuote,
     onExpenseStatus: updateExpense,
     onVisitStatus: updateVisit,
+    onUpdatePerson: updatePerson,
     onRemovePerson: removePerson,
     onAttendanceSubmit: submitAttendance,
     onAttendanceRegularize: regularizeAttendance,
@@ -825,7 +958,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
           {page === "Profile" && role !== "Client" && <AccountProfilePage role={role} email={userEmail} onProfileImageChange={setProfileImage} />}
           {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
-          {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onCreate={setModal} onNavigate={navigateToPage} />}
+          {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} />}
           {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} onQuote={updateQuote} />}
           {page !== "Dashboard" && role === "Owner" && page === "Projects & Sites" && <OwnerProjectsPage {...featurePageProps} />}
           {page !== "Dashboard" && role === "Owner" && page === "Materials" && <OwnerMaterialsPage {...featurePageProps} />}
@@ -842,7 +975,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             <div><span className="panel-kicker">{role.toUpperCase()} WORKSPACE</span><h2 id="notification-title">Notifications</h2><p>Updates that need your attention.</p></div>
             <button className="icon-button notification-close" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}>×</button>
           </header>
-          <div className="push-notification-control"><div><strong>Browser push notifications</strong><span>{pushStatus === "enabled" ? "Enabled on this device." : pushStatus === "checking" ? "Checking browser and server support…" : pushStatus === "unsupported" ? "This browser does not support push notifications." : pushStatus === "unconfigured" ? "Push delivery needs server VAPID configuration." : pushStatus === "denied" ? "Permission is blocked in browser settings." : pushStatus === "error" ? "Could not update push settings. Try again." : role === "Owner" ? "Get expense and material requests outside the app." : role === "Employee" ? "Get project and work update alerts on this device." : "Get work updates for your project outside the app."}</span></div><button className="button button-outline" disabled={pushStatus === "checking" || pushStatus === "unsupported" || pushStatus === "unconfigured" || pushStatus === "denied"} onClick={() => void togglePushNotifications()}>{pushStatus === "enabled" ? "Turn off" : pushStatus === "checking" ? "Checking…" : pushStatus === "unconfigured" ? "Unavailable" : pushStatus === "denied" ? "Blocked" : pushStatus === "error" ? "Try again" : "Enable"}</button></div>
+          <div className="push-notification-control"><div><strong>Browser push notifications</strong><span>{pushStatus === "enabled" ? "Enabled on this device." : pushStatus === "checking" ? "Checking browser and server support…" : pushStatus === "unsupported" ? "This browser does not support push notifications." : pushStatus === "unconfigured" ? "Push delivery needs server VAPID configuration." : pushStatus === "denied" ? "Permission is blocked in browser settings." : pushStatus === "error" ? "Could not update push settings. Try again." : role === "Owner" ? "Get quotation approvals, expense and material requests outside the app." : role === "Employee" ? "Get project and work update alerts on this device." : "Get new quotation and work updates for your project outside the app."}</span></div><button className="button button-outline" disabled={pushStatus === "checking" || pushStatus === "unsupported" || pushStatus === "unconfigured" || pushStatus === "denied"} onClick={() => void togglePushNotifications()}>{pushStatus === "enabled" ? "Turn off" : pushStatus === "checking" ? "Checking…" : pushStatus === "unconfigured" ? "Unavailable" : pushStatus === "denied" ? "Blocked" : pushStatus === "error" ? "Try again" : "Enable"}</button></div>
           {notifications.length > 0
             ? <div className="notification-list">{notifications.map((item, index) => (
               <button className="notification-item" key={`${item.title}-${item.detail}-${index}`} onClick={() => { setNotificationsOpen(false); navigateToPage(item.page); }}>

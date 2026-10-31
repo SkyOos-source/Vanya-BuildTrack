@@ -9,14 +9,22 @@ export function createProgress(body: any) {
   const description = readText(body?.description);
   const project = readText(body?.project);
   const attachment = readAttachment(body?.attachment);
+  const rawAttachments: unknown = body?.attachments;
+  const attachments = Array.isArray(rawAttachments)
+    ? rawAttachments.map(readAttachment)
+    : attachment ? [attachment] : [];
+  const validAttachments = attachments.filter((item): item is string => item !== null);
   const stage = body?.stage === undefined ? "Progress" : body.stage;
   const progressValue = body?.progress;
   const hasProgressValue = progressValue !== undefined && progressValue !== "";
   const completionProgress = hasProgressValue && progressValue !== null ? readAmount(progressValue) : null;
   if (!description || !project || (stage !== "Start" && stage !== "Progress" && stage !== "Completion") ||
     (hasProgressValue && (completionProgress === null || completionProgress > 100)) ||
-    (body?.attachment && !attachment)) {
-    return failure(400, "Progress description, project, valid photo stage, completion percentage from 0 to 100, and a supported attachment are required.");
+    (body?.attachment && !attachment) ||
+    (rawAttachments !== undefined &&
+      (!Array.isArray(rawAttachments) || rawAttachments.length > 5 || rawAttachments.some((item, index) =>
+        !attachments[index] || !attachments[index]?.startsWith("data:image/"))))) {
+    return failure(400, "Progress description, project, valid photo stage, completion percentage from 0 to 100, and up to 5 valid images are required.");
   }
   const assignedProject = projects.find((item) => item.name === project);
   if (hasProgressValue && !assignedProject) {
@@ -31,7 +39,8 @@ export function createProgress(body: any) {
     kind: "progress",
     stage,
     description,
-    attachment: attachment ?? undefined,
+    attachment: validAttachments[0] ?? attachment ?? undefined,
+    ...(validAttachments.length ? { attachments: validAttachments } : {}),
     createdAt: new Date().toISOString()
   };
   activities.unshift(activity);

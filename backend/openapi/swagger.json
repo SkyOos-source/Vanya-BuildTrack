@@ -144,6 +144,12 @@
 					"createdAt": {
 						"type": "string"
 					},
+					"attachments": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
 					"attachment": {
 						"type": "string"
 					},
@@ -1003,6 +1009,38 @@
 			}
 		},
 		"/api/people/{id}": {
+			"patch": {
+				"operationId": "Update",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			},
 			"delete": {
 				"operationId": "Delete",
 				"responses": {

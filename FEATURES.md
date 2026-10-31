@@ -93,11 +93,10 @@ Clients follow the work on their assigned projects and respond to quotations.
 
 ### Feedback and reviews
 
-- Allow clients to submit feedback or a review for an assigned project.
-- Associate each submission with its project and submitting client.
-- Make received feedback available to the owner.
+- Let clients save a project rating and comment in BuildTrack for the owner, and open the configured Google review page to post it publicly.
+- Make received client feedback available to the owner.
 - When a project reaches 100% completion, let its client open a report with project-start and project-completion photos, falling back to the earliest and latest uploaded photos.
-- Include a Google review link and save the client's star rating and comment to BuildTrack.
+- Include a direct Google review link in the completion report.
 
 ### Engineer site visits
 

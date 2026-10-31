@@ -3,7 +3,7 @@ import "reflect-metadata";
 import cors from "cors";
 import express from "express";
 import { RegisterRoutes } from "./generated/routes";
-import { initializeStore, saveStore } from "./data/store";
+import { initializeStore, saveStore, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 
@@ -11,7 +11,7 @@ const app = express();
 const port = Number(process.env.PORT ?? 3001);
 
 app.use(cors());
-app.use(express.json({ limit: "3mb" }));
+app.use(express.json({ limit: "15mb" }));
 app.use((request, response, next) => {
   if (request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS") {
     next();
@@ -49,7 +49,38 @@ app.use((request, response, next) => {
   };
   response.json = ((body: unknown) => {
     if (response.statusCode >= 400) return sendResponse(body);
-    void saveStore().then(() => sendResponse(body)).catch((error: unknown) => {
+    void saveStore().then(() => {
+      if (request.path === "/api/site-visits" || /^\/api\/site-visits\/[^/]+$/.test(request.path)) {
+        const visit = (body as { record?: SiteVisit } | null)?.record;
+        if (visit) {
+          const action = request.method === "POST" ? "scheduled" : request.body?.action;
+          if (action === "scheduled" || action === "check-in" || action === "check-out") {
+            const isScheduled = action === "scheduled";
+            publishWorkspaceUpdate({
+              resource: "siteVisits",
+              visit: {
+                id: visit.id,
+                project: visit.project,
+                site: visit.site,
+                engineer: visit.engineer,
+                date: visit.date,
+                purpose: visit.purpose,
+                status: visit.status
+              },
+              action,
+              ...(isScheduled ? {
+                push: {
+                  title: "New site visit scheduled",
+                  body: `${visit.project} is scheduled for ${new Date(`${visit.date}T00:00:00`).toLocaleDateString()}.`,
+                  targets: [{ role: "employee" as const, userName: visit.engineer, url: "/engineer/site-visits" }]
+                }
+              } : {})
+            });
+          }
+        }
+      }
+      return sendResponse(body);
+    }).catch((error: unknown) => {
       console.error("Unable to persist SQLite workspace data:", error);
       response.status(500);
       sendJson({ error: "The record could not be saved to the SQLite database." });

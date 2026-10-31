@@ -1,6 +1,6 @@
 # Vanya BuildTrack
 
-A construction project management SaaS starter with role-based Owner, Site Engineer, and Client portals. The frontend is React + TypeScript; the backend is Node.js, Express, and TypeScript.
+A construction project management SaaS starter with role-based Owner, Site Engineer, and Client portals. The frontend is a React + TypeScript single-page application; the backend is Node.js, Express, and TypeScript.
 
 ## Run BuildTrack
 
@@ -21,7 +21,7 @@ The Vite frontend runs at http://localhost:5173 and the Express API runs at http
 
 Use the **Demo mode** toggle in the header to choose between:
 
-- **Demo mode:** sample data and sign-in are handled entirely in the browser. No backend API requests are made; demo changes are stored in that browser.
+- **Demo mode:** sample data and sign-in are handled entirely in the browser. CRUD operations work and changes persist in that browser's local storage; no backend API requests are made.
 - **Real mode (default):** sign-in and workspace data use the SQLite database at `backend/data/buildtrack.db`. The real database starts empty except for the initial owner account.
 
 Demo credentials are available when Demo mode is on:
@@ -34,7 +34,7 @@ Demo credentials are available when Demo mode is on:
 
 Real mode seeds only the existing owner account (`owner@vanya.com` / `owner123`) the first time the SQLite database is created. Set `OWNER_EMAIL`, `OWNER_PASSWORD`, and `OWNER_NAME` in `backend/.env` before first startup to customize it; changing these variables does not alter an already-created account. Create employee and client logins from the owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
 
-Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details, compare photos marked as project start and completion (or the earliest and latest uploaded photos), submit a rating and feedback, and open the Google review page. To link directly to the business's Google review form, set `VITE_GOOGLE_REVIEW_URL` to the Google Business Profile review URL in `frontend/.env`; without it, the report links to a Google Maps search for Vanya BuildTrack.
+Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details and compare photos marked as project start and completion (or the earliest and latest uploaded photos). On the client Feedback page, a rating and comment can be saved in BuildTrack for the owner and posted publicly through the Google review page. The default Google link opens the Vanya Concrete Technologies listing, where clients can select **Write a review**. To use a direct review form link instead, set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env`.
 
 ### Browser push notifications
 

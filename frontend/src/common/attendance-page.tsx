@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Attendance, AttendanceLeave, AttendanceProof, DashboardData, Role } from "./types";
 import { StatusBadge } from "./components";
 import { apiFetch } from "./api";
@@ -260,29 +260,15 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     }
   };
 
-  const selectPhoto = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Choose an image file for attendance evidence.");
-      return;
-    }
-    setError("");
-    setCameraOpen(false);
-    setCameraStream(null);
-    setPhoto(file);
-  };
-
-  const openCamera = async () => {
+  const openCamera = async (facingMode: "user" | "environment") => {
     setError("");
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Camera access is unavailable. Open this page over HTTPS or use Upload Photo.");
+      setError("Camera access is unavailable. Open this page over HTTPS and allow camera access.");
       return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+        video: { facingMode: { ideal: facingMode } },
         audio: false
       });
       setPhoto(null);
@@ -291,7 +277,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     } catch (cameraError) {
       console.error("Unable to open attendance camera:", cameraError);
       setError(cameraError instanceof DOMException && cameraError.name === "NotAllowedError"
-        ? "Camera permission was denied. Allow camera access in your browser settings or use Upload Photo."
+        ? "Camera permission was denied. Allow camera access in your browser settings."
         : "Could not open the camera. Check that it is connected and not being used by another app.");
     }
   };
@@ -450,10 +436,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       <section className="attendance-capture-dialog" role="dialog" aria-modal="true" aria-labelledby="attendance-capture-title">
         <div className="attendance-preview-heading"><strong id="attendance-capture-title">{action === "check-in" ? "Check In Photo" : "Check Out Photo"}</strong><button type="button" aria-label="Close photo capture" disabled={submitting} onClick={() => { setCaptureOpen(false); setCameraOpen(false); setCameraStream(null); }}>×</button></div>
         <div className="attendance-photo-options" aria-label="Choose attendance photo">
-          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera()}>▣ Take Photo</button>
-          <label className="button button-outline attendance-photo-option">↑ Upload Photo
-            <input type="file" accept="image/*" onChange={selectPhoto} />
-          </label>
+          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("user")}>▣ Take Selfie</button>
+          <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("environment")}>▣ Take Site Photo</button>
         </div>
         {cameraOpen && <div className="attendance-live-camera">
           <video ref={cameraVideoRef} autoPlay muted playsInline aria-label="Live camera preview" />

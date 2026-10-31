@@ -59,7 +59,7 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Activity": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"createdAt":{"dataType":"string"},"attachment":{"dataType":"string"},"description":{"dataType":"string"},"stage":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Start"]},{"dataType":"enum","enums":["Progress"]},{"dataType":"enum","enums":["Completion"]}]},"kind":{"dataType":"string","required":true},"time":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"action":{"dataType":"string","required":true},"actor":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"createdAt":{"dataType":"string"},"attachments":{"dataType":"array","array":{"dataType":"string"}},"attachment":{"dataType":"string"},"description":{"dataType":"string"},"stage":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Start"]},{"dataType":"enum","enums":["Progress"]},{"dataType":"enum","enums":["Completion"]}]},"kind":{"dataType":"string","required":true},"time":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"action":{"dataType":"string","required":true},"actor":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Person": {
@@ -660,6 +660,37 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'create',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsPeopleController_update: Record<string, TsoaRoute.ParameterSchema> = {
+                id: {"in":"path","name":"id","required":true,"dataType":"string"},
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.patch('/api/people/:id',
+            ...(fetchMiddlewares<RequestHandler>(PeopleController)),
+            ...(fetchMiddlewares<RequestHandler>(PeopleController.prototype.update)),
+
+            async function PeopleController_update(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsPeopleController_update, request, response });
+
+                const controller = new PeopleController();
+
+              await templateService.apiHandler({
+                methodName: 'update',
                 controller,
                 response,
                 next,
