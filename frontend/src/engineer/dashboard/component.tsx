@@ -15,7 +15,7 @@ export function EngineerDashboard({ data, currentUser, onNavigate }: { data: Das
   return <>
     <div className="welcome-banner"><div className="welcome-copy"><span className="panel-kicker">{dateLabel.toUpperCase()}</span><h2>Good morning, {currentUser.split(" ")[0]} <span>☀</span></h2><p>{projects.length ? "Your assigned projects and site updates are shown below." : "Your assigned projects and site updates will appear here."}</p></div>{demoMode && <div className="weather-pill">⌖ <span><strong>28°C</strong><small>Bengaluru</small></span><span className="weather-sun">☀</span></div>}</div>
     <div className="stat-grid engineer-stats">
-      <StatCard label="Assigned sites" value={String(projects.length).padStart(2, "0")} note={`${projects.length} assigned projects`} icon="⌖" trend={`${projects.length} active assignments`} />
+      <StatCard label="Assigned sites" value={String(projects.length).padStart(2, "0")} note={`${projects.length} assigned projects`} icon="⌖" trend={`${projects.length} active assignments`} dark />
       <StatCard label="Avg. site progress" value={`${Math.round(projects.reduce((sum, item) => sum + item.progress, 0) / Math.max(projects.length, 1))}%`} note="Across assigned projects" icon="↗" trend={`${projects.length} projects tracked`} />
       <StatCard label="Pending updates" value={String(pendingUpdates).padStart(2, "0")} note="Based on today's progress updates" icon="◷" trend={`${updatesToday} submitted today`} attention={pendingUpdates > 0} />
       <StatCard label="Team on site" value={String(attendanceToday).padStart(2, "0")} note="Attendance records today" icon="♙" trend={`${attendanceToday} records today`} />

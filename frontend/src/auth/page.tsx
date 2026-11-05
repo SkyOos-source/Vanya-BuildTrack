@@ -51,7 +51,7 @@ export function SignInPage() {
   };
 
   return <main className="signin-page">
-    <header className="signin-nav"><Link className="brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>Vanya BuildTrack</strong><small>Construction Manager</small></span></Link><div className="signin-nav-actions"><ModeToggle /><Link to="/" className="signin-back">← Back to home</Link></div></header>
+    <header className="signin-nav"><Link className="brand landing-brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>Vanya BuildTrack</strong><small>Construction Manager</small></span></Link><div className="signin-nav-actions"><ModeToggle /><Link to="/" className="button button-outline signin-back">← Back to home</Link></div></header>
     <section className="signin-layout">
       <div className="signin-story"><span className="landing-kicker"><i /> YOUR PROJECTS, IN SYNC</span><h1>Good work<br />starts with<br /><span>a clear view.</span></h1><p>One workspace for the people planning, building, and bringing every project to life.</p><div className="signin-story-note"><span>“</span><strong>Every site update brings the whole team closer.</strong><small>VANYA BUILDTRACK</small></div></div>
       <div className="signin-card">
