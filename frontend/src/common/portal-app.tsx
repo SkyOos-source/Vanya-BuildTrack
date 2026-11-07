@@ -942,7 +942,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </nav>
         <div className="sidebar-bottom">
           {role === "Owner"
-            ? <button className={`nav-item ${page === "Settings & Backup" ? "nav-active" : ""}`} onClick={() => navigateToPage("Settings & Backup")}><span className="nav-icon">⚙</span><span>Settings & Backup</span></button>
+            ? <button className={`nav-item ${page === "Settings & Backup" ? "nav-active" : ""}`} onClick={() => { navigateToPage("Settings & Backup"); setMobileNavOpen(false); }}><span className="nav-icon">⚙</span><span>Settings & Backup</span></button>
             : <button className={`nav-item ${page === "Settings" ? "nav-active" : ""}`} onClick={() => { navigateToPage("Settings"); setMobileNavOpen(false); }}><span className="nav-icon">⚙</span><span>Settings</span></button>}
           <div className="sidebar-divider" />
           <button className="logout-button" onClick={() => void signOut()}><span>↪</span> Sign out</button>

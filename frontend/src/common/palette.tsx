@@ -18,6 +18,7 @@ const PaletteContext = createContext<PaletteContextValue | null>(null);
 
 const defaultPalette: PaletteId = "previous";
 const paletteStoragePrefix = "buildtrack-user-palette";
+const lastPaletteStorageKey = "buildtrack-last-palette";
 
 function isPaletteId(value: unknown): value is PaletteId {
   return value === "current" || value === "previous" || value === "reference";
@@ -30,11 +31,24 @@ function currentUserPaletteKey() {
 
 function readUserPalette(): PaletteId {
   const key = currentUserPaletteKey();
-  if (!key) return defaultPalette;
+  if (!key) {
+    const lastPalette = localStorage.getItem(lastPaletteStorageKey);
+    if (lastPalette === null) return defaultPalette;
+    if (isPaletteId(lastPalette)) return lastPalette;
+    throw new Error("Saved color palette is invalid.");
+  }
   const saved = localStorage.getItem(key);
   if (saved === null) return defaultPalette;
   if (isPaletteId(saved)) return saved;
   throw new Error("Saved user color palette is invalid.");
+}
+
+function rememberLastPalette(palette: PaletteId) {
+  try {
+    localStorage.setItem(lastPaletteStorageKey, palette);
+  } catch (error) {
+    console.error("Unable to remember the last selected color palette:", error);
+  }
 }
 
 function applyPalette(palette: PaletteId) {
@@ -54,16 +68,21 @@ export function PaletteProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      setPalette(readUserPalette());
+      const savedPalette = readUserPalette();
+      setPalette(savedPalette);
+      if (currentUserPaletteKey()) rememberLastPalette(savedPalette);
     } catch (error) {
       console.error("Unable to load the signed-in user's color palette:", error);
       setPalette(defaultPalette);
     }
     const paletteKey = currentUserPaletteKey();
     const syncPalette = (event: StorageEvent) => {
-      if (event.key !== paletteKey) return;
+      const keyToSync = paletteKey ?? lastPaletteStorageKey;
+      if (event.key !== keyToSync) return;
       try {
-        setPalette(readUserPalette());
+        const savedPalette = readUserPalette();
+        setPalette(savedPalette);
+        if (paletteKey) rememberLastPalette(savedPalette);
       } catch (error) {
         console.error("Unable to sync the signed-in user's color palette:", error);
         setPalette(defaultPalette);
@@ -79,6 +98,7 @@ export function PaletteProvider({ children }: { children: ReactNode }) {
     const key = currentUserPaletteKey();
     if (!key) throw new Error("Sign in before choosing a personal color palette.");
     localStorage.setItem(key, nextPalette);
+    rememberLastPalette(nextPalette);
     setPalette(nextPalette);
   };
 
