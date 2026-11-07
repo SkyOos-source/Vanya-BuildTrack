@@ -228,6 +228,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         })();
         return;
       }
+      if (update.resource === "settings") return;
       if (role === "Employee") return;
       const resource = update.resource;
       if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
@@ -896,6 +897,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const pageTitle = page === "Dashboard" ? `${role} Dashboard` : page;
   const featurePageProps = {
     currentUser,
+    userEmail,
     data,
     projects: visibleProjects,
     search,

@@ -1,5 +1,6 @@
 export type Role = "Owner" | "Employee" | "Client";
 export type RoleId = "owner" | "employee" | "client";
+export type PaletteId = "current" | "previous" | "reference";
 export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "visit" | "material" | "material-request" | "person";
 export type SessionUser = { name: string; email: string; role: RoleId };
 export type Project = {

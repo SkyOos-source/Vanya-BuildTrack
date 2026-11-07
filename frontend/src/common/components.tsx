@@ -75,5 +75,5 @@ export function RecordModal({ modal, projects, people, onClose, onSubmit }: { mo
 }
 
 export function BuildingIcon() {
-  return <img className="building-icon-image" src="/buildtrack-icon.png" alt="BuildTrack icon" />;
+  return <img className="building-icon-image" src="/buildtrack-logo-transparent.png" alt="BuildTrack icon" />;
 }
