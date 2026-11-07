@@ -1,10 +1,9 @@
-import type { Attendance, AttendanceLeave, AttendanceProof, AttendanceRegularizationRequest, DashboardData, PaletteId, RoleId } from "./types";
+import type { Attendance, AttendanceLeave, AttendanceProof, AttendanceRegularizationRequest, DashboardData, RoleId } from "./types";
 import { demoCredentials, fallbackData, isDemoMode } from "./data";
 
 type DemoState = DashboardData & {
   attendanceLeaves: AttendanceLeave[];
   attendanceRegularizationRequests: AttendanceRegularizationRequest[];
-  palette: PaletteId;
   profiles: Record<string, { phone: string; image: string | null }>;
 };
 
@@ -13,7 +12,6 @@ const demoState: DemoState = {
   ...JSON.parse(JSON.stringify(fallbackData)) as DashboardData,
   attendanceLeaves: [],
   attendanceRegularizationRequests: [],
-  palette: "current",
   profiles: {}
 };
 
@@ -28,7 +26,6 @@ function restoreDemoData() {
       if (value[key] !== undefined && !Array.isArray(value[key])) throw new Error(`Saved demo workspace field '${key}' is invalid.`);
     }
     if (value.profiles && typeof value.profiles !== "object") throw new Error("Saved demo profile data is invalid.");
-    if (value.palette !== undefined && value.palette !== "current" && value.palette !== "previous" && value.palette !== "reference") throw new Error("Saved demo workspace palette is invalid.");
     Object.assign(demoState, value);
     demoState.attendance = Array.from(new Map(demoState.attendance.map((record) => [record.id, record])).values());
     const savedActivityIds = new Set(demoState.activities.map((activity) => activity.id));
@@ -129,16 +126,6 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   const method = (init?.method ?? "GET").toUpperCase();
   const body = readBody(init);
   const role = body.role;
-
-  if (path === "/api/settings/palette") {
-    if (method === "GET") return response({ palette: demoState.palette });
-    if (method === "PATCH") {
-      if (url.searchParams.get("email")?.toLowerCase() !== demoCredentials.owner.email) return response({ error: "Only the workspace owner can change the color palette." }, 403);
-      if (body.palette !== "current" && body.palette !== "previous" && body.palette !== "reference") return response({ error: "Choose a valid workspace color palette." }, 400);
-      demoState.palette = body.palette;
-      return saveResponse({ palette: demoState.palette });
-    }
-  }
 
   if (path === "/api/auth/login" && method === "POST") {
     if (role !== "owner" && role !== "employee" && role !== "client") return response({ error: "Choose a valid account role." }, 400);

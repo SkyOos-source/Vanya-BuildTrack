@@ -7,9 +7,9 @@ import { AttendancePage } from "./attendance-page";
 import { ProjectDetails } from "./project-details";
 import { QuotationPdfPreview } from "./quotation-pdf-preview";
 import { SiteVisitsPage, type SiteVisitAction } from "./site-visits-page";
-import { paletteOptions, usePalette } from "./palette";
+import { PalettePicker } from "./palette";
 
-export type FeaturePageProps = { page: string; role: Role; currentUser: string; userEmail: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
+export type FeaturePageProps = { page: string; role: Role; currentUser: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
 
 function localDateKey(value?: string) {
   if (!value) return "";
@@ -18,8 +18,7 @@ function localDateKey(value?: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function FeaturePage({ page, role, currentUser, userEmail, data, projects, search, setSearch, filter, setFilter, onCreate, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onExpenseStatus, onVisitStatus, onUpdatePerson, onRemovePerson, onToast, onFeedback, onBackup }: FeaturePageProps) {
-  const { palette, loading: paletteLoading, saving: paletteSaving, updatePalette } = usePalette();
+export function FeaturePage({ page, role, currentUser, data, projects, search, setSearch, filter, setFilter, onCreate, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onExpenseStatus, onVisitStatus, onUpdatePerson, onRemovePerson, onToast, onFeedback, onBackup }: FeaturePageProps) {
   const [rating, setRating] = useState(5);
   const [workProgressDate, setWorkProgressDate] = useState("");
   const [workProgressProject, setWorkProgressProject] = useState("All");
@@ -156,31 +155,13 @@ export function FeaturePage({ page, role, currentUser, userEmail, data, projects
     {page === "Attendance" && <AttendancePage data={data} role={role} currentUser={currentUser} onSubmit={onAttendanceSubmit} onRegularize={onAttendanceRegularize} onReviewRequest={onAttendanceRequestReview} />}
     {page === "Site Visits" && <SiteVisitsPage visits={data.siteVisits} role={role} currentUser={currentUser} onSchedule={() => onCreate("visit")} onAction={onVisitStatus} />}
     {page === "Reports" && <section className="report-grid"><article className="report-card panel"><span className="report-icon">▥</span><span className="panel-kicker">PROJECT PERFORMANCE</span><h2>Progress report</h2><p>Milestone completion and updates, by project and site.</p><button className="text-link" onClick={() => void downloadReport("progress")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">＄</span><span className="panel-kicker">FINANCIAL HEALTH</span><h2>Expense report</h2><p>Approved, pending, and paid expenses across your portfolio.</p><button className="text-link" onClick={() => void downloadReport("expenses")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">◈</span><span className="panel-kicker">SITE INVENTORY</span><h2>Materials report</h2><p>Material received, consumed, and remaining at every site.</p><button className="text-link" onClick={() => void downloadReport("materials")}>Generate report ↗</button></article></section>}
-    {page === "Settings & Backup" && role === "Owner" && <>
+    {(page === "Settings" || page === "Settings & Backup") && <>
       <section className="panel palette-settings">
-        <div className="panel-heading compact"><div><span className="panel-kicker">WORKSPACE APPEARANCE</span><h2>Color palette</h2></div><span className="palette-scope-label">Applies to everyone</span></div>
-        <p className="palette-settings-copy">Choose the colors used across the workspace. Your selection is saved for all users.</p>
-        <div className="palette-options" role="group" aria-label="Workspace color palette">
-          {paletteOptions.map((option) => <button
-            type="button"
-            className={`palette-option ${palette === option.id ? "palette-option-selected" : ""}`}
-            key={option.id}
-            aria-pressed={palette === option.id}
-            disabled={paletteLoading || paletteSaving}
-            onClick={() => void updatePalette(option.id, userEmail).catch((error: unknown) => {
-              console.error("Unable to update the workspace color palette:", error);
-              onToast(error instanceof Error ? error.message : "Could not update the workspace color palette.");
-            })}
-          >
-            <span className="palette-swatches" aria-hidden="true">{option.colors.map((color) => <i key={color} style={{ backgroundColor: color }} />)}</span>
-            <strong>{option.name}</strong>
-            <span>{option.description}</span>
-            {palette === option.id && <small>Selected for workspace</small>}
-          </button>)}
-        </div>
-        {(paletteLoading || paletteSaving) && <p className="palette-status" role="status">{paletteLoading ? "Loading workspace palette…" : "Saving workspace palette…"}</p>}
+        <div className="panel-heading compact"><div><span className="panel-kicker">PERSONAL APPEARANCE</span><h2>Color palette</h2></div><span className="palette-scope-label">Saved per user</span></div>
+        <p className="palette-settings-copy">Choose the colors for your account. Your selection is saved in this browser and does not change other users' palettes.</p>
+        <PalettePicker onError={onToast} />
       </section>
-      <section className="backup-layout"><article className="panel backup-card"><span className="report-icon">↧</span><span className="panel-kicker">ACCOUNT DATA</span><h2>Back up your workspace</h2><p>Download a JSON export of your project, site, quotation, and expense records.</p><ul><li>Project and site summaries</li><li>Quotations and expense records</li><li>Activity and attendance history</li></ul><button className="button button-primary" onClick={onBackup}>＋ Request account backup</button><small>Backups are generated from current workspace data.</small></article><section className="panel backup-history"><div className="panel-heading compact"><div><span className="panel-kicker">RECENT REQUESTS</span><h2>Backup history</h2></div><span className="backup-count">{data.backups.length} requests</span></div><div className="backup-list">{data.backups.map((backup) => <article className="backup-row" key={backup.id}><span className="backup-file">↧</span><div><strong>{backup.id} · Workspace data export</strong><small>Requested by {backup.requestedBy} · {backup.requestedAt}</small></div><button className="button button-outline" onClick={() => void downloadBackup(backup.id)}>Download</button><StatusBadge status={backup.status} /></article>)}</div></section></section>
+      {page === "Settings & Backup" && role === "Owner" && <section className="backup-layout"><article className="panel backup-card"><span className="report-icon">↧</span><span className="panel-kicker">ACCOUNT DATA</span><h2>Back up your workspace</h2><p>Download a JSON export of your project, site, quotation, and expense records.</p><ul><li>Project and site summaries</li><li>Quotations and expense records</li><li>Activity and attendance history</li></ul><button className="button button-primary" onClick={onBackup}>＋ Request account backup</button><small>Backups are generated from current workspace data.</small></article><section className="panel backup-history"><div className="panel-heading compact"><div><span className="panel-kicker">RECENT REQUESTS</span><h2>Backup history</h2></div><span className="backup-count">{data.backups.length} requests</span></div><div className="backup-list">{data.backups.map((backup) => <article className="backup-row" key={backup.id}><span className="backup-file">↧</span><div><strong>{backup.id} · Workspace data export</strong><small>Requested by {backup.requestedBy} · {backup.requestedAt}</small></div><button className="button button-outline" onClick={() => void downloadBackup(backup.id)}>Download</button><StatusBadge status={backup.status} /></article>)}</div></section></section>}
     </>}
     {page === "People" && role === "Owner" && <section className="panel feature-panel">
       {selectedEngineer ? <>

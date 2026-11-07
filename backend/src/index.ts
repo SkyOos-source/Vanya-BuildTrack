@@ -21,9 +21,7 @@ app.use((request, response, next) => {
   const sendResponse = (body: unknown) => {
     if (response.statusCode < 400) {
       const record = (body as { record?: Record<string, unknown> } | null)?.record;
-      if (request.method === "PATCH" && request.path === "/api/settings/palette") {
-        publishWorkspaceUpdate({ resource: "settings" });
-      } else if (request.method === "POST" && request.path === "/api/materials") {
+      if (request.method === "POST" && request.path === "/api/materials") {
         publishWorkspaceUpdate({ resource: "materials" });
       } else if (request.method === "POST" && request.path === "/api/material-requests") {
         publishWorkspaceUpdate({

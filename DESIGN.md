@@ -54,17 +54,17 @@ The layout guidance below is based on the screenshots supplied during project se
 
 ## Color and visual direction
 
-The owner can select one of three workspace-wide palettes in **Settings & Backup**. The selected palette is stored with workspace data and is applied across the application for every user.
+Every user can select a personal palette from the shared top bar or their **Settings** page (owners find it under **Settings & Backup**). Each selection is saved in that user's browser and does not change the palette for other users. New users default to Construction orange.
 
 | Option | Color direction | Primary | Supporting colors |
 | --- | --- | --- | --- |
 | Current · Terracotta | Existing warm construction palette | `#B65B38` | `#2F241F`, `#F7F2EE` |
-| Previous · Construction orange | Earlier vivid orange palette | `#E94F0B` | `#211E1C`, `#FAF9F7` |
+| Default · Construction orange | Default vivid orange palette | `#E94F0B` | `#211E1C`, `#FAF9F7` |
 | Reference · Evergreen | Forest green, cream, and lime inspired by the supplied reference image | `#164A3A` | `#FAF9F2`, `#D9ED70` |
 
-The current palette is the default for existing workspaces. Keep semantic status colors distinct from the brand palette: use accessible success, warning, and error colors, and never use color as the only indicator of meaning. Check text and control contrast, especially for text on accent and soft-accent surfaces.
+Construction orange is the default for new users. Keep semantic status colors distinct from the brand palette: use accessible success, warning, and error colors, and never use color as the only indicator of meaning. Check text and control contrast, especially for text on accent and soft-accent surfaces.
 
-The current palette uses the following tokens as its baseline; the alternate choices override the equivalent accent, text, surface, and border tokens.
+Each palette overrides equivalent accent, text, surface, and border tokens.
 
 | Token | Color | Intended use |
 | --- | --- | --- |

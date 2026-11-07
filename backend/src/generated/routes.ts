@@ -6,8 +6,6 @@ import {  fetchMiddlewares, ExpressTemplateService } from '@tsoa/runtime';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { SiteVisitsController } from './../features/site-visits/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-import { SettingsController } from './../features/settings/controller';
-// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { ReportsController } from './../features/reports/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { QuotationsController } from './../features/quotations/controller';
@@ -220,66 +218,6 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'update',
-                controller,
-                response,
-                next,
-                validatedArgs,
-                successStatus: undefined,
-              });
-            } catch (err) {
-                return next(err);
-            }
-        });
-        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsSettingsController_getPalette: Record<string, TsoaRoute.ParameterSchema> = {
-        };
-        app.get('/api/settings/palette',
-            ...(fetchMiddlewares<RequestHandler>(SettingsController)),
-            ...(fetchMiddlewares<RequestHandler>(SettingsController.prototype.getPalette)),
-
-            async function SettingsController_getPalette(request: ExRequest, response: ExResponse, next: any) {
-
-            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-
-            let validatedArgs: any[] = [];
-            try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsSettingsController_getPalette, request, response });
-
-                const controller = new SettingsController();
-
-              await templateService.apiHandler({
-                methodName: 'getPalette',
-                controller,
-                response,
-                next,
-                validatedArgs,
-                successStatus: undefined,
-              });
-            } catch (err) {
-                return next(err);
-            }
-        });
-        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsSettingsController_updatePalette: Record<string, TsoaRoute.ParameterSchema> = {
-                email: {"in":"query","name":"email","required":true,"dataType":"string"},
-                body: {"in":"body","name":"body","required":true,"dataType":"any"},
-        };
-        app.patch('/api/settings/palette',
-            ...(fetchMiddlewares<RequestHandler>(SettingsController)),
-            ...(fetchMiddlewares<RequestHandler>(SettingsController.prototype.updatePalette)),
-
-            async function SettingsController_updatePalette(request: ExRequest, response: ExResponse, next: any) {
-
-            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-
-            let validatedArgs: any[] = [];
-            try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsSettingsController_updatePalette, request, response });
-
-                const controller = new SettingsController();
-
-              await templateService.apiHandler({
-                methodName: 'updatePalette',
                 controller,
                 response,
                 next,

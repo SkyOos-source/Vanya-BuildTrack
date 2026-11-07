@@ -83,7 +83,6 @@ export type OwnerAccount = { email: string; name: string; salt: string; password
 export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: DemoRole; userName: string };
 export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
 export type DemoRole = "owner" | "employee" | "client";
-export type PaletteId = "current" | "previous" | "reference";
 
 export const projects: Project[] = [];
 
@@ -107,9 +106,8 @@ export const employeeCredentials: EmployeeCredential[] = [];
 export const clientCredentials: EmployeeCredential[] = [];
 export const pushSubscriptions: PushSubscriptionRecord[] = [];
 export const ownerAccount: OwnerAccount = { email: "", name: "", salt: "", passwordHash: "" };
-export const workspaceSettings: { palette: PaletteId } = { palette: "current" };
 
-export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfile, ownerAccount, settings: workspaceSettings };
+export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfile, ownerAccount };
 let projectSequence = 1;
 let quotationSequence = 1;
 let expenseSequence = 1;
@@ -224,14 +222,6 @@ export async function initializeStore() {
     throw new Error("SQLite workspace state has an invalid top-level structure.");
   }
   const saved = parsed as Record<string, unknown>;
-  if (saved.settings !== undefined) {
-    if (!saved.settings || typeof saved.settings !== "object") throw new Error("SQLite workspace settings have an invalid structure.");
-    const savedPalette = (saved.settings as Record<string, unknown>).palette;
-    if (savedPalette !== "current" && savedPalette !== "previous" && savedPalette !== "reference") {
-      throw new Error("SQLite workspace color palette is invalid.");
-    }
-    workspaceSettings.palette = savedPalette;
-  }
   const restore = <T>(target: T[], key: string) => {
     const records = saved[key];
     if (records === undefined) return;

@@ -152,6 +152,6 @@ export function pageFromPath(pathname: string, role: Role): string {
   const base = rolePath(roleId(role));
   const slug = pathname.slice(base.length).replace(/^\/+|\/+$/g, "");
   if (!slug) return "Dashboard";
-  const pages = [...(role !== "Client" ? ["Profile"] : []), ...navigation[role].map((item) => item.label), ...(role === "Owner" ? ["Settings & Backup", "Financial Overview"] : [])];
+  const pages = [...(role !== "Client" ? ["Profile"] : []), ...navigation[role].map((item) => item.label), ...(role === "Owner" ? ["Settings & Backup", "Financial Overview"] : ["Settings"])];
   return pages.find((page) => pageSlug(page) === slug) ?? "Dashboard";
 }
