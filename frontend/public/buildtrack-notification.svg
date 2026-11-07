@@ -1,4 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
-  <rect width="96" height="96" rx="22" fill="#b84a12"/>
-  <path d="M25 76V28l23-10 23 10v48M18 76h60M37 39h5m-5 11h5m17-11h-5m5 11h-5m-6 26V58h-8v18" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Vanya BuildTrack logo">
+  <rect width="96" height="96" rx="20" fill="#B65B38"/>
+  <rect x="14" y="14" width="68" height="68" rx="16" fill="#F7E8DD" opacity="0.12"/>
+  <path d="M31 42.5 48 27l17 15.5V67a4 4 0 0 1-4 4H35a4 4 0 0 1-4-4V42.5Z" fill="#fff"/>
+  <path d="M40 44h16M40 52h16M48 62v-12" stroke="#B65B38" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 42.5 48 27l17 15.5" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

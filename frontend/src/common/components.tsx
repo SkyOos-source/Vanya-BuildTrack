@@ -37,8 +37,8 @@ export function ExpenseRows({ expenses, detailed = false, onAction, onApprove, o
   </>;
 }
 
-export function StatCard({ label, value, note, icon, trend, attention = false }: { label: string; value: string; note: string; icon: string; trend: string; attention?: boolean }) {
-  return <article className={`stat-card ${attention ? "stat-attention" : ""}`}><div className="stat-card-head"><span className="stat-label">{label}</span><span className={`stat-icon ${attention ? "stat-icon-orange" : ""}`}>{icon}</span></div><strong className="stat-value">{value}</strong><span className="stat-note">{note}</span><div className={`stat-trend ${attention ? "trend-attention" : ""}`}><i />{trend}</div></article>;
+export function StatCard({ label, value, note, icon, trend, attention = false, dark = false }: { label: string; value: string; note: string; icon: string; trend: string; attention?: boolean; dark?: boolean }) {
+  return <article className={`stat-card ${attention ? "stat-attention" : ""} ${dark ? "stat-card-dark" : ""}`}><div className="stat-card-head"><span className="stat-label">{label}</span><span className={`stat-icon ${attention ? "stat-icon-orange" : ""}`}>{icon}</span></div><strong className="stat-value">{value}</strong><span className="stat-note">{note}</span><div className={`stat-trend ${attention ? "trend-attention" : ""}`}><i />{trend}</div></article>;
 }
 
 export function StatusBadge({ status }: { status: string }) {
@@ -75,5 +75,5 @@ export function RecordModal({ modal, projects, people, onClose, onSubmit }: { mo
 }
 
 export function BuildingIcon() {
-  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 21V5.5L12 2l8 3.5V21M2 21h20M8 8h1m-1 4h1m-1 4h1m6-8h1m-1 4h1m-1 4h1m-4 5v-5h-2v5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  return <img className="building-icon-image" src="/buildtrack-logo-transparent.png" alt="BuildTrack icon" />;
 }

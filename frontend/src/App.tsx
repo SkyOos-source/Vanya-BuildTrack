@@ -5,10 +5,11 @@ import { PortalRoute } from "./common/portal-app";
 import { CookieConsent } from "./common/cookie-consent";
 import { DataUsagePage, NotFoundPage, PrivacyPolicyPage } from "./common/legal-pages";
 import { PublicProfilePage } from "./common/profile-page";
+import { PaletteProvider } from "./common/palette";
 
 export default function App() {
   return (
-    <>
+    <PaletteProvider>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/signin" element={<SignInPage />} />
@@ -21,6 +22,6 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <CookieConsent />
-    </>
+    </PaletteProvider>
   );
 }

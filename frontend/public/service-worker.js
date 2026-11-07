@@ -15,7 +15,7 @@ self.addEventListener("push", (event) => {
   }
 
   const title = "Vanya BuildTrack";
-  const icon = new URL("/buildtrack-notification.png?v=2", self.location.origin).href;
+  const icon = new URL("/buildtrack-icon.png?v=4", self.location.origin).href;
   const options = {
     body: typeof message.body === "string" ? message.body : "There is a new update in your workspace.",
     icon,

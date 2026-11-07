@@ -888,6 +888,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     "Financial Overview": "Review revenue, expenses, quotations, and profit across your projects.",
     "Site Visits": "Plan and follow up on engineer site visits.",
     "Settings & Backup": "Manage your profile and request an account data backup.",
+    Settings: "Choose your personal color palette and workspace appearance.",
     Profile: "Manage your BuildTrack contact details and profile photo.",
     People: "Manage clients and engineers across your projects.",
     Timeline: "Follow project milestones and site updates.",
@@ -940,7 +941,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           ))}
         </nav>
         <div className="sidebar-bottom">
-          {role === "Owner" && <button className={`nav-item ${page === "Settings & Backup" ? "nav-active" : ""}`} onClick={() => navigateToPage("Settings & Backup")}><span className="nav-icon">⚙</span><span>Settings & Backup</span></button>}
+          {role === "Owner"
+            ? <button className={`nav-item ${page === "Settings & Backup" ? "nav-active" : ""}`} onClick={() => navigateToPage("Settings & Backup")}><span className="nav-icon">⚙</span><span>Settings & Backup</span></button>
+            : <button className={`nav-item ${page === "Settings" ? "nav-active" : ""}`} onClick={() => { navigateToPage("Settings"); setMobileNavOpen(false); }}><span className="nav-icon">⚙</span><span>Settings</span></button>}
           <div className="sidebar-divider" />
           <button className="logout-button" onClick={() => void signOut()}><span>↪</span> Sign out</button>
         </div>
@@ -957,7 +960,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           </div>
         </header>
 
-        <div className="content-area">
+        <div className={`content-area ${page === "Settings" || page === "Settings & Backup" ? "content-area-settings" : ""}`}>
           <section className="page-heading">
             <div><div className="eyebrow"><span className="eyebrow-dot" /> BUILDTRACK / {role.toUpperCase()}</div><h1>{pageTitle}</h1><p>{pageDescription[page] || "Your construction workspace at a glance."}</p></div>
             <div className="heading-actions">
