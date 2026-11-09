@@ -1,8 +1,9 @@
-import type { Attendance, AttendanceLeave, AttendanceProof, AttendanceRegularizationRequest, DashboardData, RoleId } from "./types";
-import { clearAuthTokens, demoCredentials, fallbackData, isDemoMode, readAccessToken, readRefreshToken, saveAuthTokens } from "./data";
+import type { Attendance, AttendanceLeave, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, RoleId } from "./types";
+import { clearAuthTokens, demoCredentials, demoOwnerAccounts, fallbackData, isDemoMode, readAccessToken, readRefreshToken, saveAuthTokens } from "./data";
 
 type DemoState = DashboardData & {
   attendanceLeaves: AttendanceLeave[];
+  attendanceLeaveRequests: AttendanceLeaveRequest[];
   attendanceRegularizationRequests: AttendanceRegularizationRequest[];
   profiles: Record<string, { phone: string; image: string | null }>;
 };
@@ -11,6 +12,7 @@ const demoDataKey = "buildtrack-demo-data";
 const demoState: DemoState = {
   ...JSON.parse(JSON.stringify(fallbackData)) as DashboardData,
   attendanceLeaves: [],
+  attendanceLeaveRequests: [],
   attendanceRegularizationRequests: [],
   profiles: {}
 };
@@ -22,7 +24,7 @@ function restoreDemoData() {
     const parsed: unknown = JSON.parse(saved);
     if (!parsed || typeof parsed !== "object") throw new Error("Saved demo workspace has an invalid format.");
     const value = parsed as Partial<DemoState>;
-    for (const key of ["projects", "quotes", "expenses", "siteVisits", "activities", "materials", "materialRequests", "attendance", "feedback", "backups", "people", "attendanceLeaves", "attendanceRegularizationRequests"] as const) {
+    for (const key of ["projects", "quotes", "expenses", "siteVisits", "activities", "materials", "materialRequests", "attendance", "feedback", "backups", "people", "attendanceLeaves", "attendanceLeaveRequests", "attendanceRegularizationRequests"] as const) {
       if (value[key] !== undefined && !Array.isArray(value[key])) throw new Error(`Saved demo workspace field '${key}' is invalid.`);
     }
     if (value.profiles && typeof value.profiles !== "object") throw new Error("Saved demo profile data is invalid.");
@@ -70,6 +72,74 @@ function text(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isDemoAttendanceDayComplete(date: string, now = new Date()) {
+  return date < dateKey(now);
+}
+
+function demoNoCheckInStatus(date: string, now: Date) {
+  const leave = demoState.attendanceLeaves.find((item) => item.date === date);
+  if (new Date(`${date}T00:00:00`).getDay() === 0 || leave) return leave?.title ?? "Weekly Off";
+  const today = dateKey(now);
+  const endOfToday = new Date(`${today}T00:00:00`);
+  endOfToday.setDate(endOfToday.getDate() + 1);
+  return date < today || date === today && now >= endOfToday ? "Absent" : "Scheduled";
+}
+
+function validDemoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function demoAttendanceRecords(now = new Date()): Attendance[] {
+  const today = dateKey(now);
+  const records = demoState.people
+    .filter((person) => person.role === "Site Engineer")
+    .flatMap((person) => {
+      const datedRecords = demoState.attendance.filter((record) =>
+        record.engineer === person.name && record.date && record.date <= today
+      );
+      const firstDate = datedRecords.reduce((earliest, record) => record.date! < earliest ? record.date! : earliest, today);
+      const date = new Date(`${firstDate}T00:00:00`);
+      const generated: Attendance[] = [];
+      while (dateKey(date) <= today) {
+        const currentDate = dateKey(date);
+        if (!demoState.attendance.some((record) => record.engineer === person.name && record.date === currentDate)) {
+          const approvedLeave = demoState.attendanceLeaveRequests.some((request) =>
+            request.engineer === person.name && request.date === currentDate && request.status === "Approved"
+          );
+          generated.push({
+            id: `AUTO-${person.id}-${currentDate}`,
+            engineer: person.name,
+            present: "—",
+            shift: "Full day",
+            status: approvedLeave ? "Off" : demoNoCheckInStatus(currentDate, now),
+            evidence: approvedLeave ? "Approved engineer leave" : "No check-in recorded",
+            date: currentDate
+          });
+        }
+        date.setDate(date.getDate() + 1);
+      }
+      return generated;
+    });
+  return [
+    ...demoState.attendance.map((record) => ({
+      ...record,
+      status: record.checkOut || record.checkoutRegularization
+        ? "Present"
+        : record.checkIn ? "Scheduled" : record.status === "Off" ? "Off" : record.date ? demoNoCheckInStatus(record.date, now) : record.status
+    })),
+    ...records
+  ].sort((left, right) => (right.date ?? "").localeCompare(left.date ?? ""));
+}
+
 function readDemoAttendanceProof(value: unknown): AttendanceProof | null {
   if (!value || typeof value !== "object") return null;
   const proof = value as Record<string, unknown>;
@@ -104,12 +174,13 @@ function readDemoSiteVisitProof(value: unknown): { image: string; capturedAt: st
 }
 
 function demoProfile(role: RoleId, email: string) {
+  const owner = role === "owner" ? demoOwnerAccounts.find((account) => account.email === email.toLowerCase()) : undefined;
   const credential = demoCredentials[role];
-  if (email.toLowerCase() !== credential.email) return undefined;
-  const name = role === "owner" ? "John Smith" : role === "employee" ? "Arjun Mehta" : "Ananya Rao";
+  if (role === "owner" ? !owner : email.toLowerCase() !== credential.email) return undefined;
+  const name = owner?.name ?? (role === "employee" ? "Arjun Mehta" : role === "client" ? "Ananya Rao" : "");
   const stored = demoState.profiles[email.toLowerCase()];
   return {
-    id: role === "owner" ? "owner" : demoState.people.find((person) => person.email.toLowerCase() === email.toLowerCase())?.id ?? role,
+    id: role === "owner" ? `owner-${email.toLowerCase()}` : demoState.people.find((person) => person.email.toLowerCase() === email.toLowerCase())?.id ?? role,
     name,
     email: credential.email,
     role: role === "owner" ? "Owner" : role === "employee" ? "Site Engineer" : "Client",
@@ -130,16 +201,18 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   if (path === "/api/auth/login" && method === "POST") {
     if (role !== "owner" && role !== "employee" && role !== "client") return response({ error: "Choose a valid account role." }, 400);
     const credential = demoCredentials[role];
-    if (text(body.email).toLowerCase() !== credential.email || body.password !== credential.password) {
+    const email = text(body.email).toLowerCase();
+    const owner = role === "owner" ? demoOwnerAccounts.find((account) => account.email === email && account.password === body.password) : undefined;
+    if (role === "owner" ? !owner : email !== credential.email || body.password !== credential.password) {
       return response({ error: "Email or password is incorrect for this role." }, 401);
     }
-    const profile = demoProfile(role, credential.email);
-    return response({ user: { name: profile?.name ?? credential.label, email: credential.email, role } });
+    const profile = demoProfile(role, role === "owner" ? email : credential.email);
+    return response({ user: { name: profile?.name ?? credential.label, email: role === "owner" ? email : credential.email, role } });
   }
   if (path === "/api/auth/logout" && method === "POST") return response({ status: "ok" });
   if (path === "/api/push/config") return response({ enabled: false, publicKey: null });
   if (path.startsWith("/api/push/subscriptions")) return response({ enabled: false });
-  if (path === "/api/dashboard") return response(demoState);
+  if (path === "/api/dashboard") return response({ ...demoState, attendance: demoAttendanceRecords() });
   if (path === "/api/events") return response({ error: "Live updates are disabled in demo mode." }, 503);
 
   if (path === "/api/attendance/regularization-requests") {
@@ -159,8 +232,8 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
       }
       const checkInTime = Date.parse(record.checkIn.capturedAt);
       const checkOutTime = Date.parse(capturedAt);
-      if (Date.now() < checkInTime + 24 * 60 * 60 * 1000) {
-        return response({ error: "A regularization request is available after the check-out deadline has passed." }, 409);
+      if (!isDemoAttendanceDayComplete(record.date)) {
+        return response({ error: "Attendance can be regularized after the day is complete." }, 409);
       }
       if (checkOutTime <= checkInTime || checkOutTime > checkInTime + 24 * 60 * 60 * 1000 || checkOutTime > Date.now()) {
         return response({ error: "Enter a past check-out time within 24 hours of check-in." }, 400);
@@ -181,6 +254,80 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
       demoState.attendanceRegularizationRequests.unshift(request);
       return saveResponse({ request }, 201);
     }
+  }
+  if (path === "/api/attendance/leave-requests") {
+    if (method === "GET") {
+      const engineer = url.searchParams.get("engineer");
+      return response(demoState.attendanceLeaveRequests
+        .filter((request) => !engineer || request.engineer === engineer)
+        .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)));
+    }
+    if (method === "POST") {
+      const engineer = text(body.engineer).trim();
+      const date = text(body.date);
+      const reason = text(body.reason).trim();
+      if (!demoState.people.some((person) => person.role === "Site Engineer" && person.name === engineer) ||
+        !validDemoDate(date) || !reason || reason.length > 500) {
+        return response({ error: "A valid engineer, leave date, and reason of up to 500 characters are required." }, 400);
+      }
+      if (date < dateKey(new Date())) return response({ error: "Leave requests must be for today or a future date." }, 400);
+      if (demoState.attendanceLeaves.some((leave) => leave.date === date) || new Date(`${date}T00:00:00`).getDay() === 0) {
+        return response({ error: "This date is already a scheduled non-working day." }, 409);
+      }
+      if (demoState.attendance.some((record) => record.engineer === engineer && record.date === date && record.checkIn)) {
+        return response({ error: "Leave cannot be requested for a day with a recorded check-in." }, 409);
+      }
+      if (demoState.attendanceLeaveRequests.some((request) =>
+        request.engineer === engineer && request.date === date && request.status !== "Declined"
+      )) return response({ error: "A leave request already exists for this engineer and date." }, 409);
+      const request: AttendanceLeaveRequest = {
+        id: nextId("ALREQ-", demoState.attendanceLeaveRequests),
+        engineer,
+        date,
+        reason,
+        requestedAt: new Date().toISOString(),
+        status: "Pending review"
+      };
+      demoState.attendanceLeaveRequests.unshift(request);
+      return saveResponse({ request }, 201);
+    }
+  }
+  const leaveRequestMatch = path.match(/^\/api\/attendance\/leave-requests\/([^/]+)$/);
+  if (leaveRequestMatch && method === "PATCH") {
+    const request = demoState.attendanceLeaveRequests.find((item) => item.id === leaveRequestMatch[1]);
+    if (!request) return response({ error: "Leave request was not found." }, 404);
+    if (request.status !== "Pending review") return response({ error: "This leave request has already been reviewed." }, 409);
+    const decision = body.decision;
+    const reviewedBy = text(body.reviewedBy).trim();
+    if ((decision !== "Approved" && decision !== "Declined") || !reviewedBy) {
+      return response({ error: "Choose an approval decision and provide the reviewing owner." }, 400);
+    }
+    let record: Attendance | undefined;
+    if (decision === "Approved") {
+      record = demoState.attendance.find((item) => item.engineer === request.engineer && item.date === request.date);
+      if (record?.checkIn) return response({ error: "This leave request cannot be approved because attendance has already been checked in." }, 409);
+      if (!record) {
+        const person = demoState.people.find((item) => item.role === "Site Engineer" && item.name === request.engineer);
+        record = {
+          id: nextId("ATT-", demoState.attendance),
+          engineer: request.engineer,
+          present: "—",
+          shift: "Full day",
+          status: "Off",
+          evidence: "Approved engineer leave",
+          date: request.date,
+          ...(person ? { project: person.project } : {})
+        };
+        demoState.attendance.unshift(record);
+      } else {
+        record.status = "Off";
+        record.evidence = "Approved engineer leave";
+      }
+    }
+    request.status = decision;
+    request.reviewedBy = reviewedBy;
+    request.reviewedAt = new Date().toISOString();
+    return saveResponse({ request, ...(record ? { record } : {}) });
   }
   const regularizationRequestMatch = path.match(/^\/api\/attendance\/regularization-requests\/([^/]+)$/);
   if (regularizationRequestMatch && method === "PATCH") {
@@ -254,8 +401,10 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   }
   const publicProfileMatch = path.match(/^\/api\/profiles\/([^/]+)$/);
   if (publicProfileMatch && method === "GET") {
-    const profile = publicProfileMatch[1] === "owner"
-      ? demoProfile("owner", demoCredentials.owner.email)
+    const profile = publicProfileMatch[1].startsWith("owner-")
+      ? demoProfile("owner", decodeURIComponent(publicProfileMatch[1].slice("owner-".length)))
+      : publicProfileMatch[1] === "owner"
+        ? demoProfile("owner", demoCredentials.owner.email)
       : demoState.people.find((person) => person.id === publicProfileMatch[1]);
     return profile ? response({ profile, qrCode: null }) : response({ error: "This public profile is not available." }, 404);
   }
@@ -280,6 +429,7 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   if (collectionRoutes[path] && method === "GET") {
     const key = collectionRoutes[path];
     const records = demoState[key];
+    if (key === "attendance") return response(demoAttendanceRecords());
     return response(key === "activities" ? demoState.activities.filter((item) => item.kind === "progress") : records);
   }
 
@@ -329,6 +479,9 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
       let existing = demoState.attendance.find((item) => item.engineer === engineer && item.date === attendanceDate);
       if (body.action === "check-in" && existing?.checkIn) {
         return response({ error: "A check-in is already recorded for today." }, 409);
+      }
+      if (body.action === "check-in" && existing?.status === "Off" && existing.evidence === "Approved engineer leave") {
+        return response({ error: "Your leave for today has been approved, so attendance cannot be recorded." }, 409);
       }
       if (body.action === "check-out" && (!existing?.checkIn || existing.checkOut || existing.checkoutRegularization)) {
         return response({ error: "Check in before recording a check-out." }, 409);
@@ -386,6 +539,12 @@ async function localDemoFetch(input: RequestInfo | URL, init?: RequestInit): Pro
   if (regularizeMatch && method === "PATCH") {
     const record = demoState.attendance.find((item) => item.id === regularizeMatch[1]);
     if (!record) return response({ error: "Attendance record was not found." }, 404);
+    if (!record.date || !isDemoAttendanceDayComplete(record.date)) {
+      return response({ error: "Attendance can be regularized after the day is complete." }, 409);
+    }
+    if (!record.checkIn || record.checkOut || record.checkoutRegularization) {
+      return response({ error: "Only attendance with a check-in and no recorded check-out can be regularized." }, 409);
+    }
     record.checkoutRegularization = { capturedAt: text(body.capturedAt), reason: text(body.reason), regularizedBy: text(body.regularizedBy), regularizedAt: new Date().toISOString() };
     record.status = "Present";
     return saveResponse({ record });
@@ -463,6 +622,7 @@ async function refreshAccessToken(): Promise<string | null> {
     refreshInFlight = null;
   }
 }
+
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   if (isDemoMode()) return localDemoFetch(input, init);
 

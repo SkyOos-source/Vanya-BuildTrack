@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch } from "./api";
 import { formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
@@ -55,6 +55,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [modal, setModal] = useState<RecordModalType | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [attendanceReviewNotifications, setAttendanceReviewNotifications] = useState<NotificationItem[]>([]);
+  const [attendanceReviewVersion, setAttendanceReviewVersion] = useState(0);
   const [pushStatus, setPushStatus] = useState<PushStatus>("checking");
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -108,7 +110,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           const saveResponse = await apiFetch("/api/push/subscriptions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subscription: subscription.toJSON(), role: roleId(role), userName })
+            body: JSON.stringify({ subscription: subscription.toJSON(), role: roleId(role), userName, userEmail })
           });
           if (!saveResponse.ok) throw new Error(`Push subscription sync failed (${saveResponse.status})`);
           if (active) setPushStatus("enabled");
@@ -199,10 +201,64 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, [page]);
 
   useEffect(() => {
+    if (role !== "Employee") {
+      setAttendanceReviewNotifications([]);
+      return;
+    }
+    let active = true;
+    const loadAttendanceReviewNotifications = async () => {
+      try {
+        const query = `?engineer=${encodeURIComponent(userName)}`;
+        const [leaveResponse, regularizationResponse] = await Promise.all([
+          apiFetch(`/api/attendance/leave-requests${query}`),
+          apiFetch(`/api/attendance/regularization-requests${query}`)
+        ]);
+        if (!leaveResponse.ok || !regularizationResponse.ok) {
+          throw new Error(`Attendance notification refresh failed (${leaveResponse.status}/${regularizationResponse.status}).`);
+        }
+        const [leaveResult, regularizationResult] = await Promise.all([
+          leaveResponse.json() as Promise<AttendanceLeaveRequest[]>,
+          regularizationResponse.json() as Promise<AttendanceRegularizationRequest[]>
+        ]);
+        if (!Array.isArray(leaveResult) || !Array.isArray(regularizationResult)) {
+          throw new Error("Attendance notification refresh returned invalid data.");
+        }
+        if (!active) return;
+        const reviewedLeaves = leaveResult.filter((request) => request.status !== "Pending review").map((request) => ({
+          title: `Leave request ${request.status.toLowerCase()}`,
+          detail: `${new Date(`${request.date}T00:00:00`).toLocaleDateString()} · ${request.reason}`,
+          time: request.reviewedAt ?? request.requestedAt,
+          icon: "◷",
+          page: "Attendance"
+        }));
+        const reviewedRegularizations = regularizationResult.filter((request) => request.status !== "Pending review").map((request) => ({
+          title: `Attendance request ${request.status.toLowerCase()}`,
+          detail: `${new Date(`${request.date}T00:00:00`).toLocaleDateString()} · ${request.reason}`,
+          time: request.reviewedAt ?? request.requestedAt,
+          icon: "◷",
+          page: "Attendance"
+        }));
+        setAttendanceReviewNotifications(
+          [...reviewedLeaves, ...reviewedRegularizations].sort((left, right) => Date.parse(right.time) - Date.parse(left.time)).slice(0, 8)
+        );
+      } catch (error) {
+        console.error("Unable to load engineer attendance review notifications:", error);
+      }
+    };
+    void loadAttendanceReviewNotifications();
+    return () => { active = false; };
+  }, [attendanceReviewVersion, data.attendance, role, userName]);
+
+  useEffect(() => {
     if (demoMode) return;
     const events = new EventSource("/api/events");
     events.onmessage = (event) => {
-      let update: { resource?: unknown; visit?: SiteVisit; action?: unknown };
+      let update: {
+        resource?: unknown;
+        visit?: SiteVisit;
+        action?: unknown;
+        push?: { body: string; targets: Array<{ role: string; userName?: string }> };
+      };
       try {
         update = JSON.parse(event.data) as typeof update;
       } catch (error) {
@@ -228,7 +284,26 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         })();
         return;
       }
-      if (role === "Employee") return;
+      if (role === "Employee") {
+        if (update.resource === "attendance") {
+          if (update.push?.targets.some((target) => target.role === "employee" && target.userName === userName)) {
+            showToast(update.push.body);
+          }
+          setAttendanceReviewVersion((current) => current + 1);
+          void (async () => {
+            try {
+              const response = await apiFetch("/api/attendance");
+              if (!response.ok) throw new Error(`Attendance refresh failed (${response.status})`);
+              const records: unknown = await response.json();
+              if (!Array.isArray(records)) throw new Error("Attendance refresh returned invalid data.");
+              setData((current) => ({ ...current, attendance: records as DashboardData["attendance"] }));
+            } catch (error) {
+              console.error("Unable to refresh attendance after a real-time update:", error);
+            }
+          })();
+        }
+        return;
+      }
       const resource = update.resource;
       if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
         console.error("Received an unsupported real-time workspace update:", resource);
@@ -485,7 +560,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           time: activity.time,
           icon: "▥",
           page: "Progress Updates"
-        }))
+        })),
+        ...attendanceReviewNotifications
       ].slice(0, 8);
     }
     const clientProjectNames = new Set([
@@ -508,7 +584,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         page: "Quotations"
       })),
     ].slice(0, 8);
-  }, [userName, data.activities, data.expenses, data.materialRequests, data.materials, data.people, data.projects, data.quotes, data.siteVisits, role]);
+  }, [attendanceReviewNotifications, userName, data.activities, data.expenses, data.materialRequests, data.materials, data.people, data.projects, data.quotes, data.siteVisits, role]);
 
   useEffect(() => {
     if (!notificationsOpen) return;
@@ -758,9 +834,13 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       if (!savedRecord) throw new Error("The attendance service returned no saved record.");
       setData((current) => ({
         ...current,
-        attendance: current.attendance.some((record) => record.id === savedRecord.id)
-          ? current.attendance.map((record) => record.id === savedRecord.id ? savedRecord : record)
-          : [savedRecord, ...current.attendance]
+        attendance: [
+          savedRecord,
+          ...current.attendance.filter((record) =>
+            record.id !== savedRecord.id &&
+            !(record.engineer === savedRecord.engineer && record.date === savedRecord.date)
+          )
+        ]
       }));
       showToast(`${action === "check-in" ? "Check-in" : "Check-out"} recorded with photo and location.`);
     } catch (error) {
@@ -809,6 +889,35 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to review attendance regularization request:", error);
       throw error instanceof Error ? error : new Error("Could not review attendance request.");
+    }
+  };
+
+  const reviewAttendanceLeaveRequest = async (requestId: string, decision: "Approved" | "Declined"): Promise<{ request: AttendanceLeaveRequest; record?: Attendance }> => {
+    try {
+      const response = await apiFetch(`/api/attendance/leave-requests/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, reviewedBy: currentUser })
+      });
+      const result = await response.json() as { request?: AttendanceLeaveRequest; record?: Attendance; error?: string };
+      if (!response.ok || !result.request) throw new Error(result.error || `Leave request review failed (${response.status}).`);
+      if (result.record) {
+        setData((current) => ({
+          ...current,
+          attendance: [
+            result.record!,
+            ...current.attendance.filter((record) =>
+              record.id !== result.record!.id &&
+              !(record.engineer === result.record!.engineer && record.date === result.record!.date)
+            )
+          ]
+        }));
+      }
+      showToast(decision === "Approved" ? "Leave request approved. The date is marked Off." : "Leave request declined.");
+      return { request: result.request, ...(result.record ? { record: result.record } : {}) };
+    } catch (error) {
+      console.error("Unable to review attendance leave request:", error);
+      throw error instanceof Error ? error : new Error("Could not review the leave request.");
     }
   };
 
@@ -917,6 +1026,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     onAttendanceSubmit: submitAttendance,
     onAttendanceRegularize: regularizeAttendance,
     onAttendanceRequestReview: reviewAttendanceRequest,
+    onAttendanceLeaveReview: reviewAttendanceLeaveRequest,
     onToast: showToast,
     onFeedback: submitFeedback,
     onBackup: requestBackup

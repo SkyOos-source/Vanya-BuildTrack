@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { Attendance, AttendanceLeave, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
+import type { Attendance, AttendanceLeave, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
 import { StatusBadge } from "./components";
 import { apiFetch } from "./api";
 
@@ -10,6 +10,7 @@ type AttendancePageProps = {
   onSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>;
   onRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>;
   onReviewRequest: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>;
+  onReviewLeaveRequest: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>;
 };
 
 function localDateKey(date: Date) {
@@ -27,9 +28,9 @@ function isSunday(date: string) {
   return new Date(`${date}T00:00:00`).getDay() === 0;
 }
 
-function attendanceStatus(record: Attendance, now: number) {
+function attendanceStatus(record: Attendance) {
   if (record.checkIn && (record.checkOut || record.checkoutRegularization)) return "Present";
-  if (record.checkIn && now >= Date.parse(record.checkIn.capturedAt) + 24 * 60 * 60 * 1000) return "Absent";
+  if (record.checkIn) return "Scheduled";
   return record.status;
 }
 
@@ -98,7 +99,10 @@ function AttendanceTable({ records, leaves, requests, now, owner, employee, onPr
     <thead><tr><th>Date</th><th>Engineer</th><th>Locations</th><th>Check-in time</th><th>Check-in photo</th><th>Check-out time</th><th>Check-out photo</th><th>Status</th>{employee && <th>Regularization request</th>}{owner && <th>Owner action</th>}</tr></thead>
     <tbody>{records.map((record) => {
       const request = requests.find((item) => item.attendanceId === record.id);
-      const canRequestRegularization = employee && Boolean(record.checkIn && !record.checkOut && !record.checkoutRegularization && attendanceStatus(record, now) === "Absent");
+      const canRequestRegularization = employee && Boolean(record.checkIn && !record.checkOut && !record.checkoutRegularization &&
+        record.date && record.date < localDateKey(new Date(now)));
+      const canRegularize = owner && Boolean(record.checkIn && !record.checkOut && !record.checkoutRegularization &&
+        record.date && record.date < localDateKey(new Date(now)));
       return <tr key={record.id}>
         <td>{record.date ? new Date(`${record.date}T00:00:00`).toLocaleDateString() : "—"}</td>
         <td>{record.engineer}</td>
@@ -120,18 +124,18 @@ function AttendanceTable({ records, leaves, requests, now, owner, employee, onPr
             : <AttendanceProofCell label={`${record.engineer} check-out`} onPreview={onPreview} />}
         </td>
         <td><StatusBadge status={record.checkIn
-          ? attendanceStatus(record, now)
+          ? attendanceStatus(record)
           : !record.checkOut
           ? leaves.find((leave) => leave.date === record.date)?.title ?? (record.date && isSunday(record.date) ? "Weekly Off" : record.status)
           : record.status} /></td>
         {employee && <td>{request?.status === "Declined"
-          ? <div className="attendance-dialog-actions"><StatusBadge status={request.status} /><button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request again</button></div>
+            ? <div className="attendance-dialog-actions"><StatusBadge status={request.status} />{canRequestRegularization && <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request again</button>}</div>
           : request
             ? <StatusBadge status={request.status} />
             : canRequestRegularization
               ? <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request regularization</button>
               : <span className="attendance-missing">—</span>}</td>}
-        {owner && <td>{record.checkIn && !record.checkOut && !record.checkoutRegularization
+        {owner && <td>{canRegularize
           ? <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRegularize(record)}>Regularize</button>
           : <span className="attendance-missing">—</span>}</td>}
       </tr>
@@ -139,7 +143,7 @@ function AttendanceTable({ records, leaves, requests, now, owner, employee, onPr
   </table></div>;
 }
 
-export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize, onReviewRequest }: AttendancePageProps) {
+export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize, onReviewRequest, onReviewLeaveRequest }: AttendancePageProps) {
   const today = localDateKey(new Date());
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -149,8 +153,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [captureOpen, setCaptureOpen] = useState(false);
-  const [historyDate, setHistoryDate] = useState("");
-  const [historyEngineer, setHistoryEngineer] = useState("All");
+  const [historyDate, setHistoryDate] = useState(today);
+  const [calendarEngineer, setCalendarEngineer] = useState("All");
   const [preview, setPreview] = useState<{ proof: AttendanceProof; label: string } | null>(null);
   const [leaves, setLeaves] = useState<AttendanceLeave[]>([]);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -161,6 +165,10 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const [regularizationError, setRegularizationError] = useState("");
   const [regularizing, setRegularizing] = useState(false);
   const [regularizationRequests, setRegularizationRequests] = useState<AttendanceRegularizationRequest[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<AttendanceLeaveRequest[]>([]);
+  const [leaveRequestError, setLeaveRequestError] = useState("");
+  const [leaveRequestBusy, setLeaveRequestBusy] = useState(false);
+  const [reviewingLeaveRequestId, setReviewingLeaveRequestId] = useState<string | null>(null);
   const [requestRecord, setRequestRecord] = useState<Attendance | null>(null);
   const [requestError, setRequestError] = useState("");
   const [requestingRegularization, setRequestingRegularization] = useState(false);
@@ -209,6 +217,26 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       }
     };
     void loadRequests();
+    return () => { active = false; };
+  }, [currentUser, data.attendance, role]);
+
+  useEffect(() => {
+    let active = true;
+    const query = role === "Employee" ? `?engineer=${encodeURIComponent(currentUser)}` : "";
+    const loadLeaveRequests = async () => {
+      try {
+        const response = await apiFetch(`/api/attendance/leave-requests${query}`);
+        const result = await response.json() as AttendanceLeaveRequest[] | { error?: string };
+        if (!response.ok || !Array.isArray(result)) {
+          throw new Error(!Array.isArray(result) ? result.error || "Could not load leave requests." : `Leave request list failed (${response.status}).`);
+        }
+        if (active) setLeaveRequests(result);
+      } catch (loadError) {
+        console.error("Unable to load attendance leave requests:", loadError);
+        if (active) setLeaveRequestError(loadError instanceof Error ? loadError.message : "Could not load leave requests.");
+      }
+    };
+    void loadLeaveRequests();
     return () => { active = false; };
   }, [currentUser, data.attendance, role]);
 
@@ -279,6 +307,47 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       setLeaveError(deleteError instanceof Error ? deleteError.message : "Could not remove leave.");
     } finally {
       setLeaveBusy(false);
+    }
+  };
+
+  const submitLeaveRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setLeaveRequestBusy(true);
+    setLeaveRequestError("");
+    try {
+      const response = await apiFetch("/api/attendance/leave-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          engineer: currentUser,
+          date: form.get("date"),
+          reason: form.get("reason")
+        })
+      });
+      const result = await response.json() as { request?: AttendanceLeaveRequest; error?: string };
+      if (!response.ok || !result.request) throw new Error(result.error || `Could not submit leave request (${response.status}).`);
+      setLeaveRequests((current) => [result.request!, ...current]);
+      formElement.reset();
+    } catch (submitError) {
+      console.error("Unable to submit attendance leave request:", submitError);
+      setLeaveRequestError(submitError instanceof Error ? submitError.message : "Could not submit leave request.");
+    } finally {
+      setLeaveRequestBusy(false);
+    }
+  };
+
+  const reviewLeaveRequest = async (request: AttendanceLeaveRequest, decision: "Approved" | "Declined") => {
+    setReviewingLeaveRequestId(request.id);
+    setLeaveRequestError("");
+    try {
+      const reviewed = await onReviewLeaveRequest(request.id, decision);
+      setLeaveRequests((current) => current.map((item) => item.id === reviewed.request.id ? reviewed.request : item));
+    } catch (reviewError) {
+      setLeaveRequestError(reviewError instanceof Error ? reviewError.message : "Could not review the leave request.");
+    } finally {
+      setReviewingLeaveRequestId(null);
     }
   };
 
@@ -440,7 +509,6 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const engineers = [...new Set(data.attendance.map((record) => record.engineer))].sort((left, right) => left.localeCompare(right));
   const history = data.attendance
     .filter((record) => role === "Owner" || record.engineer === currentUser)
-    .filter((record) => role !== "Owner" || historyEngineer === "All" || record.engineer === historyEngineer)
     .filter((record) => !historyDate || record.date === historyDate);
 
   return <div className="feature-page">
@@ -491,10 +559,46 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         : <div className="inline-empty">No attendance regularization requests have been submitted.</div>}
     </section>}
 
+    {role !== "Client" && <section className="panel feature-panel attendance-leave-requests-panel">
+      <div className="list-toolbar"><div><span className="panel-kicker">{role === "Owner" ? "ENGINEER REQUESTS" : "TIME OFF"}</span><h2 className="list-title">{role === "Owner" ? "Engineer leave requests" : "Request a day off"}</h2></div></div>
+      {role === "Employee" && <form className="attendance-leave-request-form" onSubmit={(event) => void submitLeaveRequest(event)}>
+        <label>Day off<input name="date" type="date" min={today} defaultValue={today} required /></label>
+        <label>Reason<textarea name="reason" maxLength={500} rows={2} placeholder="Why do you need this day off?" required /></label>
+        <button className="button button-primary" type="submit" disabled={leaveRequestBusy}>{leaveRequestBusy ? "Submitting…" : "Submit leave request"}</button>
+      </form>}
+      {leaveRequestError && <p className="attendance-error" role="alert">{leaveRequestError}</p>}
+      {leaveRequests.length
+        ? <div className="data-table-wrap"><table className="data-table">
+          <thead><tr>{role === "Owner" && <th>Engineer</th>}<th>Date</th><th>Reason</th><th>Requested</th><th>Status</th>{role === "Owner" && <th>Review</th>}</tr></thead>
+          <tbody>{leaveRequests.map((request) => <tr key={request.id}>
+            {role === "Owner" && <td>{request.engineer}</td>}
+            <td>{dateLabel(request.date)}</td>
+            <td>{request.reason}</td>
+            <td>{new Date(request.requestedAt).toLocaleString()}</td>
+            <td><StatusBadge status={request.status} /></td>
+            {role === "Owner" && <td>{request.status === "Pending review"
+              ? <div className="attendance-dialog-actions">
+                <button className="button button-primary" type="button" disabled={reviewingLeaveRequestId !== null} onClick={() => void reviewLeaveRequest(request, "Approved")}>{reviewingLeaveRequestId === request.id ? "Reviewing…" : "Approve"}</button>
+                <button className="button button-outline" type="button" disabled={reviewingLeaveRequestId !== null} onClick={() => void reviewLeaveRequest(request, "Declined")}>Decline</button>
+              </div>
+              : request.reviewedBy ? `By ${request.reviewedBy}` : "—"}</td>}
+          </tr>)}</tbody>
+        </table></div>
+        : <div className="inline-empty">{role === "Owner" ? "No engineer leave requests have been submitted." : "You have not requested any days off."}</div>}
+    </section>}
+
     <section className="panel feature-panel attendance-calendar-panel">
       <div className="attendance-calendar-heading">
-        <div><span className="panel-kicker">{role === "Owner" ? "WORKSPACE CALENDAR" : "SCHEDULED DAYS OFF"}</span><h2>{role === "Owner" ? "Yearly leave calendar" : "Leave calendar"}</h2><p>{role === "Owner" ? "Add and manage leave dates visible to all site engineers." : "Scheduled leaves and Sundays are non-working days; missed attendance is not marked absent."}</p></div>
-        <div className="attendance-calendar-navigation"><button className="button button-outline" type="button" aria-label="Previous month" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}>←</button><strong>{calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button className="button button-outline" type="button" aria-label="Next month" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}>→</button></div>
+        <div><span className="panel-kicker">{role === "Owner" ? "WORKSPACE CALENDAR" : "SCHEDULED DAYS OFF"}</span><h2>{role === "Owner" ? "Engineer attendance calendar" : "Leave calendar"}</h2><p>{role === "Owner" ? "View attendance by engineer or see a daily summary for the whole team." : "Scheduled leaves and Sundays are non-working days; missed attendance is not marked absent."}</p></div>
+        <div className="attendance-calendar-controls">
+          {role === "Owner" && <label>Engineer
+            <select aria-label="Filter attendance calendar by engineer" className="select-button" value={calendarEngineer} onChange={(event) => setCalendarEngineer(event.target.value)}>
+              <option value="All">All engineers</option>
+              {engineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
+            </select>
+          </label>}
+          <div className="attendance-calendar-navigation"><button className="button button-outline" type="button" aria-label="Previous month" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}>←</button><strong>{calendarMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong><button className="button button-outline" type="button" aria-label="Next month" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}>→</button></div>
+        </div>
       </div>
       <div className="attendance-calendar-layout">
         <div className="attendance-calendar">
@@ -503,15 +607,45 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
             if (!day) return <span className="attendance-calendar-empty" key={`empty-${index}`} />;
             const date = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const leave = leaves.find((item) => item.date === date);
-            const dayRecord = data.attendance.find((record) => record.date === date && record.engineer === currentUser);
-            const dayStatus = dayRecord?.checkIn ? attendanceStatus(dayRecord, now) : undefined;
-            return <div className={`attendance-calendar-day ${isSunday(date) ? "calendar-sunday" : ""} ${leave ? "calendar-leave" : ""} ${dayStatus === "Present" ? "calendar-present" : ""} ${dayStatus === "Absent" ? "calendar-absent" : ""} ${dayStatus === "Checked in" ? "calendar-pending" : ""} ${date === today ? "calendar-today" : ""}`} key={date}>
+            const dayRecords = data.attendance.filter((record) =>
+              record.date === date && (role === "Owner" ? calendarEngineer === "All" || record.engineer === calendarEngineer : record.engineer === currentUser)
+            );
+            const dayStatuses = dayRecords.map((record) =>
+              record.checkIn ? attendanceStatus(record) : record.status
+            );
+            const presentCount = dayStatuses.filter((status) => status === "Present").length;
+            const absentCount = dayStatuses.filter((status) => status === "Absent").length;
+            const scheduledCount = dayStatuses.filter((status) => status === "Scheduled").length;
+            const offCount = dayStatuses.filter((status) => status === "Off").length;
+            const statusDetails = dayRecords.map((record, recordIndex) => `${record.engineer}: ${dayStatuses[recordIndex]}`).join(", ");
+            const isAllEngineers = role === "Owner" && calendarEngineer === "All";
+            const isMixed = isAllEngineers && [presentCount, absentCount, scheduledCount, offCount].filter(Boolean).length > 1;
+            const dayStatus = isAllEngineers
+              ? statusDetails
+              : dayStatuses[0];
+            const aggregateClass = isAllEngineers
+              ? isMixed ? "calendar-mixed" : presentCount ? "calendar-present" : absentCount ? "calendar-absent" : scheduledCount ? "calendar-pending" : offCount ? "calendar-off" : ""
+              : dayStatus === "Present" ? "calendar-present" : dayStatus === "Absent" ? "calendar-absent" : dayStatus === "Scheduled" ? "calendar-pending" : dayStatus === "Off" ? "calendar-off" : "";
+            return <div className={`attendance-calendar-day ${isSunday(date) ? "calendar-sunday" : ""} ${leave ? "calendar-leave" : ""} ${aggregateClass} ${date === today ? "calendar-today" : ""}`} key={date}>
               <span>{day}</span>
-              {dayStatus
-                ? <small title={dayStatus}>{dayStatus === "Checked in" ? "Awaiting check-out" : dayStatus}</small>
+              {isAllEngineers && (presentCount + absentCount + scheduledCount + offCount > 0)
+                ? <div className="attendance-calendar-counts" title={statusDetails}>
+                  <span className="count-present">Present <b>{presentCount}</b></span>
+                  <span className="count-absent">Absent <b>{absentCount}</b></span>
+                  <span className="count-scheduled">Awaiting <b>{scheduledCount}</b></span>
+                  <span className="count-off">Off <b>{offCount}</b></span>
+                </div>
+                : dayStatus
+                ? <small title={dayStatus}>{dayStatus === "Scheduled" && dayRecords[0]?.checkIn ? "Awaiting check-out" : dayStatus}</small>
                 : leave ? <small title={leave.title}>{leave.title}</small> : isSunday(date) ? <small>Sunday</small> : null}
             </div>;
           })}
+          {role === "Owner" && <div className="attendance-calendar-legend">
+            <span><i className="legend-present" />Present</span>
+            <span><i className="legend-absent" />Absent</span>
+            <span><i className="legend-scheduled" />Scheduled / awaiting check-out</span>
+            <span><i className="legend-off" />Approved leave</span>
+          </div>}
         </div>
         <aside className="attendance-leave-list">
           {role === "Owner" && <form className="attendance-leave-form" onSubmit={(event) => void addLeave(event)}>
@@ -531,12 +665,6 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       <div className="attendance-history-heading">
         <h2>Attendance History</h2>
         <div className="attendance-history-filters">
-          {role === "Owner" && <label>Filter Engineer:
-            <select aria-label="Filter attendance by engineer" className="select-button" value={historyEngineer} onChange={(event) => setHistoryEngineer(event.target.value)}>
-              <option value="All">All engineers</option>
-              {engineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
-            </select>
-          </label>}
           <label>Filter Date:
             <input aria-label="Filter attendance by date" type="date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} />
           </label>

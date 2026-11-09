@@ -84,10 +84,14 @@ export const fallbackData: DashboardData = {
 };
 
 export const demoCredentials: Record<RoleId, { email: string; password: string; label: string }> = {
-  owner: { email: "owner@vanya.com", password: "owner123", label: "Owner" },
+  owner: { email: "varun@vanya.com", password: "owner123", label: "Owner · Varun" },
   employee: { email: "employee@vanya.com", password: "employee123", label: "Employee" },
   client: { email: "client@vanya.com", password: "client123", label: "Client" }
 };
+export const demoOwnerAccounts = [
+  { email: "varun@vanya.com", name: "Varun", password: "owner123" },
+  { email: "chaitanya@vanya.com", name: "Chaitanya", password: "owner123" }
+];
 
 export const emptyDashboardData: DashboardData = {
   projects: [],

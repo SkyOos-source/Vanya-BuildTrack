@@ -3,7 +3,7 @@ import path from "node:path";
 import webpush, { type PushSubscription } from "web-push";
 import { pushSubscriptions, saveStore, type DemoRole, type PushSubscriptionRecord } from "./data/store";
 
-export type PushTarget = { role: DemoRole; userName?: string; url: string };
+export type PushTarget = { role: DemoRole; userName?: string; userEmail?: string; url: string };
 export type PushMessage = { title: string; body: string; targets: PushTarget[] };
 
 type VapidConfiguration = { publicKey: string; privateKey: string };
@@ -62,12 +62,13 @@ export function isPushSubscription(value: unknown): value is PushSubscription {
     typeof keys.auth === "string" && /^[A-Za-z0-9_-]+$/.test(keys.auth);
 }
 
-export function savePushSubscription(subscription: PushSubscription, userName: string, role: DemoRole): void {
+export function savePushSubscription(subscription: PushSubscription, userName: string, role: DemoRole, userEmail?: string): void {
   const record: PushSubscriptionRecord = {
     endpoint: subscription.endpoint,
     keys: subscription.keys,
     role,
-    userName
+    userName,
+    ...(userEmail ? { userEmail: userEmail.toLowerCase() } : {})
   };
   const existingIndex = pushSubscriptions.findIndex((item) => item.endpoint === subscription.endpoint);
   if (existingIndex < 0) pushSubscriptions.push(record);
@@ -82,7 +83,13 @@ export function removePushSubscription(endpoint: string): void {
 export async function sendPushNotification(message: PushMessage): Promise<void> {
   const deliveries = message.targets.flatMap((target) =>
     pushSubscriptions
-      .filter((subscription) => subscription.role === target.role && (!target.userName || subscription.userName === target.userName))
+      .filter((subscription) => subscription.role === target.role && (
+        target.userEmail
+          ? subscription.userEmail
+            ? subscription.userEmail.toLowerCase() === target.userEmail.toLowerCase()
+            : !target.userName || subscription.userName.trim().toLowerCase() === target.userName.trim().toLowerCase()
+          : !target.userName || subscription.userName.trim().toLowerCase() === target.userName.trim().toLowerCase()
+      ))
       .map((subscription) => ({ subscription, url: target.url }))
   );
   await Promise.all(deliveries.map(async ({ subscription, url }) => {

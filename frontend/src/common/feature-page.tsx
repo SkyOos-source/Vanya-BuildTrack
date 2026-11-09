@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { Activity, Attendance, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, Project, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
+import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, OwnerAuditLog, Project, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
 import { apiFetch } from "./api";
+import { isDemoMode } from "./data";
 import { formatCurrency, initials } from "./utils";
 import { ExpenseRows, ProjectCards, StatusBadge } from "./components";
 import { AttendancePage } from "./attendance-page";
@@ -9,7 +10,7 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview";
 import { SiteVisitsPage, type SiteVisitAction } from "./site-visits-page";
 import { PalettePicker } from "./palette";
 
-export type FeaturePageProps = { page: string; role: Role; currentUser: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
+export type FeaturePageProps = { page: string; role: Role; currentUser: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
 
 function localDateKey(value?: string) {
   if (!value) return "";
@@ -18,7 +19,7 @@ function localDateKey(value?: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function FeaturePage({ page, role, currentUser, data, projects, search, setSearch, filter, setFilter, onCreate, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onExpenseStatus, onVisitStatus, onUpdatePerson, onRemovePerson, onToast, onFeedback, onBackup }: FeaturePageProps) {
+export function FeaturePage({ page, role, currentUser, data, projects, search, setSearch, filter, setFilter, onCreate, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onAttendanceLeaveReview, onExpenseStatus, onVisitStatus, onUpdatePerson, onRemovePerson, onToast, onFeedback, onBackup }: FeaturePageProps) {
   const [rating, setRating] = useState(5);
   const [workProgressDate, setWorkProgressDate] = useState("");
   const [workProgressProject, setWorkProgressProject] = useState("All");
@@ -32,6 +33,30 @@ export function FeaturePage({ page, role, currentUser, data, projects, search, s
   const [personBeingEdited, setPersonBeingEdited] = useState<Person | null>(null);
   const [materialProjectFilter, setMaterialProjectFilter] = useState("All");
   const [materialRequestStatusFilter, setMaterialRequestStatusFilter] = useState("All");
+  const [ownerAuditLogs, setOwnerAuditLogs] = useState<OwnerAuditLog[]>([]);
+  const [auditLogsError, setAuditLogsError] = useState("");
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const loadOwnerAuditLogs = async () => {
+    if (role !== "Owner" || page !== "Settings & Backup" || isDemoMode()) return;
+    setAuditLogsLoading(true);
+    try {
+      const response = await apiFetch("/api/audit-logs");
+      const records: unknown = await response.json();
+      if (!response.ok || !Array.isArray(records)) {
+        throw new Error((records as { error?: string }).error || `Audit log request failed (${response.status}).`);
+      }
+      setOwnerAuditLogs(records as OwnerAuditLog[]);
+      setAuditLogsError("");
+    } catch (error) {
+      console.error("Unable to load owner audit logs:", error);
+      setAuditLogsError(error instanceof Error ? error.message : "Could not load owner audit logs.");
+    } finally {
+      setAuditLogsLoading(false);
+    }
+  };
+  useEffect(() => {
+    void loadOwnerAuditLogs();
+  }, [page, role]);
   const projectView = page === "Projects & Sites" || page === "My Projects" || page === "My Sites";
   const clientProjectName = data.people.find((person) => person.role === "Client" && person.name === currentUser)?.project;
   const scopedProjects = role === "Owner" ? projects : role === "Employee" ? projects.filter((project) => project.engineer === currentUser) : projects.filter((project) => project.client === currentUser || project.name === clientProjectName);
@@ -152,7 +177,7 @@ export function FeaturePage({ page, role, currentUser, data, projects, search, s
         : <div className="inline-empty">{workProgressDate ? "No work progress updates were shared on this date." : "No work progress updates have been shared yet."}</div>;
     })()}</section>}
     {page === "Materials" && <><section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">SITE INVENTORY</span><h2 className="list-title">Materials received & used</h2></div><div className="toolbar-actions"><select className="select-button" aria-label="Filter materials by project" value={materialProjectFilter} onChange={(event) => setMaterialProjectFilter(event.target.value)}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("material")}>＋ Log materials</button>}{role === "Employee" && <><button className="button button-outline" onClick={() => onCreate("material")}>＋ Log materials</button><button className="button button-primary" onClick={() => onCreate("material-request")}>＋ Request material</button></>}</div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Project / site</th><th>Received</th><th>Used</th><th>In stock</th><th>Last updated</th></tr></thead><tbody>{data.materials.filter((item) => (role !== "Employee" || scopedProjects.some((project) => project.name === item.project)) && (materialProjectFilter === "All" || item.project === materialProjectFilter)).map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.project}</td><td>{item.received}</td><td>{item.used}</td><td>{item.stock}</td><td>{item.lastUpdated}</td></tr>)}</tbody></table></div></section>{role === "Employee" && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">REQUEST HISTORY</span><h2 className="list-title">My material requests</h2></div><select className="select-button" aria-label="Filter material requests by status" value={materialRequestStatusFilter} onChange={(event) => setMaterialRequestStatusFilter(event.target.value)}><option value="All">All statuses</option><option>Pending review</option><option>Approved</option><option>Declined</option></select></div>{data.materialRequests.filter((request) => request.requestedBy === currentUser && (materialRequestStatusFilter === "All" || request.status === materialRequestStatusFilter)).length > 0 ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Project / site</th><th>Quantity</th><th>Requested</th><th>Status</th></tr></thead><tbody>{data.materialRequests.filter((request) => request.requestedBy === currentUser && (materialRequestStatusFilter === "All" || request.status === materialRequestStatusFilter)).map((request) => <tr key={request.id}><td>{request.material}</td><td>{request.project}</td><td>{request.quantity}</td><td>{request.requestedAt}</td><td><StatusBadge status={request.status} /></td></tr>)}</tbody></table></div> : <p className="people-empty">No material requests match this filter.</p>}</section>}</>}
-    {page === "Attendance" && <AttendancePage data={data} role={role} currentUser={currentUser} onSubmit={onAttendanceSubmit} onRegularize={onAttendanceRegularize} onReviewRequest={onAttendanceRequestReview} />}
+    {page === "Attendance" && <AttendancePage data={data} role={role} currentUser={currentUser} onSubmit={onAttendanceSubmit} onRegularize={onAttendanceRegularize} onReviewRequest={onAttendanceRequestReview} onReviewLeaveRequest={onAttendanceLeaveReview} />}
     {page === "Site Visits" && <SiteVisitsPage visits={data.siteVisits} role={role} currentUser={currentUser} onSchedule={() => onCreate("visit")} onAction={onVisitStatus} />}
     {page === "Reports" && <section className="report-grid"><article className="report-card panel"><span className="report-icon">▥</span><span className="panel-kicker">PROJECT PERFORMANCE</span><h2>Progress report</h2><p>Milestone completion and updates, by project and site.</p><button className="text-link" onClick={() => void downloadReport("progress")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">＄</span><span className="panel-kicker">FINANCIAL HEALTH</span><h2>Expense report</h2><p>Approved, pending, and paid expenses across your portfolio.</p><button className="text-link" onClick={() => void downloadReport("expenses")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">◈</span><span className="panel-kicker">SITE INVENTORY</span><h2>Materials report</h2><p>Material received, consumed, and remaining at every site.</p><button className="text-link" onClick={() => void downloadReport("materials")}>Generate report ↗</button></article></section>}
     {(page === "Settings" || page === "Settings & Backup") && <>
@@ -161,7 +186,19 @@ export function FeaturePage({ page, role, currentUser, data, projects, search, s
         <p className="palette-settings-copy">Choose the colors for your account. Your selection is saved in this browser and does not change other users' palettes.</p>
         <PalettePicker onError={onToast} />
       </section>
-      {page === "Settings & Backup" && role === "Owner" && <section className="backup-layout"><article className="panel backup-card"><span className="report-icon">↧</span><span className="panel-kicker">ACCOUNT DATA</span><h2>Back up your workspace</h2><p>Download a JSON export of your project, site, quotation, and expense records.</p><ul><li>Project and site summaries</li><li>Quotations and expense records</li><li>Activity and attendance history</li></ul><button className="button button-primary" onClick={onBackup}>＋ Request account backup</button><small>Backups are generated from current workspace data.</small></article><section className="panel backup-history"><div className="panel-heading compact"><div><span className="panel-kicker">RECENT REQUESTS</span><h2>Backup history</h2></div><span className="backup-count">{data.backups.length} requests</span></div><div className="backup-list">{data.backups.map((backup) => <article className="backup-row" key={backup.id}><span className="backup-file">↧</span><div><strong>{backup.id} · Workspace data export</strong><small>Requested by {backup.requestedBy} · {backup.requestedAt}</small></div><button className="button button-outline" onClick={() => void downloadBackup(backup.id)}>Download</button><StatusBadge status={backup.status} /></article>)}</div></section></section>}
+      {page === "Settings & Backup" && role === "Owner" && <>
+        <section className="backup-layout"><article className="panel backup-card"><span className="report-icon">↧</span><span className="panel-kicker">ACCOUNT DATA</span><h2>Back up your workspace</h2><p>Download a JSON export of your project, site, quotation, and expense records.</p><ul><li>Project and site summaries</li><li>Quotations and expense records</li><li>Activity and attendance history</li></ul><button className="button button-primary" onClick={onBackup}>＋ Request account backup</button><small>Backups are generated from current workspace data.</small></article><section className="panel backup-history"><div className="panel-heading compact"><div><span className="panel-kicker">RECENT REQUESTS</span><h2>Backup history</h2></div><span className="backup-count">{data.backups.length} requests</span></div><div className="backup-list">{data.backups.map((backup) => <article className="backup-row" key={backup.id}><span className="backup-file">↧</span><div><strong>{backup.id} · Workspace data export</strong><small>Requested by {backup.requestedBy} · {backup.requestedAt}</small></div><button className="button button-outline" onClick={() => void downloadBackup(backup.id)}>Download</button><StatusBadge status={backup.status} /></article>)}</div></section></section>
+        <section className="panel backup-history owner-audit-history">
+          <div className="panel-heading compact"><div><span className="panel-kicker">OWNER ACTIVITY</span><h2>Audit log</h2></div><button className="button button-outline" disabled={auditLogsLoading || isDemoMode()} onClick={() => void loadOwnerAuditLogs()}>{auditLogsLoading ? "Refreshing…" : "Refresh"}</button></div>
+          {isDemoMode()
+            ? <p className="palette-settings-copy">Owner audit logs are available in real mode.</p>
+            : auditLogsError
+              ? <p className="palette-settings-copy" role="alert">{auditLogsError}</p>
+              : ownerAuditLogs.length > 0
+                ? <div className="backup-list">{ownerAuditLogs.map((entry) => <article className="backup-row" key={entry.id}><span className="backup-file">↻</span><div><strong>{entry.action} {entry.resource}{entry.target ? ` · ${entry.target}` : ""}</strong><small>{entry.ownerName} ({entry.ownerEmail}) · {new Date(entry.createdAt).toLocaleString()}</small></div></article>)}</div>
+                : <p className="palette-settings-copy">{auditLogsLoading ? "Loading owner activity…" : "No owner actions have been recorded yet."}</p>}
+        </section>
+      </>}
     </>}
     {page === "People" && role === "Owner" && <section className="panel feature-panel">
       {selectedEngineer ? <>

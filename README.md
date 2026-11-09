@@ -28,11 +28,11 @@ Demo credentials are available when Demo mode is on:
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Owner | `owner@vanya.com` | `owner123` |
+| Owner | `varun@vanya.com` or `chaitanya@vanya.com` | `owner123` |
 | Employee | `employee@vanya.com` | `employee123` |
 | Client | `client@vanya.com` | `client123` |
 
-Real mode seeds only the existing owner account (`owner@vanya.com` / `owner123`) the first time the SQLite database is created. Set `OWNER_EMAIL`, `OWNER_PASSWORD`, and `OWNER_NAME` in `backend/.env` before first startup to customize it; changing these variables does not alter an already-created account. Create employee and client logins from the owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
+Real mode provides two full-access owner accounts: Varun (`varun@vanya.com`) and Chaitanya (`chaitanya@vanya.com`). For a new database, provide `OWNER_PASSWORD` and `OWNER2_PASSWORD` through backend deployment secrets; both are required to provision the accounts, and there are no real-mode password defaults. Their passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. `OWNER_EMAIL`, `OWNER_NAME`, `OWNER2_EMAIL`, and `OWNER2_NAME` can optionally override the account details during initial provisioning. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
 
 Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details and compare photos marked as project start and completion (or the earliest and latest uploaded photos). On the client Feedback page, a rating and comment can be saved in BuildTrack for the owner and posted publicly through the Google review page. The default Google link opens the Vanya Concrete Technologies listing, where clients can select **Write a review**. To use a direct review form link instead, set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env`.
 

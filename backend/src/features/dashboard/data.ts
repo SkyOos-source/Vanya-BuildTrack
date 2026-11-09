@@ -1,4 +1,5 @@
-import { activities, attendance, backups, expenses, feedback, materialRequests, materials, people, projects, quotations, siteVisits } from "../../data/store";
+import { activities, backups, expenses, feedback, materialRequests, materials, people, projects, quotations, siteVisits } from "../../data/store";
+import { listAttendance } from "../attendance/service";
 
 export const dashboardData = () => ({
   projects,
@@ -8,7 +9,7 @@ export const dashboardData = () => ({
   activities,
   materials,
   materialRequests,
-  attendance,
+  attendance: listAttendance(),
   feedback,
   backups,
   people

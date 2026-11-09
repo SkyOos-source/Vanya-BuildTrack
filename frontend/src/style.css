@@ -149,6 +149,12 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .footer-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
 .icon-button { position: relative; display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 5px; background: transparent; color: #69635d; cursor: pointer; font-size: 16px; }
 .icon-button:hover { background: #f4f1ed; }
+.password-input-wrap { position: relative; display: flex; width: 100%; align-items: center; }
+.password-input-wrap > input { min-width: 0; flex: 1; padding-right: 42px !important; }
+.password-visibility-toggle { position: absolute; right: 5px; display: grid; width: 32px; height: 30px; place-items: center; border: 0; border-radius: 4px; background: transparent; color: #77716b; cursor: pointer; }
+.password-visibility-toggle:hover { background: #f4f1ed; color: #39332e; }
+.password-visibility-toggle:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
+.password-visibility-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .notification-button { font-size: 20px; }
 .notification-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .notification-button i { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border: 1px solid white; border-radius: 50%; background: var(--orange); }
@@ -810,6 +816,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .signin-card form { display: grid; gap: 12px; }
 .signin-card form label { display: grid; gap: 6px; color: #5e5751; font-size: 9px; font-weight: 600; }
 .signin-card form input, .signin-card form select { width: 100%; height: 37px; padding: 0 10px; border: 1px solid #e8e3de; border-radius: 5px; background: #fff; color: #4a443e; font-size: 10px; }
+.signin-card .password-input-wrap > input { height: 37px; }
 .signin-submit { width: 100%; min-height: 39px; justify-content: space-between; margin-top: 3px; padding: 0 13px; }
 .signin-error { padding: 9px 10px; border: 1px solid #f2d6d0; border-radius: 5px; background: var(--red-soft); color: #a54b3d; font-size: 9px; }
 .demo-access { margin-top: 17px; padding-top: 13px; border-top: 1px solid #efedea; }
@@ -866,6 +873,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 @media (max-width: 620px) {
   body { min-width: 320px; }
+  .notification-drawer { width: min(340px, 86vw); }
   .landing-page, .signin-page { padding-right: 18px; padding-left: 18px; }
   .landing-nav, .signin-nav { margin-inline: -18px; padding-inline: 24px; }
   .landing-nav > .brand, .signin-nav > .brand { min-width: 0; flex: 0 1 auto; gap: 7px; }
@@ -1167,15 +1175,23 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .attendance-calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .attendance-calendar-heading h2 { margin: 4px 0; color: #302b27; font: 700 15px "Manrope", sans-serif; }
 .attendance-calendar-heading p { margin: 0; color: #77716b; font-size: 11px; }
+.attendance-calendar-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.attendance-calendar-controls > label { display: flex; align-items: center; gap: 7px; color: #514b45; font-size: 10px; }
 .attendance-calendar-navigation { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .attendance-calendar-navigation .button { min-height: 32px; padding: 0 10px; }
 .attendance-calendar-navigation strong { min-width: 130px; color: #38322e; text-align: center; font: 600 12px "Manrope", sans-serif; }
 .attendance-calendar-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(220px, .8fr); gap: 20px; }
 .attendance-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .attendance-calendar-weekday { padding: 5px 2px; color: #89827b; text-align: center; font-size: 9px; }
-.attendance-calendar-empty, .attendance-calendar-day { min-height: 62px; border: 1px solid #eee8e1; border-radius: 5px; }
+.attendance-calendar-empty, .attendance-calendar-day { min-height: 76px; border: 1px solid #eee8e1; border-radius: 5px; }
 .attendance-calendar-day { display: flex; min-width: 0; flex-direction: column; align-items: start; gap: 4px; padding: 6px; background: #fff; color: #514b45; font-size: 10px; }
 .attendance-calendar-day small { max-width: 100%; overflow: hidden; color: #77716b; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.attendance-calendar-counts { display: grid; width: 100%; gap: 2px; }
+.attendance-calendar-counts span { display: flex; justify-content: space-between; gap: 3px; border-radius: 3px; padding: 1px 3px; font-size: 8px; line-height: 1.25; white-space: nowrap; }
+.attendance-calendar-counts .count-present { background: #e6f4e9; color: #347348; }
+.attendance-calendar-counts .count-absent { background: #fde9e6; color: #a3443c; }
+.attendance-calendar-counts .count-scheduled { background: #fff3d4; color: #8b6a1a; }
+.attendance-calendar-counts .count-off { background: #eee9ff; color: #6552a3; }
 .attendance-calendar-day.calendar-sunday { background: #faf8f5; }
 .attendance-calendar-day.calendar-leave { border-color: #efc7a8; background: #fff6ed; }
 .attendance-calendar-day.calendar-leave small { color: #a44c1f; }
@@ -1185,7 +1201,18 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .attendance-calendar-day.calendar-absent small { color: #a3443c; }
 .attendance-calendar-day.calendar-pending { border-color: #ead9a6; background: #fffaf0; }
 .attendance-calendar-day.calendar-pending small { color: #8b6a1a; }
+.attendance-calendar-day.calendar-off { border-color: #cfc4f2; background: #f5f2ff; }
+.attendance-calendar-day.calendar-off small { color: #6552a3; }
+.attendance-calendar-day.calendar-mixed { border-color: #e7c89f; background: #fff8ed; }
+.attendance-calendar-day.calendar-mixed small { color: #8b6a1a; }
 .attendance-calendar-day.calendar-today > span { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--orange); color: #fff; }
+.attendance-calendar-legend { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 8px 14px; padding-top: 4px; color: #77716b; font-size: 9px; }
+.attendance-calendar-legend span { display: flex; align-items: center; gap: 5px; }
+.attendance-calendar-legend i { width: 9px; height: 9px; border-radius: 2px; }
+.attendance-calendar-legend .legend-present { background: #b7d9c0; }
+.attendance-calendar-legend .legend-absent { background: #e7b6b0; }
+.attendance-calendar-legend .legend-scheduled { background: #ead9a6; }
+.attendance-calendar-legend .legend-off { background: #cfc4f2; }
 .attendance-leave-list { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 .attendance-leave-list > strong { color: #514b45; font: 600 11px "Manrope", sans-serif; }
 .attendance-leave-list > small { color: #938c85; font-size: 9px; }
@@ -1193,6 +1220,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .attendance-leave-form label { display: grid; gap: 4px; color: #514b45; font-size: 10px; }
 .attendance-leave-form input { min-height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: #fff; color: var(--graphite); font: inherit; }
 .attendance-leave-form .button { justify-self: start; min-height: 34px; }
+.attendance-leave-request-form { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(240px, 1.5fr) auto; align-items: end; gap: 10px; margin-bottom: 14px; }
+.attendance-leave-request-form label { display: grid; gap: 5px; color: #514b45; font-size: 10px; }
+.attendance-leave-request-form input, .attendance-leave-request-form textarea { width: 100%; min-height: 36px; padding: 8px; border: 1px solid var(--border); border-radius: 5px; background: #fff; color: var(--graphite); font: inherit; }
+.attendance-leave-request-form textarea { resize: vertical; }
+.attendance-leave-request-form .button { min-height: 36px; white-space: nowrap; }
 .attendance-leave-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid #f0e7dd; border-radius: 5px; background: #fffaf5; }
 .attendance-leave-item > span { display: grid; gap: 3px; }
 .attendance-leave-item b { color: #514b45; font-size: 9px; }
@@ -1203,8 +1235,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .attendance-today-card { align-items: start; flex-direction: column; padding: 15px; }
   .attendance-history-heading { align-items: start; flex-direction: column; }
   .attendance-calendar-heading { align-items: start; flex-direction: column; }
+  .attendance-leave-request-form { grid-template-columns: 1fr; }
   .attendance-calendar-layout { grid-template-columns: 1fr; }
-  .attendance-calendar-day { min-height: 52px; padding: 4px; }
+  .attendance-calendar-day { min-height: 76px; padding: 4px; }
+  .attendance-calendar-counts span { flex-wrap: wrap; font-size: 7px; white-space: normal; }
 }
 
 @media print {

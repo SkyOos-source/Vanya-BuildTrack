@@ -14,7 +14,7 @@ self.addEventListener("push", (event) => {
     console.error("Could not read the push notification payload:", error);
   }
 
-  const title = "Vanya BuildTrack";
+  const title = typeof message.title === "string" ? message.title : "Vanya BuildTrack";
   const icon = new URL("/buildtrack-icon.png?v=4", self.location.origin).href;
   const options = {
     body: typeof message.body === "string" ? message.body : "There is a new update in your workspace.",

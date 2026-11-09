@@ -1,15 +1,15 @@
-import { ownerAccount, store } from "../../data/store";
+import { store } from "../../data/store";
 import { failure, result, today } from "../shared";
 import { backups } from "./data";
 
 export const listBackups = () => backups;
 
-export function createBackup() {
+export function createBackup(requestedBy: string) {
   const backup = {
     id: `BKP-${String(backups.length + 8).padStart(3, "0")}`,
     status: "Ready to download",
     requestedAt: today(),
-    requestedBy: ownerAccount.name
+    requestedBy
   };
   backups.unshift(backup);
   return result({ record: backup }, 201);

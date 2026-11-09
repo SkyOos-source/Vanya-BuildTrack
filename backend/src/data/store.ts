@@ -1,6 +1,6 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { prisma } from "../prisma";
-import { initialOwnerAccount } from "../features/auth/data";
+import { getInitialOwnerAccounts } from "../features/auth/data";
 
 
 export type Project = {
@@ -68,19 +68,22 @@ export type Activity = {
   attachments?: string[];
   createdAt?: string;
 };
+export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
 export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };
 export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string };
 export type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number };
 export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
 export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
 export type AttendanceLeave = { id: string; title: string; date: string };
+export type AttendanceLeaveRequest = { id: string; engineer: string; date: string; reason: string; requestedAt: string; status: "Pending review" | "Approved" | "Declined"; reviewedBy?: string; reviewedAt?: string };
 export type AttendanceRegularizationRequest = { id: string; attendanceId: string; engineer: string; date: string; capturedAt: string; reason: string; requestedAt: string; status: "Pending review" | "Approved" | "Declined"; reviewedBy?: string; reviewedAt?: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string; image?: string };
-export const ownerProfile = { phone: "", image: "" };
+export type OwnerProfile = { phone: string; image: string };
+export const ownerProfiles: Record<string, OwnerProfile> = {};
 export type OwnerAccount = { email: string; name: string; salt: string; passwordHash: string };
-export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: DemoRole; userName: string };
+export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: DemoRole; userName: string; userEmail?: string };
 export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
 export type DemoRole = "owner" | "employee" | "client";
 
@@ -97,23 +100,26 @@ export const materials: Material[] = [];
 export const materialRequests: MaterialRequest[] = [];
 export const attendance: Attendance[] = [];
 export const attendanceLeaves: AttendanceLeave[] = [];
+export const attendanceLeaveRequests: AttendanceLeaveRequest[] = [];
 export const attendanceRegularizationRequests: AttendanceRegularizationRequest[] = [];
 export const feedback: Feedback[] = [];
 export const backups: Backup[] = [];
 export const people: Person[] = [];
+export const ownerAuditLogs: OwnerAuditLog[] = [];
 
 export const employeeCredentials: EmployeeCredential[] = [];
 export const clientCredentials: EmployeeCredential[] = [];
 export const pushSubscriptions: PushSubscriptionRecord[] = [];
-export const ownerAccount: OwnerAccount = { email: "", name: "", salt: "", passwordHash: "" };
+export const ownerAccounts: OwnerAccount[] = [];
 
-export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfile, ownerAccount };
+export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, attendanceLeaveRequests, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfiles, ownerAccounts, ownerAuditLogs };
 let projectSequence = 1;
 let quotationSequence = 1;
 let expenseSequence = 1;
 let visitSequence = 1;
 let updateSequence = 1;
 let attendanceSequence = 1;
+let attendanceLeaveRequestSequence = 1;
 let attendanceRegularizationRequestSequence = 1;
 let materialSequence = 1;
 let materialRequestSequence = 1;
@@ -200,20 +206,22 @@ export function isDemoRole(value: unknown): value is DemoRole {
   return value === "owner" || value === "employee" || value === "client";
 }
 
-function seedOwnerAccount() {
-  const salt = randomBytes(16).toString("hex");
-  Object.assign(ownerAccount, {
-    email: initialOwnerAccount.email.toLowerCase(),
-    name: initialOwnerAccount.name,
-    salt,
-    passwordHash: scryptSync(initialOwnerAccount.password, salt, 64).toString("hex")
-  });
+function seedOwnerAccounts() {
+  ownerAccounts.splice(0, ownerAccounts.length, ...getInitialOwnerAccounts().map((account) => {
+    const salt = randomBytes(16).toString("hex");
+    return {
+      email: account.email.toLowerCase(),
+      name: account.name,
+      salt,
+      passwordHash: scryptSync(account.password, salt, 64).toString("hex")
+    };
+  }));
 }
 
 export async function initializeStore() {
   const savedState = await prisma.appState.findUnique({ where: { id: "workspace" } });
   if (!savedState) {
-    seedOwnerAccount();
+    seedOwnerAccounts();
     await saveStore();
     return;
   }
@@ -222,6 +230,7 @@ export async function initializeStore() {
     throw new Error("SQLite workspace state has an invalid top-level structure.");
   }
   const saved = parsed as Record<string, unknown>;
+  let ownerAccountsNeedSaving = false;
   const restore = <T>(target: T[], key: string) => {
     const records = saved[key];
     if (records === undefined) return;
@@ -237,33 +246,55 @@ export async function initializeStore() {
   restore(materialRequests, "materialRequests");
   restore(attendance, "attendance");
   restore(attendanceLeaves, "attendanceLeaves");
+  restore(attendanceLeaveRequests, "attendanceLeaveRequests");
   restore(attendanceRegularizationRequests, "attendanceRegularizationRequests");
   restore(feedback, "feedback");
   restore(backups, "backups");
   restore(people, "people");
+  restore(ownerAuditLogs, "ownerAuditLogs");
   restore(employeeCredentials, "employeeCredentials");
   restore(clientCredentials, "clientCredentials");
   restore(pushSubscriptions, "pushSubscriptions");
-  if (saved.ownerProfile && typeof saved.ownerProfile === "object") {
-    const savedOwnerProfile = saved.ownerProfile as { phone?: unknown; image?: unknown };
-    ownerProfile.phone = typeof savedOwnerProfile.phone === "string" ? savedOwnerProfile.phone : "";
-    ownerProfile.image = typeof savedOwnerProfile.image === "string" ? savedOwnerProfile.image : "";
-  }
-  if (saved.ownerAccount && typeof saved.ownerAccount === "object") {
-    Object.assign(ownerAccount, saved.ownerAccount);
+  if (saved.ownerAccounts === undefined) {
+    seedOwnerAccounts();
+    ownerAccountsNeedSaving = true;
+  } else if (Array.isArray(saved.ownerAccounts) && saved.ownerAccounts.every((account) =>
+    account && typeof account === "object" &&
+    typeof account.email === "string" && typeof account.name === "string" &&
+    typeof account.salt === "string" && typeof account.passwordHash === "string"
+  )) {
+    ownerAccounts.splice(0, ownerAccounts.length, ...saved.ownerAccounts as OwnerAccount[]);
   } else {
-    seedOwnerAccount();
+    throw new Error("SQLite workspace state field 'ownerAccounts' must contain valid owner credentials.");
+  }
+  if (saved.ownerProfiles && typeof saved.ownerProfiles === "object" && !Array.isArray(saved.ownerProfiles)) {
+    for (const [email, value] of Object.entries(saved.ownerProfiles)) {
+      if (!value || typeof value !== "object") continue;
+      const profile = value as { phone?: unknown; image?: unknown };
+      ownerProfiles[email.toLowerCase()] = {
+        phone: typeof profile.phone === "string" ? profile.phone : "",
+        image: typeof profile.image === "string" ? profile.image : ""
+      };
+    }
+  } else if (saved.ownerProfile && typeof saved.ownerProfile === "object" && ownerAccounts[0]) {
+    const savedOwnerProfile = saved.ownerProfile as { phone?: unknown; image?: unknown };
+    ownerProfiles[ownerAccounts[0].email] = {
+      phone: typeof savedOwnerProfile.phone === "string" ? savedOwnerProfile.phone : "",
+      image: typeof savedOwnerProfile.image === "string" ? savedOwnerProfile.image : ""
+    };
   }
   projectSequence = nextSequence(projects, "PRJ-", projectSequence);
   quotationSequence = nextSequence(quotations, "QT-", quotationSequence);
   expenseSequence = nextSequence(expenses, "EXP-", expenseSequence);
   visitSequence = nextSequence(siteVisits, "VIS-", visitSequence);
   attendanceSequence = nextSequence(attendance, "ATT-", attendanceSequence);
+  attendanceLeaveRequestSequence = nextSequence(attendanceLeaveRequests, "ALREQ-", attendanceLeaveRequestSequence);
   attendanceRegularizationRequestSequence = nextSequence(attendanceRegularizationRequests, "AREQ-", attendanceRegularizationRequestSequence);
   materialSequence = nextSequence(materials, "MAT-", materialSequence);
   materialRequestSequence = nextSequence(materialRequests, "MREQ-", materialRequestSequence);
   personSequence = nextSequence(people, "USR-", personSequence);
   updateSequence = nextSequence(activities, "UPD-", updateSequence);
+  if (ownerAccountsNeedSaving) await saveStore();
 }
 
 export function nextSequence(records: Array<{ id: string }>, prefix: string, fallback: number) {
@@ -283,10 +314,28 @@ export async function saveStore() {
 }
 
 export function verifyOwnerCredential(email: string, password: string) {
-  if (!ownerAccount.salt || !ownerAccount.passwordHash || ownerAccount.email !== email) return false;
-  const actual = scryptSync(password, ownerAccount.salt, 64);
-  const expected = Buffer.from(ownerAccount.passwordHash, "hex");
+  const account = ownerAccounts.find((item) => item.email === email);
+  if (!account?.salt || !account.passwordHash) return false;
+  const actual = scryptSync(password, account.salt, 64);
+  const expected = Buffer.from(account.passwordHash, "hex");
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+export function findOwnerAccount(email: string) {
+  return ownerAccounts.find((item) => item.email === email.trim().toLowerCase());
+}
+
+export function recordOwnerAction(owner: OwnerAccount, action: string, resource: string, target?: string) {
+  ownerAuditLogs.unshift({
+    id: `AUD-${randomUUID()}`,
+    ownerName: owner.name,
+    ownerEmail: owner.email,
+    action,
+    resource,
+    ...(target ? { target } : {}),
+    createdAt: new Date().toISOString()
+  });
+  if (ownerAuditLogs.length > 500) ownerAuditLogs.length = 500;
 }
 
 export function createEmployeeCredential(email: string, password: string) {
@@ -347,6 +396,7 @@ export function nextId(kind: string): string {
     visit: { prefix: "VIS-", next: () => visitSequence++ },
     progress: { prefix: "UPD-", next: () => updateSequence++ },
     attendance: { prefix: "ATT-", next: () => attendanceSequence++ },
+    "attendance-leave-request": { prefix: "ALREQ-", next: () => attendanceLeaveRequestSequence++ },
     "attendance-regularization-request": { prefix: "AREQ-", next: () => attendanceRegularizationRequestSequence++ },
     material: { prefix: "MAT-", next: () => materialSequence++ },
     "material-request": { prefix: "MREQ-", next: () => materialRequestSequence++ },
