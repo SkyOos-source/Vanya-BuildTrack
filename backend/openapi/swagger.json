@@ -1584,6 +1584,31 @@
 				}
 			}
 		},
+		"/api/auth/refresh": {
+			"post": {
+				"operationId": "Renew",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/auth/logout": {
 			"post": {
 				"operationId": "SignOut",

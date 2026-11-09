@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
-import { emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readSession, roleId, roleName, rolePath } from "./data";
+import { clearAuthTokens, emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch } from "./api";
 import { formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
@@ -862,13 +862,18 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const signOut = async () => {
     if (!demoMode) {
       try {
-        const response = await apiFetch("/api/auth/logout", { method: "POST" });
+        const response = await apiFetch("/api/auth/logout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: readRefreshToken() })
+        });
         if (!response.ok) throw new Error(`Sign-out failed (${response.status})`);
       } catch (error) {
         console.error("API sign-out failed:", error);
       }
     }
     localStorage.removeItem("buildtrack-session");
+    clearAuthTokens();
     navigate("/signin", { replace: true });
   };
 

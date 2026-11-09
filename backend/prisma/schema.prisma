@@ -11,3 +11,12 @@ model AppState {
   id      String @id
   payload String
 }
+
+model RefreshToken {
+  tokenHash String   @id
+  userJson  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
