@@ -819,6 +819,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .signin-card .password-input-wrap > input { height: 37px; }
 .signin-submit { width: 100%; min-height: 39px; justify-content: space-between; margin-top: 3px; padding: 0 13px; }
 .signin-error { padding: 9px 10px; border: 1px solid #f2d6d0; border-radius: 5px; background: var(--red-soft); color: #a54b3d; font-size: 9px; }
+.setup-owner-fields { display: grid; gap: 10px; min-width: 0; margin: 3px 0; padding: 12px; border: 1px solid #efedea; border-radius: 6px; }
+.setup-owner-fields legend { padding: 0 5px; color: #746c65; font-size: 9px; font-weight: 700; }
+.setup-success { margin-bottom: 12px; padding: 9px 10px; border: 1px solid #d5e8d7; border-radius: 5px; background: #f0f8f0; color: #3e7046; font-size: 9px; }
 .demo-access { margin-top: 17px; padding-top: 13px; border-top: 1px solid #efedea; }
 .demo-access-heading { display: flex; justify-content: space-between; gap: 8px; color: #9b948d; font-size: 7px; letter-spacing: .6px; }
 .demo-access-heading span:first-child { color: #746c65; font-weight: 700; }

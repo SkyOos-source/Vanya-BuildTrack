@@ -1612,6 +1612,48 @@
 				]
 			}
 		},
+		"/api/auth/setup/status": {
+			"get": {
+				"operationId": "SetupStatus",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/api/auth/setup": {
+			"post": {
+				"operationId": "Setup",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/auth/login": {
 			"post": {
 				"operationId": "SignIn",

@@ -9,6 +9,7 @@ import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerA
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 import { authenticateBearerHeader } from "./features/auth/session";
+import { createInitialOwnerSetupCode } from "./features/auth/service";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
@@ -276,6 +277,10 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 });
 
 void initializeStore().then(() => {
+  const setupCode = createInitialOwnerSetupCode();
+  if (setupCode) {
+    console.info(`Initial owner setup code: ${setupCode}`);
+  }
   app.listen(port, () => {
     console.log(`BuildTrack API listening on http://localhost:${port}`);
   });

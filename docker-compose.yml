@@ -4,11 +4,10 @@ services:
     build: .
     image: buildtrack:latest
     restart: unless-stopped
-    env_file:
-      - ./deploy/uat.env
     environment:
       NODE_ENV: production
       PORT: "3001"
+      FRONTEND_URL: https://vanyabuildtrackuat.duckdns.org
     ports:
       - "127.0.0.1:3101:3001"
     volumes:
@@ -25,11 +24,10 @@ services:
     build: .
     image: buildtrack:latest
     restart: unless-stopped
-    env_file:
-      - ./deploy/prod.env
     environment:
       NODE_ENV: production
       PORT: "3001"
+      FRONTEND_URL: https://vanyabuildtrack.duckdns.org
     ports:
       - "127.0.0.1:3102:3001"
     volumes:

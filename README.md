@@ -22,20 +22,15 @@ The Vite frontend runs at http://localhost:5173 and the Express API runs at http
 Use the **Demo mode** toggle in the header to choose between:
 
 - **Demo mode:** sample data and sign-in are handled entirely in the browser. CRUD operations work and changes persist in that browser's local storage; no backend API requests are made.
-- **Real mode (default):** sign-in and workspace data use the SQLite database at `backend/data/buildtrack.db`. The real database starts empty except for the initial owner account.
+- **Real mode (default):** sign-in and workspace data use the SQLite database at `backend/data/buildtrack.db`. A new database starts empty and requires one-time owner setup.
 
 ### Deploy to a VPS with UAT and production
 
 The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. UAT and production run as separate containers, have separate SQLite/VAPID data volumes, and bind only to localhost ports `3101` and `3102`; use a reverse proxy for public HTTPS access.
 
-Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. From the repository directory:
+Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. No deployment `.env` files or environment password settings are needed; the domains are configured in `docker-compose.yml`.
 
-```sh
-cp deploy/uat.env.example deploy/uat.env
-cp deploy/prod.env.example deploy/prod.env
-```
-
-Edit both environment files: the `FRONTEND_URL` values are set to the corresponding HTTPS domains; replace both owner passwords with strong unique secrets, and set `VAPID_SUBJECT` to a monitored email address. Do not reuse the owner passwords between environments. The passwords provision each environment's initial owner accounts only on first database creation.
+Each fresh environment prints a random one-time setup code in its container logs. The setup page asks for two owner accounts and their login passwords, and the code prevents an unauthenticated visitor from claiming the new workspace. Choose strong, unique passwords and keep them private; the passwords are entered in the setup page and stored only as salted hashes in the database.
 
 Start either environment independently:
 
@@ -46,7 +41,16 @@ docker compose --profile prod up -d --build
 
 The first start applies SQLite migrations automatically. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain HTTPS certificates with Certbot's Nginx plugin for both DNS names. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app ports are bound to `127.0.0.1`.
 
-To deploy an update, pull the desired code and run the matching `docker compose --profile ... up -d --build` command. Keep the environment files private, and back up each environment's SQLite workspace before upgrades or VPS maintenance. The named volumes `buildtrack-uat-data` and `buildtrack-prod-data` contain the databases and generated push keys; do not remove them when updating containers.
+Before exposing a fresh environment publicly, retrieve its setup code over SSH:
+
+```sh
+docker compose --profile uat logs --tail=100
+docker compose --profile prod logs --tail=100
+```
+
+Open the corresponding HTTPS domain, choose **Complete initial setup**, and enter that environment's setup code and two owner accounts. The random code is displayed only in the server logs and becomes invalid after setup or an application restart. UAT and production use different codes and separate databases.
+
+To deploy an update, pull the desired code and run the matching `docker compose --profile ... up -d --build` command. Back up each environment's SQLite workspace before upgrades or VPS maintenance. The named volumes `buildtrack-uat-data` and `buildtrack-prod-data` contain the databases and generated push keys; do not remove them when updating containers.
 
 This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
 
@@ -58,7 +62,7 @@ Demo credentials are available when Demo mode is on:
 | Employee | `employee@vanya.com` | `employee123` |
 | Client | `client@vanya.com` | `client123` |
 
-Real mode provides two full-access owner accounts: Varun (`varun@vanya.com`) and Chaitanya (`chaitanya@vanya.com`). For a new database, provide `OWNER_PASSWORD` and `OWNER2_PASSWORD` through backend deployment secrets; both are required to provision the accounts, and there are no real-mode password defaults. Their passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. `OWNER_EMAIL`, `OWNER_NAME`, `OWNER2_EMAIL`, and `OWNER2_NAME` can optionally override the account details during initial provisioning. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
+Real mode provides two full-access owner accounts: the initial setup page lets you choose their names, emails, and passwords. Passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
 
 Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details and compare photos marked as project start and completion (or the earliest and latest uploaded photos). On the client Feedback page, a rating and comment can be saved in BuildTrack for the owner and posted publicly through the Google review page. The default Google link opens the Vanya Concrete Technologies listing, where clients can select **Write a review**. To use a direct review form link instead, set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env`.
 

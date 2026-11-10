@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { prisma } from "../prisma";
-import { getInitialOwnerAccounts } from "../features/auth/data";
 
 
 export type Project = {
@@ -206,8 +205,8 @@ export function isDemoRole(value: unknown): value is DemoRole {
   return value === "owner" || value === "employee" || value === "client";
 }
 
-function seedOwnerAccounts() {
-  ownerAccounts.splice(0, ownerAccounts.length, ...getInitialOwnerAccounts().map((account) => {
+function hashOwnerAccounts(accounts: Array<{ email: string; name: string; password: string }>): OwnerAccount[] {
+  return accounts.map((account) => {
     const salt = randomBytes(16).toString("hex");
     return {
       email: account.email.toLowerCase(),
@@ -215,13 +214,12 @@ function seedOwnerAccounts() {
       salt,
       passwordHash: scryptSync(account.password, salt, 64).toString("hex")
     };
-  }));
+  });
 }
 
 export async function initializeStore() {
   const savedState = await prisma.appState.findUnique({ where: { id: "workspace" } });
   if (!savedState) {
-    seedOwnerAccounts();
     await saveStore();
     return;
   }
@@ -256,7 +254,7 @@ export async function initializeStore() {
   restore(clientCredentials, "clientCredentials");
   restore(pushSubscriptions, "pushSubscriptions");
   if (saved.ownerAccounts === undefined) {
-    seedOwnerAccounts();
+    ownerAccounts.splice(0, ownerAccounts.length);
     ownerAccountsNeedSaving = true;
   } else if (Array.isArray(saved.ownerAccounts) && saved.ownerAccounts.every((account) =>
     account && typeof account === "object" &&
@@ -295,6 +293,34 @@ export async function initializeStore() {
   personSequence = nextSequence(people, "USR-", personSequence);
   updateSequence = nextSequence(activities, "UPD-", updateSequence);
   if (ownerAccountsNeedSaving) await saveStore();
+}
+
+export function isInitialOwnerSetupRequired() {
+  return ownerAccounts.length === 0;
+}
+
+export async function completeInitialOwnerSetup(accounts: Array<{ email: string; name: string; password: string }>) {
+  const savedState = await prisma.appState.findUnique({ where: { id: "workspace" } });
+  if (!savedState) throw new Error("SQLite workspace state is not initialized.");
+  if (ownerAccounts.length > 0) return false;
+
+  const parsed: unknown = JSON.parse(savedState.payload);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("SQLite workspace state has an invalid top-level structure.");
+  }
+  const saved = parsed as Record<string, unknown>;
+  if (!Array.isArray(saved.ownerAccounts) || saved.ownerAccounts.length > 0) return false;
+
+  const createdAccounts = hashOwnerAccounts(accounts);
+  const updatedPayload = JSON.stringify({ ...saved, ownerAccounts: createdAccounts });
+  const updated = await prisma.appState.updateMany({
+    where: { id: "workspace", payload: savedState.payload },
+    data: { payload: updatedPayload }
+  });
+  if (updated.count !== 1) return false;
+
+  ownerAccounts.splice(0, ownerAccounts.length, ...createdAccounts);
+  return true;
 }
 
 export function nextSequence(records: Array<{ id: string }>, prefix: string, fallback: number) {
