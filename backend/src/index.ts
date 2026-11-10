@@ -2,6 +2,8 @@ import "dotenv/config";
 import "reflect-metadata";
 import cors from "cors";
 import express from "express";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { RegisterRoutes } from "./generated/routes";
 import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, saveStore, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
@@ -255,6 +257,18 @@ app.get("/api/audit-logs", (request, response) => {
 });
 
 RegisterRoutes(app);
+
+const frontendDirectory = path.resolve(__dirname, "../public");
+if (existsSync(frontendDirectory)) {
+  app.use(express.static(frontendDirectory));
+  app.get("*", (request, response, next) => {
+    if (request.path === "/api" || request.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    response.sendFile(path.join(frontendDirectory, "index.html"));
+  });
+}
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   console.error("API request failed:", error);

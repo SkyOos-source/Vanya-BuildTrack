@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+.env.*
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+backend/data
+frontend/.env*
+deploy/*.env
