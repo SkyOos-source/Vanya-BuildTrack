@@ -54,7 +54,7 @@ The layout guidance below is based on the screenshots supplied during project se
 
 ## Color and visual direction
 
-Every user can select a personal palette from the shared top bar or their **Settings** page (owners find it under **Settings & Backup**). Each selection is saved in that user's browser and does not change the palette for other users. New users default to Construction orange.
+Every user can select a personal palette from the shared top bar or their **Settings** page (owners find it under **Settings & Backup**). Each selection is saved in that user's browser and does not change the palette for other users. The most recently active user's palette is also shown on public pages after sign-out. New users default to Construction orange.
 
 | Option | Color direction | Primary | Supporting colors |
 | --- | --- | --- | --- |

@@ -1,7 +1,8 @@
-import { isDemoRole, ownerAccount, people, readText, verifyClientCredential, verifyEmployeeCredential, verifyOwnerCredential } from "../../data/store";
+import { findOwnerAccount, isDemoRole, people, readText, verifyClientCredential, verifyEmployeeCredential, verifyOwnerCredential } from "../../data/store";
+import { createSession, revokeTokens, rotateRefreshToken } from "./session";
 import { failure, result } from "../shared";
 
-export function login(body: any) {
+export async function login(body: any) {
   const email = readText(body?.email)?.toLowerCase() ?? "";
   const password = readText(body?.password) ?? "";
   const role: unknown = body?.role;
@@ -13,11 +14,24 @@ export function login(body: any) {
     return failure(401, "Email or password is incorrect for this role.");
   }
   const invitedPerson = invitedEmployeeLogin || invitedClientLogin ? findPerson(email, role) : undefined;
-  const account = invitedPerson ?? ownerAccount;
-  return result({ user: { name: account.name, email: account.email, role } });
+  const account = invitedPerson ?? (ownerLogin ? findOwnerAccount(email) : undefined);
+  if (!account) return failure(401, "Email or password is incorrect for this role.");
+  const user = { name: account.name, email: account.email, role };
+  return result({ user, ...await createSession(user) });
 }
 
-export const logout = () => result({ status: "ok" });
+export async function refresh(body: any) {
+  const refreshToken = readText(body?.refreshToken);
+  if (!refreshToken) return failure(401, "A valid refresh token is required.");
+  const session = await rotateRefreshToken(refreshToken);
+  if (!session) return failure(401, "Refresh token is invalid or expired. Sign in again.");
+  return result(session);
+}
+
+export const logout = async (authorization?: string, refreshToken?: string) => {
+  await revokeTokens(authorization, refreshToken);
+  return result({ status: "ok" });
+};
 
 function findPerson(email: string, role: "employee" | "client") {
   const personRole = role === "employee" ? "Site Engineer" : "Client";

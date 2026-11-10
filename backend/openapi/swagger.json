@@ -542,6 +542,48 @@
 				],
 				"type": "object"
 			},
+			"AttendanceLeaveRequest": {
+				"properties": {
+					"reviewedAt": {
+						"type": "string"
+					},
+					"reviewedBy": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"Pending review",
+							"Approved",
+							"Declined"
+						]
+					},
+					"requestedAt": {
+						"type": "string"
+					},
+					"reason": {
+						"type": "string"
+					},
+					"date": {
+						"type": "string"
+					},
+					"engineer": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
+					"requestedAt",
+					"reason",
+					"date",
+					"engineer",
+					"id"
+				],
+				"type": "object"
+			},
 			"AttendanceRegularizationRequest": {
 				"properties": {
 					"reviewedAt": {
@@ -1493,12 +1535,7 @@
 						"description": "Ok",
 						"content": {
 							"application/json": {
-								"schema": {
-									"items": {
-										"$ref": "#/components/schemas/Backup"
-									},
-									"type": "array"
-								}
+								"schema": {}
 							}
 						}
 					}
@@ -1536,6 +1573,22 @@
 					},
 					"204": {
 						"description": "No content"
+					},
+					"401": {
+						"description": "",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					},
+					"403": {
+						"description": "",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
 					},
 					"404": {
 						"description": "",
@@ -1584,6 +1637,31 @@
 				}
 			}
 		},
+		"/api/auth/refresh": {
+			"post": {
+				"operationId": "Renew",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/auth/logout": {
 			"post": {
 				"operationId": "SignOut",
@@ -1598,7 +1676,15 @@
 					}
 				},
 				"security": [],
-				"parameters": []
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
 			}
 		},
 		"/api/attendance": {
@@ -1611,50 +1697,7 @@
 							"application/json": {
 								"schema": {
 									"items": {
-										"properties": {
-											"checkoutRegularization": {
-												"$ref": "#/components/schemas/AttendanceRegularization"
-											},
-											"checkOut": {
-												"$ref": "#/components/schemas/AttendanceProof"
-											},
-											"checkIn": {
-												"$ref": "#/components/schemas/AttendanceProof"
-											},
-											"date": {
-												"type": "string"
-											},
-											"evidence": {
-												"type": "string"
-											},
-											"shift": {
-												"type": "string"
-											},
-											"present": {
-												"type": "string"
-											},
-											"engineer": {
-												"type": "string"
-											},
-											"project": {
-												"type": "string"
-											},
-											"id": {
-												"type": "string"
-											},
-											"status": {
-												"type": "string"
-											}
-										},
-										"required": [
-											"evidence",
-											"shift",
-											"present",
-											"engineer",
-											"id",
-											"status"
-										],
-										"type": "object"
+										"$ref": "#/components/schemas/Attendance"
 									},
 									"type": "array"
 								}
@@ -1724,6 +1767,94 @@
 				},
 				"security": [],
 				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/attendance/leave-requests": {
+			"get": {
+				"operationId": "ListLeaveRequests",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/AttendanceLeaveRequest"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "engineer",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			},
+			"post": {
+				"operationId": "RequestLeave",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/attendance/leave-requests/{id}": {
+			"patch": {
+				"operationId": "ReviewLeaveRequest",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {

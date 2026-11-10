@@ -117,6 +117,11 @@ const models: TsoaRoute.Models = {
         "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"date":{"dataType":"string","required":true},"title":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "AttendanceLeaveRequest": {
+        "dataType": "refAlias",
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"reviewedAt":{"dataType":"string"},"reviewedBy":{"dataType":"string"},"status":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Pending review"]},{"dataType":"enum","enums":["Approved"]},{"dataType":"enum","enums":["Declined"]}],"required":true},"requestedAt":{"dataType":"string","required":true},"reason":{"dataType":"string","required":true},"date":{"dataType":"string","required":true},"engineer":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "AttendanceRegularizationRequest": {
         "dataType": "refAlias",
         "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"reviewedAt":{"dataType":"string"},"reviewedBy":{"dataType":"string"},"status":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Pending review"]},{"dataType":"enum","enums":["Approved"]},{"dataType":"enum","enums":["Declined"]}],"required":true},"requestedAt":{"dataType":"string","required":true},"reason":{"dataType":"string","required":true},"capturedAt":{"dataType":"string","required":true},"date":{"dataType":"string","required":true},"engineer":{"dataType":"string","required":true},"attendanceId":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
@@ -1068,6 +1073,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsBackupsController_list: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.get('/api/backups',
             ...(fetchMiddlewares<RequestHandler>(BackupsController)),
@@ -1097,6 +1103,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsBackupsController_create: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.post('/api/backups',
             ...(fetchMiddlewares<RequestHandler>(BackupsController)),
@@ -1126,6 +1133,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsBackupsController_download: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"dataType":"string"},
                 responder: {"in":"res","name":"404","required":true,"dataType":"any"},
         };
@@ -1186,7 +1194,39 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsAuthController_renew: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.post('/api/auth/refresh',
+            ...(fetchMiddlewares<RequestHandler>(AuthController)),
+            ...(fetchMiddlewares<RequestHandler>(AuthController.prototype.renew)),
+
+            async function AuthController_renew(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsAuthController_renew, request, response });
+
+                const controller = new AuthController();
+
+              await templateService.apiHandler({
+                methodName: 'renew',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsAuthController_signOut: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
         };
         app.post('/api/auth/logout',
             ...(fetchMiddlewares<RequestHandler>(AuthController)),
@@ -1273,6 +1313,98 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsAttendanceController_listLeaveRequests: Record<string, TsoaRoute.ParameterSchema> = {
+                engineer: {"in":"query","name":"engineer","dataType":"string"},
+        };
+        app.get('/api/attendance/leave-requests',
+            ...(fetchMiddlewares<RequestHandler>(AttendanceController)),
+            ...(fetchMiddlewares<RequestHandler>(AttendanceController.prototype.listLeaveRequests)),
+
+            async function AttendanceController_listLeaveRequests(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsAttendanceController_listLeaveRequests, request, response });
+
+                const controller = new AttendanceController();
+
+              await templateService.apiHandler({
+                methodName: 'listLeaveRequests',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsAttendanceController_requestLeave: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.post('/api/attendance/leave-requests',
+            ...(fetchMiddlewares<RequestHandler>(AttendanceController)),
+            ...(fetchMiddlewares<RequestHandler>(AttendanceController.prototype.requestLeave)),
+
+            async function AttendanceController_requestLeave(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsAttendanceController_requestLeave, request, response });
+
+                const controller = new AttendanceController();
+
+              await templateService.apiHandler({
+                methodName: 'requestLeave',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsAttendanceController_reviewLeaveRequest: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+                id: {"in":"path","name":"id","required":true,"dataType":"string"},
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.patch('/api/attendance/leave-requests/:id',
+            ...(fetchMiddlewares<RequestHandler>(AttendanceController)),
+            ...(fetchMiddlewares<RequestHandler>(AttendanceController.prototype.reviewLeaveRequest)),
+
+            async function AttendanceController_reviewLeaveRequest(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsAttendanceController_reviewLeaveRequest, request, response });
+
+                const controller = new AttendanceController();
+
+              await templateService.apiHandler({
+                methodName: 'reviewLeaveRequest',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsAttendanceController_listRegularizationRequests: Record<string, TsoaRoute.ParameterSchema> = {
                 engineer: {"in":"query","name":"engineer","dataType":"string"},
         };
@@ -1334,6 +1466,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsAttendanceController_reviewRegularizationRequest: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
                 id: {"in":"path","name":"id","required":true,"dataType":"string"},
                 body: {"in":"body","name":"body","required":true,"dataType":"any"},
         };

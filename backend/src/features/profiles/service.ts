@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { ownerAccount, ownerProfile, people, readText } from "../../data/store";
+import { findOwnerAccount, ownerProfiles, ownerAccounts, people, readText } from "../../data/store";
 import { failure, result } from "../shared";
 
 type PublicProfile = {
@@ -13,9 +13,11 @@ type PublicProfile = {
 
 function findProfile(role: string, email: string): PublicProfile | undefined {
   const normalizedEmail = email.trim().toLowerCase();
-  if (role === "owner" && normalizedEmail === ownerAccount.email) {
+  const ownerAccount = role === "owner" ? findOwnerAccount(normalizedEmail) : undefined;
+  if (ownerAccount) {
+    const ownerProfile = ownerProfiles[ownerAccount.email] ??= { phone: "", image: "" };
     return {
-      id: "owner",
+      id: `owner-${ownerAccount.email}`,
       name: ownerAccount.name,
       email: ownerAccount.email,
       role: "Owner",
@@ -64,6 +66,7 @@ export function updateMyProfile(role: string, email: string, body: unknown) {
     else return failure(400, "Choose a valid JPEG, PNG, or WebP profile photo smaller than 1.8 MB.");
   }
   if (role === "owner") {
+    const ownerProfile = ownerProfiles[profile.email.toLowerCase()] ??= { phone: "", image: "" };
     if (Object.hasOwn(input, "phone")) ownerProfile.phone = phone;
     if (image !== undefined) ownerProfile.image = image;
   }
@@ -94,7 +97,11 @@ export async function getMyProfile(role: string, email: string, origin: string) 
 }
 
 export function getPublicProfile(id: string) {
-  if (id === "owner") {
+  const ownerAccount = id.startsWith("owner-")
+    ? findOwnerAccount(id.slice("owner-".length))
+    : id === "owner" ? ownerAccounts[0] : undefined;
+  if (ownerAccount) {
+    const ownerProfile = ownerProfiles[ownerAccount.email] ??= { phone: "", image: "" };
     return result({
       profile: {
         id,

@@ -2,18 +2,74 @@ import "dotenv/config";
 import "reflect-metadata";
 import cors from "cors";
 import express from "express";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { RegisterRoutes } from "./generated/routes";
-import { initializeStore, saveStore, type SiteVisit } from "./data/store";
+import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, saveStore, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
+import { authenticateBearerHeader } from "./features/auth/session";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
 
+function auditOwnerRequest(request: express.Request, body: unknown) {
+  const session = authenticateBearerHeader(request.get("authorization"));
+  const owner = session?.role === "owner" ? findOwnerAccount(session.email) : undefined;
+  if (!owner || request.path.startsWith("/api/push/") || request.path.startsWith("/api/auth/")) return;
+  const parts = request.path.split("/").filter(Boolean);
+  const collection = parts[1] === "attendance" && ["leaves", "leave-requests", "regularization-requests"].includes(parts[2] ?? "")
+    ? parts[2]
+    : parts[1] ?? "workspace";
+  const resources: Record<string, string> = {
+    projects: "Project",
+    quotations: "Quotation",
+    expenses: "Expense",
+    "site-visits": "Site visit",
+    progress: "Progress update",
+    materials: "Material",
+    "material-requests": "Material request",
+    attendance: "Attendance",
+    "leave-requests": "Leave request",
+    "regularization-requests": "Regularization request",
+    leaves: "Attendance leave",
+    people: "Person",
+    feedback: "Feedback",
+    backups: "Backup",
+    profiles: "Profile"
+  };
+  const resource = resources[collection] ?? collection.replace(/-/g, " ").replace(/s$/, "");
+  const payload = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const record = payload.record && typeof payload.record === "object"
+    ? payload.record as Record<string, unknown>
+    : payload.request && typeof payload.request === "object"
+      ? payload.request as Record<string, unknown>
+      : {};
+  const target = typeof record.id === "string"
+    ? record.id
+    : parts.find((part, index) => index > 1 && part !== "regularize" && part !== "download");
+  const requestedStatus = payload.decision ?? payload.status ?? record.status;
+  let action = request.method === "POST" ? "Created" : request.method === "DELETE" ? "Deleted" : "Updated";
+  if (typeof requestedStatus === "string" && ["Approved", "Declined", "Paid"].includes(requestedStatus)) {
+    action = requestedStatus;
+  } else if (parts.includes("regularize")) {
+    action = "Regularized";
+  } else if (request.path === "/api/backups") {
+    action = "Requested";
+  }
+  recordOwnerAction(owner, action, resource, target);
+}
+
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
 app.use((request, response, next) => {
-  if (request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS") {
+  const attendanceReadMayMaterializeRecords = request.method === "GET" && (
+    request.path === "/api/attendance" ||
+    request.path === "/api/dashboard" ||
+    request.path === "/api/reports/attendance"
+  );
+  if ((request.method === "GET" && !attendanceReadMayMaterializeRecords) ||
+    request.method === "HEAD" || request.method === "OPTIONS") {
     next();
     return;
   }
@@ -41,6 +97,36 @@ app.use((request, response, next) => {
             targets: [{ role: "owner", url: "/admin/attendance" }]
           }
         });
+      } else if (request.method === "POST" && request.path === "/api/attendance/leave-requests") {
+        publishWorkspaceUpdate({
+          resource: "attendance",
+          push: {
+            title: "Engineer leave requested",
+            body: `${request.body?.engineer ?? "An engineer"} requested leave for ${request.body?.date ?? "a scheduled date"}.`,
+            targets: [{ role: "owner", url: "/admin/attendance" }]
+          }
+        });
+      } else if (request.method === "PATCH" && /^\/api\/attendance\/(leave|regularization)-requests\/[^/]+$/.test(request.path)) {
+        const requestRecord = (body as { request?: { engineer?: string; status?: string; date?: string } } | null)?.request;
+        const isLeaveRequest = request.path.includes("/leave-requests/");
+        const engineer = people.find((person) => person.role === "Site Engineer" && person.name === requestRecord?.engineer);
+        publishWorkspaceUpdate({
+          resource: "attendance",
+          ...(requestRecord?.engineer && requestRecord.status ? {
+            push: {
+              title: `${isLeaveRequest ? "Leave" : "Attendance"} ${requestRecord.status.toLowerCase()}`,
+              body: isLeaveRequest
+                ? `Your leave request for ${requestRecord.date ?? "the requested date"} was ${requestRecord.status.toLowerCase()}.`
+                : `Your attendance regularization request was ${requestRecord.status.toLowerCase()}.`,
+              targets: [{
+                role: "employee",
+                userName: requestRecord.engineer,
+                ...(engineer ? { userEmail: engineer.email } : {}),
+                url: "/engineer/attendance"
+              }]
+            }
+          } : {})
+        });
       } else if (request.method === "POST" && request.path === "/api/expenses") {
         publishWorkspaceUpdate({
           resource: "expenses",
@@ -58,6 +144,9 @@ app.use((request, response, next) => {
   };
   response.json = ((body: unknown) => {
     if (response.statusCode >= 400) return sendResponse(body);
+    if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") {
+      auditOwnerRequest(request, body);
+    }
     void saveStore().then(() => {
       if (request.path === "/api/site-visits" || /^\/api\/site-visits\/[^/]+$/.test(request.path)) {
         const visit = (body as { record?: SiteVisit } | null)?.record;
@@ -133,12 +222,14 @@ app.post("/api/push/subscriptions", (request, response) => {
     return;
   }
   const body = request.body && typeof request.body === "object" ? request.body as Record<string, unknown> : {};
-  const { subscription, role, userName } = body;
-  if ((role !== "owner" && role !== "employee" && role !== "client") || typeof userName !== "string" || !userName.trim() || !isPushSubscription(subscription)) {
+  const { subscription, role, userName, userEmail } = body;
+  if ((role !== "owner" && role !== "employee" && role !== "client") || typeof userName !== "string" || !userName.trim() ||
+    userEmail !== undefined && (typeof userEmail !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) ||
+    !isPushSubscription(subscription)) {
     response.status(400).json({ error: "A valid role, push subscription, and user name are required." });
     return;
   }
-  savePushSubscription(subscription, userName.trim(), role);
+  savePushSubscription(subscription, userName.trim(), role, typeof userEmail === "string" ? userEmail.trim() : undefined);
   response.status(201).json({ enabled: true });
 });
 
@@ -152,7 +243,32 @@ app.delete("/api/push/subscriptions", (request, response) => {
   response.json({ enabled: false });
 });
 
+app.get("/api/audit-logs", (request, response) => {
+  const session = authenticateBearerHeader(request.get("authorization"));
+  if (!session) {
+    response.status(401).json({ error: "Sign-in is required to view audit logs." });
+    return;
+  }
+  if (session.role !== "owner" || !findOwnerAccount(session.email)) {
+    response.status(403).json({ error: "Owner access is required to view audit logs." });
+    return;
+  }
+  response.json(ownerAuditLogs);
+});
+
 RegisterRoutes(app);
+
+const frontendDirectory = path.resolve(__dirname, "../public");
+if (existsSync(frontendDirectory)) {
+  app.use(express.static(frontendDirectory));
+  app.get("*", (request, response, next) => {
+    if (request.path === "/api" || request.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    response.sendFile(path.join(frontendDirectory, "index.html"));
+  });
+}
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   console.error("API request failed:", error);

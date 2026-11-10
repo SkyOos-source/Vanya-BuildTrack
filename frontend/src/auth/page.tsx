@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { RoleId, SessionUser } from "../common/types";
-import { demoCredentials, isDemoMode, readSession, rolePath } from "../common/data";
-import { BuildingIcon } from "../common/components";
+import { clearAuthTokens, demoCredentials, isDemoMode, readSession, rolePath, saveAuthTokens } from "../common/data";
+import { BuildingIcon, PasswordInput } from "../common/components";
 import { ModeToggle } from "../common/mode-toggle";
 import { apiFetch } from "../common/api";
 
@@ -38,9 +38,12 @@ export function SignInPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, role })
       });
-      const result = await response.json() as { user?: SessionUser; error?: string };
+      const result = await response.json() as { user?: SessionUser; accessToken?: string; refreshToken?: string; error?: string };
       if (!response.ok || !result.user) throw new Error(result.error || `Sign-in failed (${response.status})`);
+      if (!demoMode && (!result.accessToken || !result.refreshToken)) throw new Error("Sign-in response did not include both session tokens.");
       localStorage.setItem("buildtrack-session", JSON.stringify(result.user));
+      if (result.accessToken && result.refreshToken) saveAuthTokens(result.accessToken, result.refreshToken);
+      else clearAuthTokens();
       const destination = (location.state as { from?: string } | null)?.from;
       navigate(destination?.startsWith(rolePath(role)) ? destination : rolePath(role), { replace: true });
     } catch (cause) {
@@ -59,7 +62,7 @@ export function SignInPage() {
         <form onSubmit={signIn}>
           <label>Sign in as<select value={role} onChange={(event) => selectDemoRole(event.target.value as RoleId)}><option value="owner">Owner</option><option value="employee">Employee</option><option value="client">Client</option></select></label>
           <label>Email address<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
-          <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required /></label>
+          <label>Password<PasswordInput autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required /></label>
           {error && <div className="signin-error" role="alert">{error}</div>}
           <button className="button button-primary signin-submit" type="submit" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"} <span>→</span></button>
         </form>

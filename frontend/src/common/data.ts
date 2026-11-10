@@ -84,10 +84,14 @@ export const fallbackData: DashboardData = {
 };
 
 export const demoCredentials: Record<RoleId, { email: string; password: string; label: string }> = {
-  owner: { email: "owner@vanya.com", password: "owner123", label: "Owner" },
+  owner: { email: "varun@vanya.com", password: "owner123", label: "Owner · Varun" },
   employee: { email: "employee@vanya.com", password: "employee123", label: "Employee" },
   client: { email: "client@vanya.com", password: "client123", label: "Client" }
 };
+export const demoOwnerAccounts = [
+  { email: "varun@vanya.com", name: "Varun", password: "owner123" },
+  { email: "chaitanya@vanya.com", name: "Chaitanya", password: "owner123" }
+];
 
 export const emptyDashboardData: DashboardData = {
   projects: [],
@@ -112,6 +116,25 @@ export function isDemoMode(): boolean {
 export function setDemoMode(enabled: boolean): void {
   localStorage.setItem(modeStorageKey, enabled ? "demo" : "real");
   localStorage.removeItem("buildtrack-session");
+  clearAuthTokens();
+}
+
+export function readAccessToken(): string | null {
+  return localStorage.getItem("buildtrack-access-token");
+}
+
+export function readRefreshToken(): string | null {
+  return localStorage.getItem("buildtrack-refresh-token");
+}
+
+export function saveAuthTokens(accessToken: string, refreshToken: string): void {
+  localStorage.setItem("buildtrack-access-token", accessToken);
+  localStorage.setItem("buildtrack-refresh-token", refreshToken);
+}
+
+export function clearAuthTokens(): void {
+  localStorage.removeItem("buildtrack-access-token");
+  localStorage.removeItem("buildtrack-refresh-token");
 }
 
 export function readSession(): SessionUser | null {
@@ -119,8 +142,16 @@ export function readSession(): SessionUser | null {
   if (!session) return null;
   try {
     const user = JSON.parse(session) as SessionUser;
-    return user && typeof user.name === "string" && typeof user.email === "string" &&
-      (user.role === "owner" || user.role === "employee" || user.role === "client") ? user : null;
+    if (!user || typeof user.name !== "string" || typeof user.email !== "string" ||
+      (user.role !== "owner" && user.role !== "employee" && user.role !== "client")) {
+      localStorage.removeItem("buildtrack-session");
+      return null;
+    }
+    if (!isDemoMode() && (!readAccessToken() || !readRefreshToken())) {
+      localStorage.removeItem("buildtrack-session");
+      return null;
+    }
+    return user;
   } catch {
     localStorage.removeItem("buildtrack-session");
     return null;
