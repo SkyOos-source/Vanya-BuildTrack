@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { BuildingIcon } from "../common/components";
 import { readSession, rolePath } from "../common/data";
-import { ModeToggle } from "../common/mode-toggle";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -69,7 +68,7 @@ export function LandingPage() {
   return <main className="landing-page">
     <header className="landing-nav">
       <Link className="brand landing-brand" to="/"><span className="brand-mark"><BuildingIcon /></span><span className="brand-copy"><strong>Vanya BuildTrack</strong><small>Construction Manager</small></span></Link>
-      <div className="landing-nav-actions"><ModeToggle /><Link className="button button-outline" to="/signin">Sign in <span>↗</span></Link></div>
+      <div className="landing-nav-actions"><Link className="button button-outline" to="/signin">Sign in <span>↗</span></Link></div>
     </header>
     <section className="landing-hero">
       <span className="landing-symbol"><BuildingIcon /></span>

@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, OwnerAuditLog, Project, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
 import { apiFetch } from "./api";
-import { isDemoMode } from "./data";
 import { formatCurrency, initials } from "./utils";
 import { ExpenseRows, ProjectCards, StatusBadge } from "./components";
 import { AttendancePage } from "./attendance-page";
@@ -37,7 +36,7 @@ export function FeaturePage({ page, role, currentUser, data, projects, search, s
   const [auditLogsError, setAuditLogsError] = useState("");
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
   const loadOwnerAuditLogs = async () => {
-    if (role !== "Owner" || page !== "Settings & Backup" || isDemoMode()) return;
+    if (role !== "Owner" || page !== "Settings & Backup") return;
     setAuditLogsLoading(true);
     try {
       const response = await apiFetch("/api/audit-logs");
@@ -189,10 +188,8 @@ export function FeaturePage({ page, role, currentUser, data, projects, search, s
       {page === "Settings & Backup" && role === "Owner" && <>
         <section className="backup-layout"><article className="panel backup-card"><span className="report-icon">↧</span><span className="panel-kicker">ACCOUNT DATA</span><h2>Back up your workspace</h2><p>Download a JSON export of your project, site, quotation, and expense records.</p><ul><li>Project and site summaries</li><li>Quotations and expense records</li><li>Activity and attendance history</li></ul><button className="button button-primary" onClick={onBackup}>＋ Request account backup</button><small>Backups are generated from current workspace data.</small></article><section className="panel backup-history"><div className="panel-heading compact"><div><span className="panel-kicker">RECENT REQUESTS</span><h2>Backup history</h2></div><span className="backup-count">{data.backups.length} requests</span></div><div className="backup-list">{data.backups.map((backup) => <article className="backup-row" key={backup.id}><span className="backup-file">↧</span><div><strong>{backup.id} · Workspace data export</strong><small>Requested by {backup.requestedBy} · {backup.requestedAt}</small></div><button className="button button-outline" onClick={() => void downloadBackup(backup.id)}>Download</button><StatusBadge status={backup.status} /></article>)}</div></section></section>
         <section className="panel backup-history owner-audit-history">
-          <div className="panel-heading compact"><div><span className="panel-kicker">OWNER ACTIVITY</span><h2>Audit log</h2></div><button className="button button-outline" disabled={auditLogsLoading || isDemoMode()} onClick={() => void loadOwnerAuditLogs()}>{auditLogsLoading ? "Refreshing…" : "Refresh"}</button></div>
-          {isDemoMode()
-            ? <p className="palette-settings-copy">Owner audit logs are available in real mode.</p>
-            : auditLogsError
+          <div className="panel-heading compact"><div><span className="panel-kicker">OWNER ACTIVITY</span><h2>Audit log</h2></div><button className="button button-outline" disabled={auditLogsLoading} onClick={() => void loadOwnerAuditLogs()}>{auditLogsLoading ? "Refreshing…" : "Refresh"}</button></div>
+          {auditLogsError
               ? <p className="palette-settings-copy" role="alert">{auditLogsError}</p>
               : ownerAuditLogs.length > 0
                 ? <div className="backup-list">{ownerAuditLogs.map((entry) => <article className="backup-row" key={entry.id}><span className="backup-file">↻</span><div><strong>{entry.action} {entry.resource}{entry.target ? ` · ${entry.target}` : ""}</strong><small>{entry.ownerName} ({entry.ownerEmail}) · {new Date(entry.createdAt).toLocaleString()}</small></div></article>)}</div>

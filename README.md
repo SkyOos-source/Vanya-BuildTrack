@@ -17,12 +17,7 @@ Open http://localhost:5173. The public landing page is `/`, the sign-in page is 
 
 BuildTrack can be installed from its landing page as a progressive web app. On a supported browser, select **Install app** to open the browser's install prompt. On iPhone or iPad, select **Install app** for the Safari **Share → Add to Home Screen** steps. App installation requires a secure site (HTTPS, or localhost for development).
 
-The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts.
-
-Use the **Demo mode** toggle in the header to choose between:
-
-- **Demo mode:** sample data and sign-in are handled entirely in the browser. CRUD operations work and changes persist in that browser's local storage; no backend API requests are made.
-- **Real mode (default):** sign-in and workspace data use the SQLite database at `backend/data/buildtrack.db`. A new database starts empty and requires one-time owner setup.
+The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts. Workspace data and sign-in are served by the backend; a new database starts empty and requires one-time owner setup.
 
 ### Deploy to a VPS with UAT and production
 
@@ -54,15 +49,7 @@ To deploy an update, pull the desired code and run the matching `docker compose 
 
 This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
 
-Demo credentials are available when Demo mode is on:
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Owner | `varun@vanya.com` or `chaitanya@vanya.com` | `owner123` |
-| Employee | `employee@vanya.com` | `employee123` |
-| Client | `client@vanya.com` | `client123` |
-
-Real mode provides two full-access owner accounts: the initial setup page lets you choose their names, emails, and passwords. Passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
+The initial setup page lets you choose names, emails, and passwords for two full-access owner accounts. Passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
 
 Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details and compare photos marked as project start and completion (or the earliest and latest uploaded photos). On the client Feedback page, a rating and comment can be saved in BuildTrack for the owner and posted publicly through the Google review page. The default Google link opens the Vanya Concrete Technologies listing, where clients can select **Write a review**. To use a direct review form link instead, set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env`.
 
@@ -74,7 +61,7 @@ Web Push requires HTTPS (localhost is supported for local development). If VAPID
 
 ### Backend architecture
 
-The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns empty live-mode collections, account credentials, sequence recovery, and SQLite persistence. Demo records and local demo request handling live in the frontend.
+The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns workspace collections, account credentials, sequence recovery, and SQLite persistence.
 
 Profile QR codes link to the frontend origin. In local development, the API derives it from the request host and maps port `3001` to Vite's default port `5173`. If the frontend is hosted separately in production, set `FRONTEND_URL` to its public origin (for example, `https://buildtrack.example.com`).
 
@@ -115,7 +102,7 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET`, `POST /api/site-visits`, and `PATCH /api/site-visits/:id` — schedule visits and mark them complete or cancelled.
 - `GET` and `POST /api/attendance` — retrieve attendance and record photo/location-backed check-in and check-out; an unfinished check-in becomes absent 24 hours after check-in, and a late employee check-out is rejected. `PATCH /api/attendance/:id/regularize` lets an owner enter the actual check-out time and reason for a missed check-out. `/api/attendance/leaves` supports listing, adding, and deleting owner-managed leave dates. Sundays and scheduled leave dates are treated as non-working days, not absences.
 - `GET`, `POST /api/people`, and `DELETE /api/people/:id` — manage the workspace people list; new site engineers receive login credentials set by the owner.
-- `GET` and `POST /api/feedback` — list and submit demo client feedback.
+- `GET` and `POST /api/feedback` — list and submit client feedback.
 - `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
 - `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 

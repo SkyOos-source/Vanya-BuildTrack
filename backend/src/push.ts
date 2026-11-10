@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import webpush, { type PushSubscription } from "web-push";
-import { pushSubscriptions, saveStore, type DemoRole, type PushSubscriptionRecord } from "./data/store";
+import { pushSubscriptions, saveStore, type AccountRole, type PushSubscriptionRecord } from "./data/store";
 
-export type PushTarget = { role: DemoRole; userName?: string; userEmail?: string; url: string };
+export type PushTarget = { role: AccountRole; userName?: string; userEmail?: string; url: string };
 export type PushMessage = { title: string; body: string; targets: PushTarget[] };
 
 type VapidConfiguration = { publicKey: string; privateKey: string };
@@ -62,7 +62,7 @@ export function isPushSubscription(value: unknown): value is PushSubscription {
     typeof keys.auth === "string" && /^[A-Za-z0-9_-]+$/.test(keys.auth);
 }
 
-export function savePushSubscription(subscription: PushSubscription, userName: string, role: DemoRole, userEmail?: string): void {
+export function savePushSubscription(subscription: PushSubscription, userName: string, role: AccountRole, userEmail?: string): void {
   const record: PushSubscriptionRecord = {
     endpoint: subscription.endpoint,
     keys: subscription.keys,

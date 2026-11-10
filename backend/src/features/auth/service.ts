@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   completeInitialOwnerSetup,
   findOwnerAccount,
-  isDemoRole,
+  isAccountRole,
   isInitialOwnerSetupRequired,
   people,
   readText,
@@ -67,7 +67,7 @@ export async function login(body: any) {
   const email = readText(body?.email)?.toLowerCase() ?? "";
   const password = readText(body?.password) ?? "";
   const role: unknown = body?.role;
-  if (!isDemoRole(role)) return failure(400, "Choose a valid account role.");
+  if (!isAccountRole(role)) return failure(400, "Choose a valid account role.");
   const ownerLogin = role === "owner" && verifyOwnerCredential(email, password);
   const invitedEmployeeLogin = role === "employee" && verifyEmployeeCredential(email, password);
   const invitedClientLogin = role === "client" && verifyClientCredential(email, password);

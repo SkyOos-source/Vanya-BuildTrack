@@ -82,9 +82,9 @@ export type Person = { id: string; name: string; role: "Client" | "Site Engineer
 export type OwnerProfile = { phone: string; image: string };
 export const ownerProfiles: Record<string, OwnerProfile> = {};
 export type OwnerAccount = { email: string; name: string; salt: string; passwordHash: string };
-export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: DemoRole; userName: string; userEmail?: string };
+export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: AccountRole; userName: string; userEmail?: string };
 export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
-export type DemoRole = "owner" | "employee" | "client";
+export type AccountRole = "owner" | "employee" | "client";
 
 export const projects: Project[] = [];
 
@@ -201,7 +201,7 @@ export function readAttendanceProof(value: unknown): AttendanceProof | null {
   };
 }
 
-export function isDemoRole(value: unknown): value is DemoRole {
+export function isAccountRole(value: unknown): value is AccountRole {
   return value === "owner" || value === "employee" || value === "client";
 }
 

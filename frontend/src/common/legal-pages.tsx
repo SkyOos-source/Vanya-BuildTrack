@@ -27,16 +27,16 @@ export function PrivacyPolicyPage() {
     <h2>How information is used</h2>
     <p>Information is used to display the workspace features: project progress, assignments, financial records, attendance, and updates to the relevant workspace roles. The app does not use this information for advertising.</p>
     <h2>Storage and access</h2>
-    <p>Demo mode stores sample workspace data and its sign-in session in browser local storage without contacting the backend. In live mode, workspace data is stored in the backend's SQLite database, while the sign-in session remains in browser storage. Access to the application, browser, or database may expose workspace records; deploy with appropriate security and access controls.</p>
+    <p>Workspace data is stored in the backend's configured database, while the sign-in session remains in browser storage. Access to the application, browser, or database may expose workspace records; deploy with appropriate security and access controls.</p>
     <h2>Retention and questions</h2>
-    <p>Workspace data remains in the selected mode's storage until it is changed or removed by the workspace operator. For requests about records, contact the administrator who provided access.</p>
+    <p>Workspace data remains in the configured database until it is changed or removed by the workspace operator. For requests about records, contact the administrator who provided access.</p>
     <p>This sample policy is informational and should be reviewed and adapted by the organization before production use.</p>
   </LegalLayout>;
 }
 
 export function DataUsagePage() {
   return <LegalLayout title="Data Usage" eyebrow="HOW BUILDTRACK USES DATA">
-    <p>BuildTrack uses information submitted to the workspace to provide project management features. Demo mode is intended for sample data and evaluation. Use live mode only with the security and operational controls appropriate for your organization.</p>
+    <p>BuildTrack uses information submitted to the workspace to provide project management features. Use the application only with the security and operational controls appropriate for your organization.</p>
     <h2>Workspace data</h2>
     <ul>
       <li><strong>Projects:</strong> project names, locations, assigned engineers, status, and progress.</li>
@@ -45,9 +45,9 @@ export function DataUsagePage() {
       <li><strong>Attendance:</strong> check-in and check-out timestamps, photos, and location coordinates when attendance is submitted.</li>
     </ul>
     <h2>What happens to the data</h2>
-    <p>In demo mode, workspace records and sample sign-in are handled in the browser, with no API calls. In live mode, the frontend requests workspace records from the app API and the backend persists them in SQLite. The sign-in session is stored in browser local storage. Uploaded attachments are stored with their related records.</p>
+    <p>The frontend requests workspace records from the app API, and the backend persists them in the configured database. The sign-in session is stored in browser local storage. Uploaded attachments are stored with their related records.</p>
     <h2>Use and sharing</h2>
-    <p>Data is displayed to support the selected workspace role and related project workflows. The app has no advertising or analytics integration. Do not enter real personal, financial, or confidential information into a publicly accessible demo environment.</p>
+    <p>Data is displayed to support the selected workspace role and related project workflows. The app has no advertising or analytics integration. Only use this workspace if you are authorized to access its records.</p>
     <h2>Managing records</h2>
     <p>Workspace operators can manage records through the app and its configured data store. Contact the workspace administrator for access, correction, or deletion requests.</p>
   </LegalLayout>;

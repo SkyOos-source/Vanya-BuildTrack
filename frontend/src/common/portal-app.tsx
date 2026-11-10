@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
-import { clearAuthTokens, emptyDashboardData, fallbackData, isDemoMode, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
+import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch } from "./api";
 import { formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
@@ -14,7 +14,6 @@ import OwnerMaterialsPage from "../owner/material/page";
 import OwnerFinancialReport from "../owner/dashboard/financial-report";
 import { NotFoundPage } from "./legal-pages";
 import { AccountProfilePage } from "./profile-page";
-import { ModeToggle } from "./mode-toggle";
 import type { SiteVisitAction } from "./site-visits-page";
 
 type PushStatus = "checking" | "ready" | "enabled" | "unsupported" | "unconfigured" | "denied" | "error";
@@ -46,8 +45,7 @@ export function PortalRoute({ role }: { role: RoleId }) {
 export function PortalApp({ role, userName, userEmail }: { role: Role; userName: string; userEmail: string }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const demoMode = isDemoMode();
-  const [data, setData] = useState<DashboardData>(demoMode ? fallbackData : emptyDashboardData);
+  const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const page = pageFromPath(location.pathname, role);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
@@ -82,10 +80,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   useEffect(() => {
     let active = true;
     const checkPushSubscription = async () => {
-      if (demoMode) {
-        setPushStatus("unconfigured");
-        return;
-      }
       if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
         setPushStatus("unsupported");
         return;
@@ -124,7 +118,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     };
     void checkPushSubscription();
     return () => { active = false; };
-  }, [demoMode, role, userName]);
+  }, [role, userName]);
 
   const togglePushNotifications = async () => {
     if (pushStatus === "enabled") {
@@ -250,7 +244,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, [attendanceReviewVersion, data.attendance, role, userName]);
 
   useEffect(() => {
-    if (demoMode) return;
     const events = new EventSource("/api/events");
     events.onmessage = (event) => {
       let update: {
@@ -353,41 +346,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       console.error("Real-time workspace connection interrupted; the browser will retry automatically.");
     };
     return () => events.close();
-  }, [data.people, data.projects, demoMode, role, userName]);
-
-  useEffect(() => {
-    if (!demoMode || role === "Client") return;
-    const refreshDemoSiteVisits = (event: StorageEvent) => {
-      if (event.key !== "buildtrack-demo-data") return;
-      void (async () => {
-        try {
-          const response = await apiFetch("/api/site-visits");
-          if (!response.ok) throw new Error(`Site visit refresh failed (${response.status})`);
-          const visits: unknown = await response.json();
-          if (!Array.isArray(visits)) throw new Error("Site visit refresh returned invalid data.");
-          const updatedVisits = visits as SiteVisit[];
-          const previousById = new Map(data.siteVisits.map((visit) => [visit.id, visit]));
-          const changedVisit = updatedVisits.find((visit) => {
-            const previous = previousById.get(visit.id);
-            return (role === "Employee" && visit.engineer === userName && (!previous || previous.status !== visit.status)) ||
-              (role === "Owner" && previous && previous.status !== visit.status);
-          });
-          setData((current) => ({ ...current, siteVisits: updatedVisits }));
-          if (changedVisit && role === "Employee" && !previousById.has(changedVisit.id)) {
-            showToast(`New site visit scheduled for ${changedVisit.project} on ${changedVisit.date}.`);
-          } else if (changedVisit && role === "Employee") {
-            showToast(`Your site visit at ${changedVisit.site} was updated.`);
-          } else if (changedVisit && role === "Owner") {
-            showToast(`${changedVisit.engineer} updated the site visit at ${changedVisit.site}.`);
-          }
-        } catch (error) {
-          console.error("Unable to refresh demo site visits after a workspace change:", error);
-        }
-      })();
-    };
-    window.addEventListener("storage", refreshDemoSiteVisits);
-    return () => window.removeEventListener("storage", refreshDemoSiteVisits);
-  }, [data.siteVisits, demoMode, role, userName]);
+  }, [data.people, data.projects, role, userName]);
 
   useEffect(() => {
     if (role !== "Client" || page !== "My Projects") return;
@@ -716,7 +675,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       setModal(null);
       showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Expense request" : modal === "expense-log" ? "Expense" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
-      console.error("Unable to save demo record:", error);
+      console.error("Unable to save record:", error);
       showToast(error instanceof Error ? error.message : "Could not save this record.");
     }
   };
@@ -969,17 +928,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   };
 
   const signOut = async () => {
-    if (!demoMode) {
-      try {
-        const response = await apiFetch("/api/auth/logout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: readRefreshToken() })
-        });
-        if (!response.ok) throw new Error(`Sign-out failed (${response.status})`);
-      } catch (error) {
-        console.error("API sign-out failed:", error);
-      }
+    try {
+      const response = await apiFetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: readRefreshToken() })
+      });
+      if (!response.ok) throw new Error(`Sign-out failed (${response.status})`);
+    } catch (error) {
+      console.error("API sign-out failed:", error);
     }
     localStorage.removeItem("buildtrack-session");
     clearAuthTokens();
@@ -1069,7 +1026,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           <button className="mobile-menu icon-button" aria-label="Open navigation" onClick={() => setMobileNavOpen(!mobileNavOpen)}>☰</button>
           <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{page}</strong></div>
           <div className="topbar-actions">
-            <ModeToggle />
             <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0" /></svg><i /></button>
             {role === "Client" ? <div className="top-avatar" aria-label={`${currentUser} avatar`}>{initials(currentUser)}</div> : <Link className="top-avatar" to={pagePath(role, "Profile")} aria-label={`View profile for ${currentUser}`}>{profileImage ? <img src={profileImage} alt="" /> : initials(currentUser)}</Link>}
           </div>
