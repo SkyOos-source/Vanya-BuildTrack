@@ -28,14 +28,14 @@ Use the **Demo mode** toggle in the header to choose between:
 
 The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. UAT and production run as separate containers, have separate SQLite/VAPID data volumes, and bind only to localhost ports `3101` and `3102`; use a reverse proxy for public HTTPS access.
 
-Before deploying, point two DNS names at the VPS (for example `uat.example.com` and `app.example.com`). Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. From the repository directory:
+Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. From the repository directory:
 
 ```sh
 cp deploy/uat.env.example deploy/uat.env
 cp deploy/prod.env.example deploy/prod.env
 ```
 
-Edit both environment files: set `FRONTEND_URL` to the corresponding HTTPS domain, replace both owner passwords with strong unique secrets, and set `VAPID_SUBJECT` to a monitored email address. Do not reuse the owner passwords between environments. The passwords provision each environment's initial owner accounts only on first database creation.
+Edit both environment files: the `FRONTEND_URL` values are set to the corresponding HTTPS domains; replace both owner passwords with strong unique secrets, and set `VAPID_SUBJECT` to a monitored email address. Do not reuse the owner passwords between environments. The passwords provision each environment's initial owner accounts only on first database creation.
 
 Start either environment independently:
 
@@ -44,7 +44,7 @@ docker compose --profile uat up -d --build
 docker compose --profile prod up -d --build
 ```
 
-The first start applies SQLite migrations automatically. Configure Nginx using `deploy/nginx-buildtrack.conf.example` (replace the example hostnames), enable that site, then obtain HTTPS certificates with Certbot's Nginx plugin for both DNS names. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app ports are bound to `127.0.0.1`.
+The first start applies SQLite migrations automatically. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain HTTPS certificates with Certbot's Nginx plugin for both DNS names. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app ports are bound to `127.0.0.1`.
 
 To deploy an update, pull the desired code and run the matching `docker compose --profile ... up -d --build` command. Keep the environment files private, and back up each environment's SQLite workspace before upgrades or VPS maintenance. The named volumes `buildtrack-uat-data` and `buildtrack-prod-data` contain the databases and generated push keys; do not remove them when updating containers.
 
