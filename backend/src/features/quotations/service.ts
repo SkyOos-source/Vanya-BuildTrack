@@ -1,9 +1,9 @@
-import { nextId, projects, readAmount, readPdfAttachment, readText } from "../../data/store";
+import { nextId, people, projects, readAmount, readPdfAttachment, readText } from "../../data/store";
 import { publishWorkspaceUpdate } from "../../realtime";
-import { quotations } from "./data";
+import { listQuotationsWithClientEmails, quotations } from "./data";
 import { failure, result, today } from "../shared";
 
-export const listQuotations = () => quotations;
+export const listQuotations = () => listQuotationsWithClientEmails();
 
 export function createQuotation(body: any) {
   const title = readText(body?.title);
@@ -12,11 +12,13 @@ export function createQuotation(body: any) {
   const attachment = readPdfAttachment(body?.quotationAttachment);
   if (!title || !project || amount === null) return failure(400, "Quotation title, project, and non-negative amount are required.");
   if (body?.quotationAttachment && !attachment) return failure(400, "Quotation attachment must be a valid PDF file.");
+  const client = people.find((person) => person.role === "Client" && person.project === project);
   const quote = {
     id: nextId("quotation"),
     project,
     title,
     client: projects.find((item) => item.name === project)?.client ?? "Unassigned",
+    ...(client ? { clientEmail: client.email.toLowerCase() } : {}),
     amount,
     date: today(),
     status: "Awaiting review",

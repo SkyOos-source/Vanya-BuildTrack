@@ -2,10 +2,11 @@ import type { DashboardData, Quote } from "../../common/types";
 import { formatCurrency } from "../../common/utils";
 import { StatusBadge } from "../../common/components";
 
-export function ClientDashboard({ data, currentUser, onNavigate, onQuote }: { data: DashboardData; currentUser: string; onNavigate: (page: string) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void }) {
-  const assignedProjectName = data.people.find((person) => person.role === "Client" && person.name === currentUser)?.project;
-  const project = data.projects.find((item) => item.client === currentUser || item.name === assignedProjectName);
-  const projectQuotes = data.quotes.filter((item) => item.client === currentUser || item.project === assignedProjectName);
+export function ClientDashboard({ data, currentUser, currentUserEmail, onNavigate, onQuote }: { data: DashboardData; currentUser: string; currentUserEmail: string; onNavigate: (page: string) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void }) {
+  const clientEmail = currentUserEmail.toLowerCase();
+  const client = data.people.find((person) => person.role === "Client" && person.email.toLowerCase() === clientEmail);
+  const project = data.projects.find((item) => item.name === client?.project);
+  const projectQuotes = data.quotes.filter((item) => item.clientEmail?.toLowerCase() === clientEmail);
   const projectQuotationTotal = projectQuotes.reduce((total, quote) => total + quote.amount, 0);
   const timeline = data.activities.filter((item) => item.project === project?.name && item.kind === "progress");
   const photos = timeline.flatMap((item) =>

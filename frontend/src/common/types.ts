@@ -15,7 +15,7 @@ export type Project = {
   dueDate: string;
   image: string;
 };
-export type Quote = { id: string; project: string; title: string; client: string; amount: number; date: string; status: string; attachment?: string };
+export type Quote = { id: string; project: string; title: string; client: string; clientEmail?: string; amount: number; date: string; status: string; attachment?: string };
 export type Expense = { id: string; project: string; category: string; description: string; amount: number; date: string; submittedBy: string; status: string; attachment?: string };
 export type SiteVisitProof = { image: string; capturedAt: string };
 export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; status: string; purpose?: string; checkIn?: SiteVisitProof; checkOut?: SiteVisitProof };

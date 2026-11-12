@@ -968,6 +968,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const pageTitle = page === "Dashboard" ? `${role} Dashboard` : page;
   const featurePageProps = {
     currentUser,
+    currentUserEmail: userEmail,
     data,
     projects: visibleProjects,
     search,
@@ -1044,7 +1045,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           {page === "Profile" && role !== "Client" && <AccountProfilePage role={role} email={userEmail} onProfileImageChange={setProfileImage} />}
           {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
           {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} />}
-          {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} onQuote={updateQuote} />}
+          {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} currentUserEmail={userEmail} onNavigate={navigateToPage} onQuote={updateQuote} />}
           {page === "Financial Overview" && role === "Owner" && <OwnerFinancialReport data={data} onBack={() => navigateToPage("Dashboard")} />}
           {page !== "Dashboard" && role === "Owner" && page === "Projects & Sites" && <OwnerProjectsPage {...featurePageProps} />}
           {page !== "Dashboard" && role === "Owner" && page === "Materials" && <OwnerMaterialsPage {...featurePageProps} />}

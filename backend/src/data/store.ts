@@ -22,6 +22,7 @@ export type Quote = {
   project: string;
   title: string;
   client: string;
+  clientEmail?: string;
   amount: number;
   date: string;
   status: string;

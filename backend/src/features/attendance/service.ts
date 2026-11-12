@@ -271,9 +271,6 @@ export function recordAttendance(body: any) {
   }
   let record = attendance.find((item) => item.engineer === engineer && item.date === date);
   if (action === "check-in" && record?.checkIn) return failure(409, "A check-in is already recorded for today.");
-  if (action === "check-in" && record?.status === "Off" && record.evidence === "Approved engineer leave") {
-    return failure(409, "Your leave for today has been approved, so attendance cannot be recorded.");
-  }
   if (action === "check-out" && (!record?.checkIn || record.checkOut || record.checkoutRegularization)) return failure(409, "Check in before recording a check-out.");
   if (action === "check-out" && record && hasMissedCheckOutDeadline(record)) {
     return failure(409, "The check-out deadline has passed. Submit a regularization request instead.");

@@ -9,7 +9,7 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview";
 import { SiteVisitsPage, type SiteVisitAction } from "./site-visits-page";
 import { PalettePicker } from "./palette";
 
-export type FeaturePageProps = { page: string; role: Role; currentUser: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
+export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
 
 function localDateKey(value?: string) {
   if (!value) return "";
@@ -18,7 +18,7 @@ function localDateKey(value?: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function FeaturePage({ page, role, currentUser, data, projects, search, setSearch, filter, setFilter, onCreate, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onAttendanceLeaveReview, onExpenseStatus, onVisitStatus, onUpdatePerson, onRemovePerson, onToast, onFeedback, onBackup }: FeaturePageProps) {
+export function FeaturePage({ page, role, currentUser, currentUserEmail, data, projects, search, setSearch, filter, setFilter, onCreate, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onAttendanceLeaveReview, onExpenseStatus, onVisitStatus, onUpdatePerson, onRemovePerson, onToast, onFeedback, onBackup }: FeaturePageProps) {
   const [rating, setRating] = useState(5);
   const [workProgressDate, setWorkProgressDate] = useState("");
   const [workProgressProject, setWorkProgressProject] = useState("All");
@@ -57,10 +57,13 @@ export function FeaturePage({ page, role, currentUser, data, projects, search, s
     void loadOwnerAuditLogs();
   }, [page, role]);
   const projectView = page === "Projects & Sites" || page === "My Projects" || page === "My Sites";
-  const clientProjectName = data.people.find((person) => person.role === "Client" && person.name === currentUser)?.project;
-  const scopedProjects = role === "Owner" ? projects : role === "Employee" ? projects.filter((project) => project.engineer === currentUser) : projects.filter((project) => project.client === currentUser || project.name === clientProjectName);
+  const clientEmail = currentUserEmail.toLowerCase();
+  const clientProjectName = data.people.find((person) => person.role === "Client" && person.email.toLowerCase() === clientEmail)?.project;
+  const scopedProjects = role === "Owner" ? projects : role === "Employee" ? projects.filter((project) => project.engineer === currentUser) : projects.filter((project) => project.name === clientProjectName);
   const selectedProject = scopedProjects.find((project) => project.id === selectedProjectId);
-  const visibleQuotes = role === "Client" ? data.quotes.filter((quote) => quote.client === currentUser) : data.quotes;
+  const visibleQuotes = role === "Client"
+    ? data.quotes.filter((quote) => quote.clientEmail?.toLowerCase() === clientEmail)
+    : data.quotes;
   const quotationGroups = new Map<string, Quote[]>();
   for (const quote of visibleQuotes) {
     const projectQuotes = quotationGroups.get(quote.project) ?? [];
