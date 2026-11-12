@@ -1,7 +1,7 @@
 import { Body, Get, Post, Request, Route } from "tsoa";
 import type { Request as ExpressRequest } from "express";
 import { ApiController } from "../shared";
-import { initialOwnerSetupStatus, login, logout, refresh, setupInitialOwners } from "./service";
+import { initialOwnerSetupStatus, login, logout, refresh, sendLoginCode, setupInitialOwners, verifyLoginCode } from "./service";
 
 @Route("api/auth")
 export class AuthController extends ApiController {
@@ -19,6 +19,16 @@ export class AuthController extends ApiController {
   @Post("login")
   public signIn(@Body() body: any): any {
     return login(body).then((value) => this.respond(value));
+  }
+
+  @Post("send-code")
+  public sendCode(@Body() body: unknown): any {
+    return sendLoginCode(body).then((value) => this.respond(value));
+  }
+
+  @Post("verify-code")
+  public verifyCode(@Body() body: unknown): any {
+    return verifyLoginCode(body).then((value) => this.respond(value));
   }
 
   @Post("refresh")

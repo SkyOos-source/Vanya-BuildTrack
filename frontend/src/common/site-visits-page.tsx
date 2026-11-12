@@ -2,33 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Role, SiteVisit, SiteVisitProof } from "./types";
 import { StatusBadge } from "./components";
 import { siteVisitDateParts } from "./utils";
+import { compressImageFile } from "./utils";
 
 export type SiteVisitAction = "check-in" | "check-out";
-
-async function compressVisitPhoto(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Could not prepare the site visit photo.");
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Could not prepare the site visit photo.")), "image/jpeg", 0.78);
-    });
-    if (blob.size > 1_800_000) throw new Error("The site visit photo must be smaller than 1.8 MB.");
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error("Could not read the site visit photo."));
-      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Could not read the site visit photo."));
-      reader.readAsDataURL(blob);
-    });
-  } finally {
-    bitmap.close();
-  }
-}
 
 function VisitProof({ proof, label }: { proof?: SiteVisitProof; label: string }) {
   if (!proof) return null;
@@ -170,7 +146,7 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
     setSaving(true);
     setError("");
     try {
-      const proof = { image: await compressVisitPhoto(photo), capturedAt: new Date().toISOString() };
+      const proof = { image: await compressImageFile(photo), capturedAt: new Date().toISOString() };
       await onAction(capture.visit, capture.action, proof);
       setCapture(null);
       setPhoto(null);

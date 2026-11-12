@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch } from "./api";
-import { formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
+import { compressImageFile, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
 import OwnerDashboard from "../owner/dashboard/page";
 import EngineerDashboard from "../engineer/dashboard/page";
@@ -51,6 +51,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<RecordModalType | null>(null);
+  const [personCreationRole, setPersonCreationRole] = useState<"Site Engineer" | "Client">("Site Engineer");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [attendanceReviewNotifications, setAttendanceReviewNotifications] = useState<NotificationItem[]>([]);
@@ -59,6 +60,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
+  const createPerson = (personRole: "Site Engineer" | "Client") => {
+    setPersonCreationRole(personRole);
+    setModal("person");
+  };
 
   useEffect(() => {
     if (role === "Client") return;
@@ -566,7 +571,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const readFileDataUrl = (file: FormDataEntryValue | null) => {
     if (!(file instanceof File) || !file.size) return Promise.resolve(undefined);
-    if (file.size > 1_800_000) return Promise.reject(new Error("The attachment must be smaller than 1.8 MB."));
+    if (file.type.startsWith("image/")) return compressImageFile(file);
+    if (file.size > 2_500_000) return Promise.reject(new Error("The PDF attachment must be smaller than 2.5 MB."));
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(new Error("Could not read the selected attachment."));
@@ -578,8 +584,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const readFileDataUrls = async (entries: FormDataEntryValue[]) => {
     const files = entries.filter((entry): entry is File => entry instanceof File && entry.size > 0);
     if (files.length > 5) throw new Error("You can upload up to 5 progress photos.");
-    if (files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
-      throw new Error("Progress photos must be JPEG, PNG, or WebP images.");
+    if (files.some((file) => !file.type.startsWith("image/"))) {
+      throw new Error("Progress photo uploads must be image files.");
     }
     return Promise.all(files.map((file) => readFileDataUrl(file)));
   };
@@ -976,6 +982,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     filter,
     setFilter,
     onCreate: setModal,
+    onCreatePerson: createPerson,
     onQuote: updateQuote,
     onExpenseStatus: updateExpense,
     onVisitStatus: updateVisit,
@@ -1075,7 +1082,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} projects={data.projects} people={data.people} onClose={() => setModal(null)} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} initialPersonRole={personCreationRole} projects={data.projects} people={data.people} onClose={() => setModal(null)} onSubmit={createRecord} />}
     </div>
   );
 }

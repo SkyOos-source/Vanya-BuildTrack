@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { findOwnerAccount, ownerProfiles, ownerAccounts, people, readText } from "../../data/store";
+import { findOwnerAccount, ownerProfiles, ownerAccounts, people, readCompressedImage, readText } from "../../data/store";
 import { failure, result } from "../shared";
 
 type PublicProfile = {
@@ -60,20 +60,27 @@ export function updateMyProfile(role: string, email: string, body: unknown) {
   let image: string | undefined;
   if (Object.hasOwn(input, "image")) {
     if (input.image === null || input.image === "") image = "";
-    else if (typeof input.image === "string" &&
-      /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(input.image) &&
-      input.image.length <= 1_800_000) image = input.image;
-    else return failure(400, "Choose a valid JPEG, PNG, or WebP profile photo smaller than 1.8 MB.");
+    else {
+      const compressedImage = readCompressedImage(input.image);
+      if (!compressedImage) return failure(400, "Choose a valid compressed JPEG profile photo no larger than 500 KB.");
+      image = compressedImage;
+    }
   }
   if (role === "owner") {
     const ownerProfile = ownerProfiles[profile.email.toLowerCase()] ??= { phone: "", image: "" };
-    if (Object.hasOwn(input, "phone")) ownerProfile.phone = phone;
+    if (Object.hasOwn(input, "phone")) {
+      if (ownerProfile.phone !== phone) ownerProfile.phoneVerified = false;
+      ownerProfile.phone = phone;
+    }
     if (image !== undefined) ownerProfile.image = image;
   }
   else {
     const person = people.find((item) => item.email.toLowerCase() === email.trim().toLowerCase() && item.role === "Site Engineer");
     if (!person) return failure(404, "Profile not found.");
-    if (Object.hasOwn(input, "phone")) person.phone = phone;
+    if (Object.hasOwn(input, "phone")) {
+      if (person.phone !== phone) person.phoneVerified = false;
+      person.phone = phone;
+    }
     if (image !== undefined) person.image = image;
   }
   return result({ profile: { ...profile, phone, image: image === undefined ? profile.image : image || null } });

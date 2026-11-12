@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Attendance, AttendanceLeave, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
 import { StatusBadge } from "./components";
 import { apiFetch } from "./api";
+import { compressImageFile } from "./utils";
 
 type AttendancePageProps = {
   data: DashboardData;
@@ -32,22 +33,6 @@ function attendanceStatus(record: Attendance) {
   if (record.checkIn && (record.checkOut || record.checkoutRegularization)) return "Present";
   if (record.checkIn) return "Scheduled";
   return record.status;
-}
-
-async function compressPhoto(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Could not prepare the selected photo.");
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.78);
-  } finally {
-    bitmap.close();
-  }
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
@@ -506,7 +491,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     setError("");
     try {
       const position = await getCurrentPosition();
-      const image = await compressPhoto(photo);
+      const image = await compressImageFile(photo);
       await onSubmit(action, today, {
         image,
         capturedAt: new Date().toISOString(),

@@ -23,9 +23,9 @@ The Vite frontend runs at http://localhost:5173 and the Express API runs at http
 
 The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. UAT and production run as separate containers, have separate SQLite/VAPID data volumes, and bind only to localhost ports `3101` and `3102`; use a reverse proxy for public HTTPS access.
 
-Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. No deployment `.env` files or environment password settings are needed; the domains are configured in `docker-compose.yml`.
+Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. MFA is off by default, so Twilio credentials are not required unless you decide to enable it.
 
-Each fresh environment prints a random one-time setup code in its container logs. The setup page asks for two owner accounts and their login passwords, and the code prevents an unauthenticated visitor from claiming the new workspace. Choose strong, unique passwords and keep them private; the passwords are entered in the setup page and stored only as salted hashes in the database.
+Each fresh environment prints a random one-time setup code in its container logs. The setup page asks for two owner accounts, phone numbers, and login passwords, and the code prevents an unauthenticated visitor from claiming the new workspace. Choose strong, unique passwords and keep them private; the passwords are entered in the setup page and stored only as salted hashes in the database.
 
 Start either environment independently:
 
@@ -49,7 +49,23 @@ To deploy an update, pull the desired code and run the matching `docker compose 
 
 This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
 
-The initial setup page lets you choose names, emails, and passwords for two full-access owner accounts. Passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
+The initial setup page lets you choose names, emails, phone numbers, and passwords for two full-access owner accounts. Passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
+
+### SMS two-step sign-in
+
+SMS two-step sign-in is currently disabled by default. To enable it, set `MFA_ENABLED=true` after configuring Twilio Verify. When enabled, owners and site engineers must verify a one-time SMS code after entering their password; client sign-in remains password-only. Phone numbers must include a country code in international format (for example, `+91 98765 43210`). Existing accounts without a saved phone number are asked to add and verify one at their next sign-in. New invitation forms require a phone number; it is verified at the invitee's first sign-in if MFA is enabled.
+
+Each client account can successfully sign in up to five times per UTC calendar day. The limit is stored in SQLite and resets at 00:00 UTC.
+
+Only when enabling MFA, create a Twilio Verify service and configure `MFA_ENABLED=true` plus these variables in the local backend environment (`backend/.env`, based on `backend/.env.example`) or the deployment root `.env`. Docker Compose passes the values to UAT and production:
+
+```dotenv
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_VERIFY_SERVICE_SID=VA...
+```
+
+Keep the credentials private and do not commit `.env` files. MFA remains off unless `MFA_ENABLED=true`; sign-in verification cannot complete until all three Twilio values are configured. Restart or redeploy the backend after changing the setting.
 
 Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details and compare photos marked as project start and completion (or the earliest and latest uploaded photos). On the client Feedback page, a rating and comment can be saved in BuildTrack for the owner and posted publicly through the Google review page. The default Google link opens the Vanya Concrete Technologies listing, where clients can select **Write a review**. To use a direct review form link instead, set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env`.
 
