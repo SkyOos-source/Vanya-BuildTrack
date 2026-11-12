@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Role } from "./types";
 import { roleId } from "./data";
-import { initials } from "./utils";
+import { compressImageFile, initials } from "./utils";
 import { apiFetch } from "./api";
 
 type UserProfile = {
@@ -43,23 +43,7 @@ function saveContact(profile: UserProfile) {
 }
 
 async function prepareProfilePhoto(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) throw new Error("Choose an image file for your profile photo.");
-  if (file.size > 10_000_000) throw new Error("Choose a profile photo smaller than 10 MB.");
-  const image = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, 512 / Math.max(image.width, image.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(image.width * scale));
-    canvas.height = Math.max(1, Math.round(image.height * scale));
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Could not prepare the selected photo.");
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const photo = canvas.toDataURL("image/jpeg", 0.82);
-    if (photo.length > 1_800_000) throw new Error("The selected photo could not be compressed enough. Choose a smaller image.");
-    return photo;
-  } finally {
-    image.close();
-  }
+  return compressImageFile(file, 512);
 }
 
 function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: ProfileResponse & {
@@ -130,7 +114,7 @@ function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: Pro
         <span className="account-profile-avatar">{displayedImage ? <img src={displayedImage} alt="" /> : initials(profile.name)}</span>
         <span className="account-profile-avatar-camera" aria-hidden="true">{savingPhoto ? "…" : "📷"}</span>
       </button> : <span className="account-profile-avatar">{displayedImage ? <img src={displayedImage} alt={`${profile.name} profile`} /> : initials(profile.name)}</span>}
-      {editable && <input ref={photoInput} className="account-profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose profile photo" onChange={(event) => void selectPhoto(event.currentTarget.files?.[0])} />}
+      {editable && <input ref={photoInput} className="account-profile-photo-input" type="file" accept="image/*" aria-label="Choose profile photo" onChange={(event) => void selectPhoto(event.currentTarget.files?.[0])} />}
       <div><span className="panel-kicker">BUILDTRACK PROFILE</span><h2>{profile.name}</h2><span className="account-profile-role">{profile.role}</span></div>
     </div>
     {photoError && <p className="profile-load-error account-profile-photo-error" role="alert">{photoError}</p>}

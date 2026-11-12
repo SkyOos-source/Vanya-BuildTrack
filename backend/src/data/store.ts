@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { prisma } from "../prisma";
-import { getInitialOwnerAccounts } from "../features/auth/data";
 
 
 export type Project = {
@@ -23,6 +22,7 @@ export type Quote = {
   project: string;
   title: string;
   client: string;
+  clientEmail?: string;
   amount: number;
   date: string;
   status: string;
@@ -79,13 +79,13 @@ export type AttendanceLeaveRequest = { id: string; engineer: string; date: strin
 export type AttendanceRegularizationRequest = { id: string; attendanceId: string; engineer: string; date: string; capturedAt: string; reason: string; requestedAt: string; status: "Pending review" | "Approved" | "Declined"; reviewedBy?: string; reviewedAt?: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
-export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string; image?: string };
-export type OwnerProfile = { phone: string; image: string };
+export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string; phoneVerified?: boolean; image?: string };
+export type OwnerProfile = { phone: string; phoneVerified?: boolean; image: string };
 export const ownerProfiles: Record<string, OwnerProfile> = {};
 export type OwnerAccount = { email: string; name: string; salt: string; passwordHash: string };
-export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: DemoRole; userName: string; userEmail?: string };
+export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: AccountRole; userName: string; userEmail?: string };
 export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
-export type DemoRole = "owner" | "employee" | "client";
+export type AccountRole = "owner" | "employee" | "client";
 
 export const projects: Project[] = [];
 
@@ -159,14 +159,22 @@ export function readProject(value: unknown, id: string): Project | null {
   };
 }
 
+export function readCompressedImage(value: unknown): string | null {
+  if (typeof value !== "string" || !/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]+=*$/.test(value)) return null;
+  const contents = Buffer.from(value.slice("data:image/jpeg;base64,".length), "base64");
+  if (contents.length > 500 * 1024 || contents.length < 3 || contents[0] !== 0xff || contents[1] !== 0xd8 || contents[2] !== 0xff) return null;
+  return value;
+}
+
 export function readAttachment(value: unknown): string | null {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" ||
-    !/^data:(image\/(jpeg|png|webp)|application\/pdf);base64,[A-Za-z0-9+/]+=*$/.test(value) ||
-    value.length > 2_500_000) {
+  if (typeof value !== "string" || value.length > 2_500_000) {
     return null;
   }
-  return value;
+  if (value.startsWith("data:application/pdf;base64,")) {
+    return /^data:application\/pdf;base64,[A-Za-z0-9+/]+=*$/.test(value) ? value : null;
+  }
+  return readCompressedImage(value);
 }
 
 export function readPdfAttachment(value: unknown): string | null {
@@ -183,9 +191,8 @@ export function readPdfAttachment(value: unknown): string | null {
 export function readAttendanceProof(value: unknown): AttendanceProof | null {
   if (!value || typeof value !== "object") return null;
   const proof = value as Record<string, unknown>;
-  if (typeof proof.image !== "string" ||
-    !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(proof.image) ||
-    proof.image.length > 2_500_000 ||
+  const image = readCompressedImage(proof.image);
+  if (!image ||
     typeof proof.capturedAt !== "string" ||
     !Number.isFinite(Date.parse(proof.capturedAt)) ||
     typeof proof.latitude !== "number" || proof.latitude < -90 || proof.latitude > 90 ||
@@ -194,7 +201,7 @@ export function readAttendanceProof(value: unknown): AttendanceProof | null {
     return null;
   }
   return {
-    image: proof.image,
+    image,
     capturedAt: proof.capturedAt,
     latitude: proof.latitude,
     longitude: proof.longitude,
@@ -202,12 +209,12 @@ export function readAttendanceProof(value: unknown): AttendanceProof | null {
   };
 }
 
-export function isDemoRole(value: unknown): value is DemoRole {
+export function isAccountRole(value: unknown): value is AccountRole {
   return value === "owner" || value === "employee" || value === "client";
 }
 
-function seedOwnerAccounts() {
-  ownerAccounts.splice(0, ownerAccounts.length, ...getInitialOwnerAccounts().map((account) => {
+function hashOwnerAccounts(accounts: Array<{ email: string; name: string; password: string }>): OwnerAccount[] {
+  return accounts.map((account) => {
     const salt = randomBytes(16).toString("hex");
     return {
       email: account.email.toLowerCase(),
@@ -215,13 +222,19 @@ function seedOwnerAccounts() {
       salt,
       passwordHash: scryptSync(account.password, salt, 64).toString("hex")
     };
-  }));
+  });
 }
 
 export async function initializeStore() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "ClientLoginQuota" (
+      "email" TEXT NOT NULL PRIMARY KEY,
+      "day" TEXT NOT NULL,
+      "loginCount" INTEGER NOT NULL
+    )
+  `);
   const savedState = await prisma.appState.findUnique({ where: { id: "workspace" } });
   if (!savedState) {
-    seedOwnerAccounts();
     await saveStore();
     return;
   }
@@ -256,7 +269,7 @@ export async function initializeStore() {
   restore(clientCredentials, "clientCredentials");
   restore(pushSubscriptions, "pushSubscriptions");
   if (saved.ownerAccounts === undefined) {
-    seedOwnerAccounts();
+    ownerAccounts.splice(0, ownerAccounts.length);
     ownerAccountsNeedSaving = true;
   } else if (Array.isArray(saved.ownerAccounts) && saved.ownerAccounts.every((account) =>
     account && typeof account === "object" &&
@@ -270,9 +283,10 @@ export async function initializeStore() {
   if (saved.ownerProfiles && typeof saved.ownerProfiles === "object" && !Array.isArray(saved.ownerProfiles)) {
     for (const [email, value] of Object.entries(saved.ownerProfiles)) {
       if (!value || typeof value !== "object") continue;
-      const profile = value as { phone?: unknown; image?: unknown };
+      const profile = value as { phone?: unknown; phoneVerified?: unknown; image?: unknown };
       ownerProfiles[email.toLowerCase()] = {
         phone: typeof profile.phone === "string" ? profile.phone : "",
+        phoneVerified: profile.phoneVerified === true,
         image: typeof profile.image === "string" ? profile.image : ""
       };
     }
@@ -297,6 +311,39 @@ export async function initializeStore() {
   if (ownerAccountsNeedSaving) await saveStore();
 }
 
+export function isInitialOwnerSetupRequired() {
+  return ownerAccounts.length === 0;
+}
+
+export async function completeInitialOwnerSetup(accounts: Array<{ email: string; name: string; password: string; phone: string }>) {
+  const savedState = await prisma.appState.findUnique({ where: { id: "workspace" } });
+  if (!savedState) throw new Error("SQLite workspace state is not initialized.");
+  if (ownerAccounts.length > 0) return false;
+
+  const parsed: unknown = JSON.parse(savedState.payload);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("SQLite workspace state has an invalid top-level structure.");
+  }
+  const saved = parsed as Record<string, unknown>;
+  if (!Array.isArray(saved.ownerAccounts) || saved.ownerAccounts.length > 0) return false;
+
+  const createdAccounts = hashOwnerAccounts(accounts);
+  const updatedProfiles = { ...((saved.ownerProfiles && typeof saved.ownerProfiles === "object" ? saved.ownerProfiles : {}) as Record<string, OwnerProfile>) };
+  for (const account of accounts) {
+    updatedProfiles[account.email.toLowerCase()] = { phone: account.phone, phoneVerified: false, image: "" };
+  }
+  const updatedPayload = JSON.stringify({ ...saved, ownerAccounts: createdAccounts, ownerProfiles: updatedProfiles });
+  const updated = await prisma.appState.updateMany({
+    where: { id: "workspace", payload: savedState.payload },
+    data: { payload: updatedPayload }
+  });
+  if (updated.count !== 1) return false;
+
+  ownerAccounts.splice(0, ownerAccounts.length, ...createdAccounts);
+  Object.assign(ownerProfiles, updatedProfiles);
+  return true;
+}
+
 export function nextSequence(records: Array<{ id: string }>, prefix: string, fallback: number) {
   const highest = records.reduce((max, record) => {
     const sequence = Number(record.id.replace(prefix, ""));
@@ -311,6 +358,24 @@ export async function saveStore() {
     create: { id: "workspace", payload: JSON.stringify({ ...store, employeeCredentials, clientCredentials }) },
     update: { payload: JSON.stringify({ ...store, employeeCredentials, clientCredentials }) }
   });
+}
+
+export async function consumeClientLoginQuota(email: string): Promise<boolean> {
+  const day = new Date().toISOString().slice(0, 10);
+  const rows = await prisma.$queryRaw<Array<{ loginCount: number }>>`
+    INSERT INTO "ClientLoginQuota" ("email", "day", "loginCount")
+    VALUES (${email.toLowerCase()}, ${day}, 1)
+    ON CONFLICT ("email") DO UPDATE SET
+      "day" = excluded."day",
+      "loginCount" = CASE
+        WHEN "ClientLoginQuota"."day" = excluded."day" THEN "ClientLoginQuota"."loginCount" + 1
+        ELSE 1
+      END
+    WHERE "ClientLoginQuota"."day" != excluded."day"
+      OR "ClientLoginQuota"."loginCount" < 5
+    RETURNING "loginCount"
+  `;
+  return rows.length > 0;
 }
 
 export function verifyOwnerCredential(email: string, password: string) {

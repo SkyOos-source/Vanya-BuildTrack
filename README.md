@@ -17,25 +17,15 @@ Open http://localhost:5173. The public landing page is `/`, the sign-in page is 
 
 BuildTrack can be installed from its landing page as a progressive web app. On a supported browser, select **Install app** to open the browser's install prompt. On iPhone or iPad, select **Install app** for the Safari **Share → Add to Home Screen** steps. App installation requires a secure site (HTTPS, or localhost for development).
 
-The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts.
-
-Use the **Demo mode** toggle in the header to choose between:
-
-- **Demo mode:** sample data and sign-in are handled entirely in the browser. CRUD operations work and changes persist in that browser's local storage; no backend API requests are made.
-- **Real mode (default):** sign-in and workspace data use the SQLite database at `backend/data/buildtrack.db`. The real database starts empty except for the initial owner account.
+The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts. Workspace data and sign-in are served by the backend; a new database starts empty and requires one-time owner setup.
 
 ### Deploy to a VPS with UAT and production
 
 The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. UAT and production run as separate containers, have separate SQLite/VAPID data volumes, and bind only to localhost ports `3101` and `3102`; use a reverse proxy for public HTTPS access.
 
-Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. From the repository directory:
+Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. MFA is off by default, so Twilio credentials are not required unless you decide to enable it.
 
-```sh
-cp deploy/uat.env.example deploy/uat.env
-cp deploy/prod.env.example deploy/prod.env
-```
-
-Edit both environment files: the `FRONTEND_URL` values are set to the corresponding HTTPS domains; replace both owner passwords with strong unique secrets, and set `VAPID_SUBJECT` to a monitored email address. Do not reuse the owner passwords between environments. The passwords provision each environment's initial owner accounts only on first database creation.
+Each fresh environment prints a random one-time setup code in its container logs. The setup page asks for two owner accounts, phone numbers, and login passwords, and the code prevents an unauthenticated visitor from claiming the new workspace. Choose strong, unique passwords and keep them private; the passwords are entered in the setup page and stored only as salted hashes in the database.
 
 Start either environment independently:
 
@@ -46,19 +36,36 @@ docker compose --profile prod up -d --build
 
 The first start applies SQLite migrations automatically. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain HTTPS certificates with Certbot's Nginx plugin for both DNS names. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app ports are bound to `127.0.0.1`.
 
-To deploy an update, pull the desired code and run the matching `docker compose --profile ... up -d --build` command. Keep the environment files private, and back up each environment's SQLite workspace before upgrades or VPS maintenance. The named volumes `buildtrack-uat-data` and `buildtrack-prod-data` contain the databases and generated push keys; do not remove them when updating containers.
+Before exposing a fresh environment publicly, retrieve its setup code over SSH:
+
+```sh
+docker compose --profile uat logs --tail=100
+docker compose --profile prod logs --tail=100
+```
+
+Open the corresponding HTTPS domain, choose **Complete initial setup**, and enter that environment's setup code and two owner accounts. The random code is displayed only in the server logs and becomes invalid after setup or an application restart. UAT and production use different codes and separate databases.
+
+To deploy an update, pull the desired code and run the matching `docker compose --profile ... up -d --build` command. Back up each environment's SQLite workspace before upgrades or VPS maintenance. The named volumes `buildtrack-uat-data` and `buildtrack-prod-data` contain the databases and generated push keys; do not remove them when updating containers.
 
 This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
 
-Demo credentials are available when Demo mode is on:
+The initial setup page lets you choose names, emails, phone numbers, and passwords for two full-access owner accounts. Passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Owner | `varun@vanya.com` or `chaitanya@vanya.com` | `owner123` |
-| Employee | `employee@vanya.com` | `employee123` |
-| Client | `client@vanya.com` | `client123` |
+### SMS two-step sign-in
 
-Real mode provides two full-access owner accounts: Varun (`varun@vanya.com`) and Chaitanya (`chaitanya@vanya.com`). For a new database, provide `OWNER_PASSWORD` and `OWNER2_PASSWORD` through backend deployment secrets; both are required to provision the accounts, and there are no real-mode password defaults. Their passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. `OWNER_EMAIL`, `OWNER_NAME`, `OWNER2_EMAIL`, and `OWNER2_NAME` can optionally override the account details during initial provisioning. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
+SMS two-step sign-in is currently disabled by default. To enable it, set `MFA_ENABLED=true` after configuring Twilio Verify. When enabled, owners and site engineers must verify a one-time SMS code after entering their password; client sign-in remains password-only. Phone numbers must include a country code in international format (for example, `+91 98765 43210`). Existing accounts without a saved phone number are asked to add and verify one at their next sign-in. New invitation forms require a phone number; it is verified at the invitee's first sign-in if MFA is enabled.
+
+Each client account can successfully sign in up to five times per UTC calendar day. The limit is stored in SQLite and resets at 00:00 UTC.
+
+Only when enabling MFA, create a Twilio Verify service and configure `MFA_ENABLED=true` plus these variables in the local backend environment (`backend/.env`, based on `backend/.env.example`) or the deployment root `.env`. Docker Compose passes the values to UAT and production:
+
+```dotenv
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_VERIFY_SERVICE_SID=VA...
+```
+
+Keep the credentials private and do not commit `.env` files. MFA remains off unless `MFA_ENABLED=true`; sign-in verification cannot complete until all three Twilio values are configured. Restart or redeploy the backend after changing the setting.
 
 Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details and compare photos marked as project start and completion (or the earliest and latest uploaded photos). On the client Feedback page, a rating and comment can be saved in BuildTrack for the owner and posted publicly through the Google review page. The default Google link opens the Vanya Concrete Technologies listing, where clients can select **Write a review**. To use a direct review form link instead, set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env`.
 
@@ -70,7 +77,7 @@ Web Push requires HTTPS (localhost is supported for local development). If VAPID
 
 ### Backend architecture
 
-The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns empty live-mode collections, account credentials, sequence recovery, and SQLite persistence. Demo records and local demo request handling live in the frontend.
+The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns workspace collections, account credentials, sequence recovery, and SQLite persistence.
 
 Profile QR codes link to the frontend origin. In local development, the API derives it from the request host and maps port `3001` to Vite's default port `5173`. If the frontend is hosted separately in production, set `FRONTEND_URL` to its public origin (for example, `https://buildtrack.example.com`).
 
@@ -111,7 +118,7 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET`, `POST /api/site-visits`, and `PATCH /api/site-visits/:id` — schedule visits and mark them complete or cancelled.
 - `GET` and `POST /api/attendance` — retrieve attendance and record photo/location-backed check-in and check-out; an unfinished check-in becomes absent 24 hours after check-in, and a late employee check-out is rejected. `PATCH /api/attendance/:id/regularize` lets an owner enter the actual check-out time and reason for a missed check-out. `/api/attendance/leaves` supports listing, adding, and deleting owner-managed leave dates. Sundays and scheduled leave dates are treated as non-working days, not absences.
 - `GET`, `POST /api/people`, and `DELETE /api/people/:id` — manage the workspace people list; new site engineers receive login credentials set by the owner.
-- `GET` and `POST /api/feedback` — list and submit demo client feedback.
+- `GET` and `POST /api/feedback` — list and submit client feedback.
 - `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
 - `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 

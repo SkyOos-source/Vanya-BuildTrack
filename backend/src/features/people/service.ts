@@ -3,9 +3,10 @@ import { failure, result } from "../shared";
 
 export const listPeople = () => people;
 
-function validPhone(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  return !phone || (/^\+?[\d\s().-]+$/.test(phone) && digits.length >= 7 && digits.length <= 15);
+function normalizePhone(value: unknown) {
+  if (typeof value !== "string" || !/^\+?[\d\s().-]+$/.test(value.trim())) return null;
+  const phone = value.trim().replace(/[\s().-]/g, "");
+  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : null;
 }
 
 export function createPerson(body: any) {
@@ -13,12 +14,12 @@ export function createPerson(body: any) {
   const email = readText(body?.email);
   const project = readText(body?.project);
   const password = readText(body?.password);
-  const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
+  const phone = normalizePhone(body?.phone);
   const role = body?.role;
   if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
     (role !== "Client" && role !== "Site Engineer") || (role === "Client" && !project) ||
-    !password || password.length < 8 || !validPhone(phone)) {
-    return failure(400, "Enter valid name and email, a valid phone number, assign clients to a project, and provide a password of at least 8 characters.");
+    !password || password.length < 8 || !phone) {
+    return failure(400, "Enter valid name, email, and international phone number (+country code), assign clients to a project, and provide a password of at least 8 characters.");
   }
   if (role === "Client" && !projects.some((item) => item.name === project)) {
     return failure(400, "Select an existing project to assign to this client.");
@@ -26,7 +27,7 @@ export function createPerson(body: any) {
   if (people.some((person) => person.email.toLowerCase() === email.toLowerCase())) {
     return failure(409, "A person with this email already exists.");
   }
-  const person = { id: nextId("person"), name, email, role, project: project ?? "No assigned sites", phone };
+  const person = { id: nextId("person"), name, email, role, project: project ?? "No assigned sites", phone, phoneVerified: false };
   if (role === "Client") {
     const assignedProject = projects.find((item) => item.name === project);
     if (assignedProject) assignedProject.client = name;
@@ -42,9 +43,13 @@ export function updatePerson(id: string, body: any) {
   if (!person) return failure(404, "Person not found.");
   const name = readText(body?.name);
   const email = readText(body?.email);
-  const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
-  if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !validPhone(phone)) {
-    return failure(400, "Enter a valid name, email, and phone number.");
+  const phoneInput = typeof body?.phone === "string" ? body.phone.trim() : "";
+  const phone = phoneInput ? normalizePhone(phoneInput) : person.phone;
+  if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return failure(400, "Enter a valid name and email address.");
+  }
+  if (phoneInput && !phone) {
+    return failure(400, "Enter a valid international phone number (+country code).");
   }
   if (people.some((item) => item.id !== id && item.email.toLowerCase() === email.toLowerCase())) {
     return failure(409, "A person with this email already exists.");
@@ -55,7 +60,10 @@ export function updatePerson(id: string, body: any) {
   const normalizedEmail = email.toLowerCase();
   person.name = name;
   person.email = email;
-  person.phone = phone;
+  if (typeof phone === "string") {
+    if (person.phone !== phone) person.phoneVerified = false;
+    person.phone = phone;
+  }
   updatePersonCredentialEmail(person.role, previousEmail, normalizedEmail);
 
   if (person.role === "Client") {

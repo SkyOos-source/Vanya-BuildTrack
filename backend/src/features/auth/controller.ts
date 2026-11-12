@@ -1,13 +1,34 @@
-import { Body, Post, Request, Route } from "tsoa";
+import { Body, Get, Post, Request, Route } from "tsoa";
 import type { Request as ExpressRequest } from "express";
 import { ApiController } from "../shared";
-import { login, logout, refresh } from "./service";
+import { initialOwnerSetupStatus, login, logout, refresh, sendLoginCode, setupInitialOwners, verifyLoginCode } from "./service";
 
 @Route("api/auth")
 export class AuthController extends ApiController {
+  @Get("setup/status")
+  public setupStatus(): any {
+    this.setHeader("Cache-Control", "no-store");
+    return initialOwnerSetupStatus();
+  }
+
+  @Post("setup")
+  public setup(@Body() body: unknown): any {
+    return setupInitialOwners(body).then((value) => this.respond(value));
+  }
+
   @Post("login")
   public signIn(@Body() body: any): any {
     return login(body).then((value) => this.respond(value));
+  }
+
+  @Post("send-code")
+  public sendCode(@Body() body: unknown): any {
+    return sendLoginCode(body).then((value) => this.respond(value));
+  }
+
+  @Post("verify-code")
+  public verifyCode(@Body() body: unknown): any {
+    return verifyLoginCode(body).then((value) => this.respond(value));
   }
 
   @Post("refresh")

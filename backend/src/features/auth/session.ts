@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { DemoRole } from "../../data/store";
+import type { AccountRole } from "../../data/store";
 import { prisma } from "../../prisma";
 
-export type AuthenticatedSession = { name: string; email: string; role: DemoRole };
+export type AuthenticatedSession = { name: string; email: string; role: AccountRole };
 
 const accessTokenLifetimeMs = 60 * 60 * 1000;
 const refreshTokenLifetimeMs = 30 * 24 * 60 * 60 * 1000;

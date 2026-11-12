@@ -8,7 +8,7 @@
     "routes": "tsoa routes -c tsoa.json",
     "spec": "tsoa spec -c tsoa.json",
     "generate": "npm run spec && npm run routes",
-    "build": "npm run generate && tsc -p tsconfig.json",
+    "build": "npm run prisma:generate && npm run generate && tsc -p tsconfig.json",
     "start": "npm run prisma:deploy && node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

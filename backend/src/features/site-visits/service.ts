@@ -1,4 +1,4 @@
-import { nextId, people, projects, readText, type SiteVisitProof } from "../../data/store";
+import { nextId, people, projects, readCompressedImage, readText, type SiteVisitProof } from "../../data/store";
 import { siteVisits } from "./data";
 import { failure, result } from "../shared";
 
@@ -13,12 +13,11 @@ function validDate(value: string) {
 function readSiteVisitProof(value: unknown): SiteVisitProof | null {
   if (!value || typeof value !== "object") return null;
   const proof = value as Record<string, unknown>;
-  if (typeof proof.image !== "string" ||
-    !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(proof.image) ||
-    proof.image.length > 2_500_000 ||
+  const image = readCompressedImage(proof.image);
+  if (!image ||
     typeof proof.capturedAt !== "string" ||
     !Number.isFinite(Date.parse(proof.capturedAt))) return null;
-  return { image: proof.image, capturedAt: new Date(proof.capturedAt).toISOString() };
+  return { image, capturedAt: new Date(proof.capturedAt).toISOString() };
 }
 
 export function createSiteVisit(body: any) {
