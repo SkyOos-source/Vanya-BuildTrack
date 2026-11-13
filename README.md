@@ -19,33 +19,47 @@ BuildTrack can be installed from its landing page as a progressive web app. On a
 
 The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts. Workspace data and sign-in are served by the backend; a new database starts empty and requires one-time owner setup.
 
-### Deploy to a VPS with UAT and production
+### Deploy to a production VPS
 
-The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. UAT and production run as separate containers, have separate SQLite/VAPID data volumes, and bind only to localhost ports `3101` and `3102`; use a reverse proxy for public HTTPS access.
+The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Production runs in a container with a persistent SQLite/VAPID data volume and binds only to localhost port `3102`; use a reverse proxy for public HTTPS access.
 
-Before deploying, point `vanyabuildtrackuat.duckdns.org` (UAT) and `vanyabuildtrack.duckdns.org` (production) at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. MFA is off by default, so Twilio credentials are not required unless you decide to enable it.
+Before deploying, point `vanyabuildtrack.duckdns.org` at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. MFA is off by default, so Twilio credentials are not required unless you decide to enable it.
 
-Each fresh environment prints a random one-time setup code in its container logs. The setup page asks for two owner accounts, phone numbers, and login passwords, and the code prevents an unauthenticated visitor from claiming the new workspace. Choose strong, unique passwords and keep them private; the passwords are entered in the setup page and stored only as salted hashes in the database.
-
-Start either environment independently:
+On a VPS that currently has UAT, remove its app container and database volume before updating the Compose file. From the existing deployment directory, run:
 
 ```sh
-docker compose --profile uat up -d --build
+docker compose --profile uat stop buildtrack-uat
+docker compose --profile uat rm -f buildtrack-uat
+docker volume ls --filter label=com.docker.compose.volume=buildtrack-uat-data
+```
+
+The last command lists the UAT volume (the full name may include the Compose project prefix). Verify it is the UAT volume, then remove that exact volume to delete its database and generated push keys:
+
+```sh
+docker volume rm <exact-uat-volume-name>
+```
+
+This volume deletion is permanent. Do not remove `buildtrack-prod-data` or any volume labeled `buildtrack-prod-data`; it contains production data. The UAT cleanup commands must be run while the old Compose file that defines `buildtrack-uat` is still present.
+
+Remove the UAT server block from the active Nginx site configuration, then test and reload Nginx (for example, `sudo nginx -t && sudo systemctl reload nginx`). The UAT DNS record can also be removed from its DNS provider.
+
+Start production:
+
+```sh
 docker compose --profile prod up -d --build
 ```
 
-The first start applies SQLite migrations automatically. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain HTTPS certificates with Certbot's Nginx plugin for both DNS names. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app ports are bound to `127.0.0.1`.
+The first start applies SQLite migrations automatically. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain an HTTPS certificate with Certbot's Nginx plugin. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app port is bound to `127.0.0.1`.
 
-Before exposing a fresh environment publicly, retrieve its setup code over SSH:
+Before exposing a fresh production installation publicly, retrieve its setup code over SSH:
 
 ```sh
-docker compose --profile uat logs --tail=100
 docker compose --profile prod logs --tail=100
 ```
 
-Open the corresponding HTTPS domain, choose **Complete initial setup**, and enter that environment's setup code and two owner accounts. The random code is displayed only in the server logs and becomes invalid after setup or an application restart. UAT and production use different codes and separate databases.
+Open the production HTTPS domain, choose **Complete initial setup**, and enter the setup code and two owner accounts. The random code is displayed only in the server logs and becomes invalid after setup or an application restart.
 
-To deploy an update, pull the desired code and run the matching `docker compose --profile ... up -d --build` command. Back up each environment's SQLite workspace before upgrades or VPS maintenance. The named volumes `buildtrack-uat-data` and `buildtrack-prod-data` contain the databases and generated push keys; do not remove them when updating containers.
+To deploy an update, pull the desired code and run `docker compose --profile prod up -d --build`. Back up the production SQLite workspace before upgrades or VPS maintenance. The named volume `buildtrack-prod-data` contains the production database and generated push keys; do not remove it when updating containers.
 
 This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
 
@@ -57,7 +71,7 @@ SMS two-step sign-in is currently disabled by default. To enable it, set `MFA_EN
 
 Each client account can successfully sign in up to five times per UTC calendar day. The limit is stored in SQLite and resets at 00:00 UTC.
 
-Only when enabling MFA, create a Twilio Verify service and configure `MFA_ENABLED=true` plus these variables in the local backend environment (`backend/.env`, based on `backend/.env.example`) or the deployment root `.env`. Docker Compose passes the values to UAT and production:
+Only when enabling MFA, create a Twilio Verify service and configure `MFA_ENABLED=true` plus these variables in the local backend environment (`backend/.env`, based on `backend/.env.example`) or the deployment root `.env`. Docker Compose passes the values to production:
 
 ```dotenv
 TWILIO_ACCOUNT_SID=AC...
