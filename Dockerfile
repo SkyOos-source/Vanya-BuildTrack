@@ -14,7 +14,7 @@ RUN npm ci
 
 COPY backend ./backend
 COPY frontend ./frontend
-RUN DATABASE_URL="postgresql://localhost:5432/buildtrack" npm run build:production \
+RUN DATABASE_URL="postgresql://localhost:5432/buildtrack" npm run build \
   && mkdir -p backend/public \
   && cp -a frontend/dist/. backend/public/
 
@@ -39,4 +39,4 @@ RUN mkdir -p backend/data && chown -R node:node backend
 USER node
 EXPOSE 3001
 
-CMD ["npm", "run", "start:postgres", "--workspace", "@buildtrack/backend"]
+CMD ["npm", "run", "start", "--workspace", "@buildtrack/backend"]

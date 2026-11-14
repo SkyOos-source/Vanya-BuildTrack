@@ -4,9 +4,10 @@ A construction project management SaaS starter with role-based Owner, Site Engin
 
 ## Run BuildTrack
 
-Requirements: Node.js 20.19+ or 22.12+, and npm.
+Requirements: Node.js 20.19+ or 22.12+, npm, and Docker Compose.
 
 ```powershell
+Copy-Item backend/.env.example backend/.env
 npm install
 npm run dev
 ```
@@ -17,11 +18,11 @@ Open http://localhost:5173. The public landing page is `/`, the sign-in page is 
 
 BuildTrack can be installed from its landing page as a progressive web app. On a supported browser, select **Install app** to open the browser's install prompt. On iPhone or iPad, select **Install app** for the Safari **Share → Add to Home Screen** steps. App installation requires a secure site (HTTPS, or localhost for development).
 
-The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts and stores local data in `backend/data/buildtrack.db`. Workspace data and sign-in are served by the backend; a new database starts empty and requires one-time owner setup.
+The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. `npm run dev` starts a local PostgreSQL container on loopback port `5433`, then applies migrations when the backend starts. Workspace data and sign-in are served by PostgreSQL; a new database starts empty and requires one-time owner setup.
 
 ### Deploy to a production VPS
 
-The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Production uses a private PostgreSQL container with a persistent database volume; the app binds only to localhost port `3102`, so use a reverse proxy for public HTTPS access. Local development continues to use SQLite.
+The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Both local development and production use PostgreSQL. Production uses a private PostgreSQL container with a persistent database volume; the app binds only to localhost port `3102`, so use a reverse proxy for public HTTPS access.
 
 Before deploying, point `vanyabuildtrack.duckdns.org` at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. MFA is off by default, so Twilio credentials are not required unless you decide to enable it.
 
@@ -55,7 +56,7 @@ Start production:
 docker compose --profile prod up -d --build
 ```
 
-The first start creates the PostgreSQL database and applies migrations automatically. This PostgreSQL database starts empty; existing SQLite workspace data is not imported, so complete the initial owner setup again. The previous SQLite file remains in the app-data volume but is no longer used for workspace data. PostgreSQL is not exposed on a host port. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain an HTTPS certificate with Certbot's Nginx plugin. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app port is bound to `127.0.0.1`.
+The first start creates the PostgreSQL database and applies migrations automatically. The new database starts empty; existing data is not imported, so complete owner setup again. Old database files may remain in the existing app-data volume alongside generated push keys; keep that volume until you have removed any old files you no longer need. PostgreSQL is not exposed on a host port. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain an HTTPS certificate with Certbot's Nginx plugin. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app port is bound to `127.0.0.1`.
 
 Before exposing a fresh production installation publicly, retrieve its setup code over SSH:
 
@@ -65,7 +66,7 @@ docker compose --profile prod logs --tail=100
 
 Open the production HTTPS domain, choose **Complete initial setup**, and enter the setup code and two owner accounts. The random code is displayed only in the server logs and becomes invalid after setup or an application restart.
 
-To deploy an update, pull the desired code and run `docker compose --profile prod up -d --build`. The API health endpoint should report `"database":"postgresql"` when the database is reachable. Back up PostgreSQL before upgrades or VPS maintenance. The named volume `buildtrack-prod-postgres-data` contains the production database; `buildtrack-prod-data` contains generated push keys and any previous SQLite database. Do not remove either volume when updating containers.
+To deploy an update, pull the desired code and run `docker compose --profile prod up -d --build`. The API health endpoint should report `"database":"postgresql"` when the database is reachable. Back up PostgreSQL before upgrades or VPS maintenance. The named volume `buildtrack-prod-postgres-data` contains the production database; `buildtrack-prod-data` contains generated push keys and any old database files. Do not remove either volume when updating containers.
 
 This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
 
@@ -75,7 +76,7 @@ The initial setup page lets you choose names, emails, phone numbers, and passwor
 
 SMS two-step sign-in is currently disabled by default. To enable it, set `MFA_ENABLED=true` after configuring Twilio Verify. When enabled, owners and site engineers must verify a one-time SMS code after entering their password; client sign-in remains password-only. Phone numbers must include a country code in international format (for example, `+91 98765 43210`). Existing accounts without a saved phone number are asked to add and verify one at their next sign-in. New invitation forms require a phone number; it is verified at the invitee's first sign-in if MFA is enabled.
 
-Each client account can successfully sign in up to five times per UTC calendar day. The limit is stored in the configured database and resets at 00:00 UTC.
+Each client account can successfully sign in up to five times per UTC calendar day. The limit is stored in PostgreSQL and resets at 00:00 UTC.
 
 Only when enabling MFA, create a Twilio Verify service and configure `MFA_ENABLED=true` plus these variables in the local backend environment (`backend/.env`, based on `backend/.env.example`) or the deployment root `.env`. Docker Compose passes the values to production:
 
@@ -115,13 +116,13 @@ The generated Express bindings are written under `backend/src/generated`, and th
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the frontend and SQLite-backed API in watch mode |
+| `npm run dev` | Start the local PostgreSQL container, frontend, and API in watch mode |
 | `npm run build` | Build both workspaces |
-| `npm run db:migrate` | Generate the Prisma client and run SQLite development migrations |
-| `npm run db:deploy` | Apply SQLite migrations |
-| `npm run db:studio` | Open Prisma Studio for the SQLite database |
-| `npm run db:deploy:postgres` | Apply PostgreSQL migrations using `DATABASE_URL` |
-| `npm run db:studio:postgres` | Open Prisma Studio for PostgreSQL using `DATABASE_URL` |
+| `npm run db:migrate` | Generate the Prisma client and run PostgreSQL development migrations |
+| `npm run db:deploy` | Apply PostgreSQL migrations |
+| `npm run db:studio` | Open Prisma Studio for PostgreSQL |
+| `npm run db:local:up` | Start the local PostgreSQL container |
+| `npm run db:local:down` | Stop the local PostgreSQL container without deleting its data |
 
 ## Real-mode API
 
@@ -144,4 +145,4 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
 - `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 
-The database stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Local development uses SQLite; the production Docker deployment uses PostgreSQL. Employee and client passwords are salted and hashed before storage. Browser sessions remain client-side; this app is still a local starter and should not be treated as production-ready authentication or multi-tenant authorization.
+The PostgreSQL database stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Local development uses a dedicated loopback-only PostgreSQL container; production uses a private PostgreSQL service. Employee and client passwords are salted and hashed before storage. Browser sessions remain client-side; this app is still a local starter and should not be treated as production-ready authentication or multi-tenant authorization.

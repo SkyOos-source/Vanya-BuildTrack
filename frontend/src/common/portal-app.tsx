@@ -192,7 +192,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           setData(result);
         }
       } catch (error) {
-        console.error("Unable to load workspace data from the SQLite API:", error);
+        console.error("Unable to load workspace data from the API:", error);
       }
     };
     void load();

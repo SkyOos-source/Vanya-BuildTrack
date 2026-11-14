@@ -28,7 +28,6 @@ services:
       NODE_ENV: production
       PORT: "3001"
       FRONTEND_URL: https://vanyabuildtrack.duckdns.org
-      DATABASE_PROVIDER: postgresql
       DATABASE_URL: postgresql://${POSTGRES_USER:-buildtrack}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the deployment root .env}@buildtrack-postgres:5432/${POSTGRES_DB:-buildtrack}?schema=public
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
