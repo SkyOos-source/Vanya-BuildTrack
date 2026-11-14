@@ -226,13 +226,6 @@ function hashOwnerAccounts(accounts: Array<{ email: string; name: string; passwo
 }
 
 export async function initializeStore() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "ClientLoginQuota" (
-      "email" TEXT NOT NULL PRIMARY KEY,
-      "day" TEXT NOT NULL,
-      "loginCount" INTEGER NOT NULL
-    )
-  `);
   const savedState = await prisma.appState.findUnique({ where: { id: "workspace" } });
   if (!savedState) {
     await saveStore();
@@ -240,14 +233,14 @@ export async function initializeStore() {
   }
   const parsed: unknown = JSON.parse(savedState.payload);
   if (!parsed || typeof parsed !== "object") {
-    throw new Error("SQLite workspace state has an invalid top-level structure.");
+    throw new Error("Database workspace state has an invalid top-level structure.");
   }
   const saved = parsed as Record<string, unknown>;
   let ownerAccountsNeedSaving = false;
   const restore = <T>(target: T[], key: string) => {
     const records = saved[key];
     if (records === undefined) return;
-    if (!Array.isArray(records)) throw new Error(`SQLite workspace state field '${key}' must be an array.`);
+    if (!Array.isArray(records)) throw new Error(`Database workspace state field '${key}' must be an array.`);
     target.splice(0, target.length, ...(records as T[]));
   };
   restore(projects, "projects");
@@ -278,7 +271,7 @@ export async function initializeStore() {
   )) {
     ownerAccounts.splice(0, ownerAccounts.length, ...saved.ownerAccounts as OwnerAccount[]);
   } else {
-    throw new Error("SQLite workspace state field 'ownerAccounts' must contain valid owner credentials.");
+    throw new Error("Database workspace state field 'ownerAccounts' must contain valid owner credentials.");
   }
   if (saved.ownerProfiles && typeof saved.ownerProfiles === "object" && !Array.isArray(saved.ownerProfiles)) {
     for (const [email, value] of Object.entries(saved.ownerProfiles)) {
@@ -317,12 +310,12 @@ export function isInitialOwnerSetupRequired() {
 
 export async function completeInitialOwnerSetup(accounts: Array<{ email: string; name: string; password: string; phone: string }>) {
   const savedState = await prisma.appState.findUnique({ where: { id: "workspace" } });
-  if (!savedState) throw new Error("SQLite workspace state is not initialized.");
+  if (!savedState) throw new Error("Database workspace state is not initialized.");
   if (ownerAccounts.length > 0) return false;
 
   const parsed: unknown = JSON.parse(savedState.payload);
   if (!parsed || typeof parsed !== "object") {
-    throw new Error("SQLite workspace state has an invalid top-level structure.");
+    throw new Error("Database workspace state has an invalid top-level structure.");
   }
   const saved = parsed as Record<string, unknown>;
   if (!Array.isArray(saved.ownerAccounts) || saved.ownerAccounts.length > 0) return false;

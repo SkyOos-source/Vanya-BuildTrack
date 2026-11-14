@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AppState {
+  id      String @id
+  payload String
+}
+
+model RefreshToken {
+  tokenHash String   @id
+  userJson  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model ClientLoginQuota {
+  email      String @id
+  day        String
+  loginCount Int
+}

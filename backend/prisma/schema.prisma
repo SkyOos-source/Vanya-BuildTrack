@@ -20,3 +20,9 @@ model RefreshToken {
 
   @@index([expiresAt])
 }
+
+model ClientLoginQuota {
+  email      String @id
+  day        String
+  loginCount Int
+}

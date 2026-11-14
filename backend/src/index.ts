@@ -180,9 +180,9 @@ app.use((request, response, next) => {
       }
       return sendResponse(body);
     }).catch((error: unknown) => {
-      console.error("Unable to persist SQLite workspace data:", error);
+      console.error("Unable to persist workspace data:", error);
       response.status(500);
-      sendJson({ error: "The record could not be saved to the SQLite database." });
+      sendJson({ error: "The record could not be saved to the database." });
     });
     return response;
   }) as typeof response.json;
@@ -285,6 +285,6 @@ void initializeStore().then(() => {
     console.log(`BuildTrack API listening on http://localhost:${port}`);
   });
 }).catch((error: unknown) => {
-  console.error("Unable to initialize the SQLite workspace database:", error);
+  console.error("Unable to initialize the workspace database:", error);
   process.exitCode = 1;
 });

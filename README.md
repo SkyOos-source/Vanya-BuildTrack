@@ -17,11 +17,11 @@ Open http://localhost:5173. The public landing page is `/`, the sign-in page is 
 
 BuildTrack can be installed from its landing page as a progressive web app. On a supported browser, select **Install app** to open the browser's install prompt. On iPhone or iPad, select **Install app** for the Safari **Share → Add to Home Screen** steps. App installation requires a secure site (HTTPS, or localhost for development).
 
-The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts. Workspace data and sign-in are served by the backend; a new database starts empty and requires one-time owner setup.
+The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. The backend applies its SQLite migration automatically when it starts and stores local data in `backend/data/buildtrack.db`. Workspace data and sign-in are served by the backend; a new database starts empty and requires one-time owner setup.
 
 ### Deploy to a production VPS
 
-The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Production runs in a container with a persistent SQLite/VAPID data volume and binds only to localhost port `3102`; use a reverse proxy for public HTTPS access.
+The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Production uses a private PostgreSQL container with a persistent database volume; the app binds only to localhost port `3102`, so use a reverse proxy for public HTTPS access. Local development continues to use SQLite.
 
 Before deploying, point `vanyabuildtrack.duckdns.org` at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. MFA is off by default, so Twilio credentials are not required unless you decide to enable it.
 
@@ -39,9 +39,15 @@ The last command lists the UAT volume (the full name may include the Compose pro
 docker volume rm <exact-uat-volume-name>
 ```
 
-This volume deletion is permanent. Do not remove `buildtrack-prod-data` or any volume labeled `buildtrack-prod-data`; it contains production data. The UAT cleanup commands must be run while the old Compose file that defines `buildtrack-uat` is still present.
+This volume deletion is permanent. Do not remove `buildtrack-prod-data` or `buildtrack-prod-postgres-data`, or any matching production volumes; they contain production data and push keys. The UAT cleanup commands must be run while the old Compose file that defines `buildtrack-uat` is still present.
 
 Remove the UAT server block from the active Nginx site configuration, then test and reload Nginx (for example, `sudo nginx -t && sudo systemctl reload nginx`). The UAT DNS record can also be removed from its DNS provider.
+
+Create the deployment environment file and set a unique PostgreSQL password. Generate a hexadecimal password with `openssl rand -hex 32`, then put it in the root `.env` as `POSTGRES_PASSWORD`. Do not commit this file.
+
+```sh
+cp .env.example .env
+```
 
 Start production:
 
@@ -49,7 +55,7 @@ Start production:
 docker compose --profile prod up -d --build
 ```
 
-The first start applies SQLite migrations automatically. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain an HTTPS certificate with Certbot's Nginx plugin. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app port is bound to `127.0.0.1`.
+The first start creates the PostgreSQL database and applies migrations automatically. This PostgreSQL database starts empty; existing SQLite workspace data is not imported, so complete the initial owner setup again. The previous SQLite file remains in the app-data volume but is no longer used for workspace data. PostgreSQL is not exposed on a host port. Configure Nginx using `deploy/nginx-buildtrack.conf.example`, enable that site, then obtain an HTTPS certificate with Certbot's Nginx plugin. The example proxy disables buffering so the app's live-update event stream works. Only ports 80 and 443 need to be publicly reachable; the app port is bound to `127.0.0.1`.
 
 Before exposing a fresh production installation publicly, retrieve its setup code over SSH:
 
@@ -59,7 +65,7 @@ docker compose --profile prod logs --tail=100
 
 Open the production HTTPS domain, choose **Complete initial setup**, and enter the setup code and two owner accounts. The random code is displayed only in the server logs and becomes invalid after setup or an application restart.
 
-To deploy an update, pull the desired code and run `docker compose --profile prod up -d --build`. Back up the production SQLite workspace before upgrades or VPS maintenance. The named volume `buildtrack-prod-data` contains the production database and generated push keys; do not remove it when updating containers.
+To deploy an update, pull the desired code and run `docker compose --profile prod up -d --build`. The API health endpoint should report `"database":"postgresql"` when the database is reachable. Back up PostgreSQL before upgrades or VPS maintenance. The named volume `buildtrack-prod-postgres-data` contains the production database; `buildtrack-prod-data` contains generated push keys and any previous SQLite database. Do not remove either volume when updating containers.
 
 This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
 
@@ -69,7 +75,7 @@ The initial setup page lets you choose names, emails, phone numbers, and passwor
 
 SMS two-step sign-in is currently disabled by default. To enable it, set `MFA_ENABLED=true` after configuring Twilio Verify. When enabled, owners and site engineers must verify a one-time SMS code after entering their password; client sign-in remains password-only. Phone numbers must include a country code in international format (for example, `+91 98765 43210`). Existing accounts without a saved phone number are asked to add and verify one at their next sign-in. New invitation forms require a phone number; it is verified at the invitee's first sign-in if MFA is enabled.
 
-Each client account can successfully sign in up to five times per UTC calendar day. The limit is stored in SQLite and resets at 00:00 UTC.
+Each client account can successfully sign in up to five times per UTC calendar day. The limit is stored in the configured database and resets at 00:00 UTC.
 
 Only when enabling MFA, create a Twilio Verify service and configure `MFA_ENABLED=true` plus these variables in the local backend environment (`backend/.env`, based on `backend/.env.example`) or the deployment root `.env`. Docker Compose passes the values to production:
 
@@ -91,7 +97,7 @@ Web Push requires HTTPS (localhost is supported for local development). If VAPID
 
 ### Backend architecture
 
-The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns workspace collections, account credentials, sequence recovery, and SQLite persistence.
+The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns workspace collections, account credentials, sequence recovery, and database persistence.
 
 Profile QR codes link to the frontend origin. In local development, the API derives it from the request host and maps port `3001` to Vite's default port `5173`. If the frontend is hosted separately in production, set `FRONTEND_URL` to its public origin (for example, `https://buildtrack.example.com`).
 
@@ -114,12 +120,14 @@ The generated Express bindings are written under `backend/src/generated`, and th
 | `npm run db:migrate` | Generate the Prisma client and run SQLite development migrations |
 | `npm run db:deploy` | Apply SQLite migrations |
 | `npm run db:studio` | Open Prisma Studio for the SQLite database |
+| `npm run db:deploy:postgres` | Apply PostgreSQL migrations using `DATABASE_URL` |
+| `npm run db:studio:postgres` | Open Prisma Studio for PostgreSQL using `DATABASE_URL` |
 
 ## Real-mode API
 
 The dashboard loads its initial data from `GET /api/dashboard`. Feature pages request their own data from the matching resource endpoint.
 
-- `GET /api/health` — API and SQLite status.
+- `GET /api/health` — API status and the configured database provider; also verifies database connectivity.
 - `POST /api/auth/login` and `POST /api/auth/logout` — real-mode sign-in and sign-out.
 - `GET /api/profiles/me?role=...&email=...`, `PATCH /api/profiles/me?role=...&email=...`, and `GET /api/profiles/:id` — load and update account profile phone numbers, generate owner/engineer QR codes, or view a QR-linked public profile.
 - `GET /api/push/config`, `POST /api/push/subscriptions`, and `DELETE /api/push/subscriptions` — configure owner browser push subscriptions.
@@ -136,4 +144,4 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
 - `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 
-The SQLite database currently stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Employee and client passwords are salted and hashed before storage. Browser sessions remain client-side; this app is still a local starter and should not be treated as production-ready authentication or multi-tenant authorization.
+The database stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Local development uses SQLite; the production Docker deployment uses PostgreSQL. Employee and client passwords are salted and hashed before storage. Browser sessions remain client-side; this app is still a local starter and should not be treated as production-ready authentication or multi-tenant authorization.

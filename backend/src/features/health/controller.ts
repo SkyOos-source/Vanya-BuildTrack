@@ -4,7 +4,7 @@ import { getHealth } from "./service";
 @Route("api/health")
 export class HealthController extends Controller {
   @Get()
-  public get() {
+  public async get() {
     return getHealth();
   }
 }
