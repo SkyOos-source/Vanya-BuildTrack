@@ -1,5 +1,5 @@
 import type { DashboardData, Project, RecordModalType } from "../../common/types";
-import { formatCurrency, siteVisitDateParts } from "../../common/utils";
+import { formatCurrency, isLoggedExpense, siteVisitDateParts } from "../../common/utils";
 import { ExpenseRows, ProjectCards, StatCard } from "../../common/components";
 
 export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { data: DashboardData; onNavigate: (page: string) => void; onCreate: (modal: RecordModalType | null) => void; onOpenProject: (project: Project) => void }) {
@@ -11,7 +11,8 @@ export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { 
       ? projectQuotes.reduce((quoteTotal, quote) => quoteTotal + quote.amount, 0)
       : project.quotationAmount ?? 0);
   }, 0);
-  const totalExpenditure = data.expenses.reduce((total, expense) => total + expense.amount, 0);
+  const loggedExpenses = data.expenses.filter(isLoggedExpense);
+  const totalExpenditure = loggedExpenses.reduce((total, expense) => total + expense.amount, 0);
   const profit = totalRevenue - totalExpenditure;
   const expenditureRatio = totalRevenue > 0 ? Math.min(Math.max(totalExpenditure / totalRevenue * 100, 0), 100) : 0;
   const chart = data.projects.map((project) => {
@@ -21,7 +22,7 @@ export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { 
       revenue: (projectQuotes.length
         ? projectQuotes.reduce((total, quote) => total + quote.amount, 0)
         : project.quotationAmount ?? 0) / 1000,
-      expenses: data.expenses
+      expenses: loggedExpenses
         .filter((expense) => expense.project === project.name)
         .reduce((total, expense) => total + expense.amount, 0) / 1000
     };
@@ -57,7 +58,7 @@ export function OwnerDashboard({ data, onNavigate, onCreate, onOpenProject }: { 
       <section className="panel activity-panel"><div className="panel-heading compact"><div><span className="panel-kicker">LIVE FROM YOUR SITES</span><h2>Recent activity</h2></div><button className="text-link" onClick={() => onNavigate("Reports")}>View all ↗</button></div><div className="activity-list">{data.activities.slice(0, 5).map((item) => <div className="activity-item" key={item.id}><span className={`activity-icon activity-${item.kind}`}>{item.kind === "progress" ? "↗" : item.kind === "expense" ? "＄" : item.kind === "quote" ? "▤" : item.kind === "attendance" ? "◷" : "◈"}</span><div className="activity-copy"><p><strong>{item.actor}</strong> {item.action}</p><span>{item.project}</span></div><time>{item.time}</time></div>)}</div></section>
     </div>
     <section className="panel project-panel"><div className="panel-heading compact"><div><span className="panel-kicker">YOUR PORTFOLIO</span><h2>Active projects <span className="heading-count">{data.projects.length}</span></h2></div><button className="text-link" onClick={() => onNavigate("Projects & Sites")}>All projects ↗</button></div><ProjectCards projects={data.projects.slice(0, 3)} onOpen={onOpenProject} /></section>
-    <div className="bottom-grid"><section className="panel table-panel"><div className="panel-heading compact"><div><span className="panel-kicker">ACTION REQUIRED</span><h2>Expenses for review</h2></div><button className="text-link" onClick={() => onNavigate("Expenses")}>All expenses ↗</button></div><ExpenseRows expenses={data.expenses.slice(0, 3)} /></section><section className="panel visit-panel"><div className="panel-heading compact"><div><span className="panel-kicker">COMING UP</span><h2>Site visits</h2></div><button className="icon-button small-add" aria-label="Schedule site visit" onClick={() => onCreate("visit")}>＋</button></div><div className="visit-list">{data.siteVisits.filter((visit) => visit.status === "Scheduled" || visit.status === "Checked in").slice(0, 2).map((visit) => { const date = siteVisitDateParts(visit.date); return <div className="visit-item" key={visit.id}><div className="visit-date"><strong>{date.day}</strong><span>{date.month}</span></div><div className="visit-info"><strong>{visit.project}</strong><span>{visit.site} · {visit.engineer}</span></div></div>; })}</div><button className="visit-add" onClick={() => onCreate("visit")}>＋ Schedule a site visit</button></section></div>
+    <div className="bottom-grid"><section className="panel table-panel"><div className="panel-heading compact"><div><span className="panel-kicker">ACTION REQUIRED</span><h2>Expenses for review</h2></div><button className="text-link" onClick={() => onNavigate("Expenses")}>All expenses ↗</button></div><ExpenseRows expenses={data.expenses.filter((item) => item.status === "Pending review").slice(0, 3)} /></section><section className="panel visit-panel"><div className="panel-heading compact"><div><span className="panel-kicker">COMING UP</span><h2>Site visits</h2></div><button className="icon-button small-add" aria-label="Schedule site visit" onClick={() => onCreate("visit")}>＋</button></div><div className="visit-list">{data.siteVisits.filter((visit) => visit.status === "Scheduled" || visit.status === "Checked in").slice(0, 2).map((visit) => { const date = siteVisitDateParts(visit.date); return <div className="visit-item" key={visit.id}><div className="visit-date"><strong>{date.day}</strong><span>{date.month}</span></div><div className="visit-info"><strong>{visit.project}</strong><span>{visit.site} · {visit.engineer}</span></div></div>; })}</div><button className="visit-add" onClick={() => onCreate("visit")}>＋ Schedule a site visit</button></section></div>
     <button className="create-quotation-action" onClick={() => onCreate("quote")}><span>＋</span> Create quotation</button>
   </>;
 }

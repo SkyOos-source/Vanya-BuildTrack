@@ -86,6 +86,8 @@ test("engineers can only create project records for assigned projects and identi
 
     const deniedBody = { project: "Beta", actor: "Forged Name" };
     assert.equal(authorizeApiRequest(request("POST", "/api/progress", deniedBody), employee).allowed, false);
+    assert.equal(authorizeApiRequest(request("GET", "/api/expenses/allocations"), employee).allowed, true);
+    assert.equal(authorizeApiRequest(request("POST", "/api/expenses/allocations"), employee).allowed, false);
 
     const allowedBody = { project: "Alpha", actor: "Forged Name", submittedBy: "Forged Name" };
     assert.equal(authorizeApiRequest(request("POST", "/api/progress", allowedBody), employee).allowed, true);

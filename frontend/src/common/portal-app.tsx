@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
 import { compressImageFile, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
@@ -339,6 +339,23 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         return;
       }
       if (role === "Employee") {
+        if (update.resource === "expenseAllocations") {
+          if (update.push?.targets.some((target) => target.role === "employee" && target.userName === userName)) {
+            showToast(update.push.body);
+          }
+          void (async () => {
+            try {
+              const response = await apiFetch("/api/expenses/allocations");
+              if (!response.ok) throw new Error(`Expense allocation refresh failed (${response.status})`);
+              const records: unknown = await response.json();
+              if (!Array.isArray(records)) throw new Error("Expense allocation refresh returned invalid data.");
+              setData((current) => ({ ...current, expenseAllocations: records as DashboardData["expenseAllocations"] }));
+            } catch (error) {
+              console.error("Unable to refresh expense allocations:", error);
+            }
+          })();
+          return;
+        }
         if (update.resource === "attendance") {
           if (update.push?.targets.some((target) => target.role === "employee" && target.userName === userName)) {
             showToast(update.push.body);
@@ -359,7 +376,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         return;
       }
       const resource = update.resource;
-      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
+      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
@@ -382,11 +399,20 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             setData((current) => ({ ...current, activities: visibleActivities, projects }));
             return;
           }
-          const endpoint = resource === "materialRequests" ? "/api/material-requests" : `/api/${resource}`;
+          const endpoint = resource === "materialRequests"
+            ? "/api/material-requests"
+            : resource === "expenseAllocations" ? "/api/expenses/allocations" : `/api/${resource}`;
           const response = await apiFetch(endpoint);
           if (!response.ok) throw new Error(`${resource} refresh failed (${response.status})`);
           const records: unknown = await response.json();
           if (!Array.isArray(records)) throw new Error(`${resource} refresh returned invalid data.`);
+          const allocationRecords = resource === "expenses" ? await (async () => {
+            const allocationsResponse = await apiFetch("/api/expenses/allocations");
+            if (!allocationsResponse.ok) throw new Error(`Expense allocation refresh failed (${allocationsResponse.status})`);
+            const allocations: unknown = await allocationsResponse.json();
+            if (!Array.isArray(allocations)) throw new Error("Expense allocation refresh returned invalid data.");
+            return allocations as DashboardData["expenseAllocations"];
+          })() : undefined;
           if (resource === "materials") {
             setData((current) => ({ ...current, materials: records as DashboardData["materials"] }));
           } else if (resource === "materialRequests") {
@@ -395,8 +421,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
           } else if (resource === "attendance") {
             setData((current) => ({ ...current, attendance: records as DashboardData["attendance"] }));
+          } else if (resource === "expenseAllocations") {
+            setData((current) => ({ ...current, expenseAllocations: records as DashboardData["expenseAllocations"] }));
           } else {
-            setData((current) => ({ ...current, expenses: records as DashboardData["expenses"] }));
+            setData((current) => ({
+              ...current,
+              expenses: records as DashboardData["expenses"],
+              expenseAllocations: allocationRecords ?? current.expenseAllocations
+            }));
           }
         } catch (error) {
           console.error(`Unable to refresh ${resource} after a real-time update:`, error);
@@ -473,6 +505,11 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
         const result: unknown = await response.json();
         if (!active || !Array.isArray(result)) return;
+        const allocationsResponse = page === "Expenses" ? await apiFetch("/api/expenses/allocations") : undefined;
+        if (allocationsResponse && !allocationsResponse.ok) throw new Error(`Expense allocations request failed (${allocationsResponse.status})`);
+        const allocations = allocationsResponse ? await allocationsResponse.json() as DashboardData["expenseAllocations"] : undefined;
+        if (allocations && !Array.isArray(allocations)) throw new Error("Expense allocations request returned invalid data.");
+        if (!active) return;
         if (page === "Projects & Sites" || page === "My Sites" || page === "My Projects") {
           setProjectsLoading(false);
           setProjectsLoadError("");
@@ -490,7 +527,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             case "Materials":
               return { ...current, materials: result as DashboardData["materials"] };
             case "Expenses":
-              return { ...current, expenses: result as DashboardData["expenses"] };
+              return { ...current, expenses: result as DashboardData["expenses"], expenseAllocations: allocations ?? current.expenseAllocations };
             case "Quotations":
               return { ...current, quotes: result as DashboardData["quotes"] };
             case "Attendance":
@@ -660,7 +697,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
     const amount = Number(form.get("amount") || 0);
     try {
-      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
+      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense-allocation" ? "expenses/allocations" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
       const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
       const attachment = modal === "expense" || modal === "expense-log" ? await readFileDataUrl(form.get("attachment")) : progressAttachments?.[0];
       const quotationFile = form.get("quotationFile");
@@ -694,6 +731,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         password: form.get("password"),
         submittedBy: currentUser,
         entryType: modal === "expense-log" ? "log" : "request",
+        allocationId: form.get("allocationId"),
         attachment,
         attachments: progressAttachments,
         quotationAttachment,
@@ -705,7 +743,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const result = await response.json() as { record?: Project | Quote | Expense | SiteVisit | Activity | Material | DashboardData["materialRequests"][number] | Person; project?: Project; error?: string };
+      const result = await response.json() as { record?: Project | Quote | Expense | ExpenseAllocation | SiteVisit | Activity | Material | DashboardData["materialRequests"][number] | Person; project?: Project; error?: string };
       if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
       if (!record) throw new Error("The API returned no saved record.");
@@ -715,7 +753,29 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       } else if (modal === "quote") {
         setData((current) => ({ ...current, quotes: [record as Quote, ...current.quotes] }));
       } else if (modal === "expense") {
-        setData((current) => ({ ...current, expenses: [record as Expense, ...current.expenses] }));
+        const expense = record as Expense;
+        setData((current) => ({
+          ...current,
+          expenses: [expense, ...current.expenses],
+          expenseAllocations: expense.allocationId
+            ? current.expenseAllocations.map((allocation) => allocation.id === expense.allocationId
+              ? { ...allocation, spentAmount: allocation.spentAmount + expense.amount, remainingAmount: Math.max(0, allocation.remainingAmount - expense.amount) }
+              : allocation)
+            : current.expenseAllocations
+        }));
+      } else if (modal === "expense-allocation") {
+        setData((current) => ({ ...current, expenseAllocations: [record as ExpenseAllocation, ...current.expenseAllocations] }));
+      } else if (modal === "expense-log") {
+        const expense = record as Expense;
+        setData((current) => ({
+          ...current,
+          expenses: [expense, ...current.expenses],
+          expenseAllocations: expense.allocationId
+            ? current.expenseAllocations.map((allocation) => allocation.id === expense.allocationId
+              ? { ...allocation, spentAmount: allocation.spentAmount + expense.amount, remainingAmount: Math.max(0, allocation.remainingAmount - expense.amount) }
+              : allocation)
+            : current.expenseAllocations
+        }));
       } else if (modal === "visit") {
         setData((current) => ({ ...current, siteVisits: [record as SiteVisit, ...current.siteVisits] }));
       } else if (modal === "progress") {
@@ -742,7 +802,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }
       }
       setModal(null);
-      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Expense request" : modal === "expense-log" ? "Expense" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
+      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save record:", error);
       showToast(error instanceof Error ? error.message : "Could not save this record.");
@@ -1145,7 +1205,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} initialPersonRole={personCreationRole} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} onClose={() => setModal(null)} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} onClose={() => setModal(null)} onSubmit={createRecord} />}
     </div>
   );
 }

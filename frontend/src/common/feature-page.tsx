@@ -11,13 +11,13 @@ import { PalettePicker } from "./palette";
 
 export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onCreatePerson: (role: "Site Engineer" | "Client") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
 
-const PEOPLE_PER_PAGE = 10;
+const RECORDS_PER_PAGE = 10;
 
-function PeoplePagination({ page, totalItems, onPageChange }: { page: number; totalItems: number; onPageChange: (page: number) => void }) {
-  const totalPages = Math.ceil(totalItems / PEOPLE_PER_PAGE);
+function RecordPagination({ page, totalItems, onPageChange }: { page: number; totalItems: number; onPageChange: (page: number) => void }) {
+  const totalPages = Math.ceil(totalItems / RECORDS_PER_PAGE);
   if (totalPages <= 1) return null;
-  const firstItem = (page - 1) * PEOPLE_PER_PAGE + 1;
-  const lastItem = Math.min(page * PEOPLE_PER_PAGE, totalItems);
+  const firstItem = (page - 1) * RECORDS_PER_PAGE + 1;
+  const lastItem = Math.min(page * RECORDS_PER_PAGE, totalItems);
   return <div className="attendance-request-pagination">
     <span>Showing {firstItem}–{lastItem} of {totalItems}</span>
     <div>
@@ -51,6 +51,8 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | null>(null);
   const [engineerPage, setEngineerPage] = useState(1);
   const [clientPage, setClientPage] = useState(1);
+  const [allocationPage, setAllocationPage] = useState(1);
+  const [expensePage, setExpensePage] = useState(1);
   const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [personPendingDeletion, setPersonPendingDeletion] = useState<Person | null>(null);
@@ -102,6 +104,23 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
     : role === "Employee"
       ? data.expenses.filter((expense) => expense.submittedBy === currentUser)
       : data.expenses;
+  const visibleExpenseAllocations = role === "Employee"
+    ? data.expenseAllocations.filter((allocation) => allocation.engineer === currentUser)
+    : data.expenseAllocations;
+  const filteredExpenses = visibleExpenses.filter((item) => filter === "All" || item.status === filter);
+  const currentAllocationPage = Math.min(allocationPage, Math.max(1, Math.ceil(visibleExpenseAllocations.length / RECORDS_PER_PAGE)));
+  const currentExpensePage = Math.min(expensePage, Math.max(1, Math.ceil(filteredExpenses.length / RECORDS_PER_PAGE)));
+  const allocationPageRecords = visibleExpenseAllocations.slice(
+    (currentAllocationPage - 1) * RECORDS_PER_PAGE,
+    currentAllocationPage * RECORDS_PER_PAGE
+  );
+  const expensePageRecords = filteredExpenses.slice(
+    (currentExpensePage - 1) * RECORDS_PER_PAGE,
+    currentExpensePage * RECORDS_PER_PAGE
+  );
+  useEffect(() => {
+    setExpensePage(1);
+  }, [filter, page]);
   const clientWorkProgress = data.activities.filter((item) =>
     item.kind === "progress" &&
     scopedProjects.some((project) => project.name === item.project) &&
@@ -145,9 +164,9 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const renderPeople = (people: Person[], engineers = false) => {
     const currentPage = engineers ? engineerPage : clientPage;
     const setPage = engineers ? setEngineerPage : setClientPage;
-    const pageCount = Math.max(1, Math.ceil(people.length / PEOPLE_PER_PAGE));
+    const pageCount = Math.max(1, Math.ceil(people.length / RECORDS_PER_PAGE));
     const page = Math.min(currentPage, pageCount);
-    const visiblePeople = people.slice((page - 1) * PEOPLE_PER_PAGE, page * PEOPLE_PER_PAGE);
+    const visiblePeople = people.slice((page - 1) * RECORDS_PER_PAGE, page * RECORDS_PER_PAGE);
     return <>
       {people.length > 0
         ? <div className="data-table-wrap"><table className="data-table people-table">
@@ -159,7 +178,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
           </tr>)}</tbody>
         </table></div>
         : <p className="people-empty">No people in this section yet.</p>}
-      <PeoplePagination page={page} totalItems={people.length} onPageChange={setPage} />
+      <RecordPagination page={page} totalItems={people.length} onPageChange={setPage} />
     </>;
   };
 
@@ -206,9 +225,35 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
       const projectTotal = projectQuotes.reduce((total, quote) => total + quote.amount, 0);
       return <section className="quotation-project-group" key={projectName}><header><div><span className="panel-kicker">PROJECT QUOTATIONS</span><h3>{projectName}</h3></div><div><small>COMBINED TOTAL</small><strong>{formatCurrency(projectTotal)}</strong></div></header><div className="quote-list">{filteredQuotes.map((quote) => <article className="quote-row" key={quote.id}><span className="quote-file-icon">▤</span><div className="quote-row-main"><strong>{quote.title}</strong><span>{quote.id} · {quote.date}</span></div><strong className="quote-row-amount">{formatCurrency(quote.amount)}</strong><StatusBadge status={quote.status} />{quote.status !== "Approved" && quote.status !== "Declined" ? <div className="inline-actions"><button onClick={() => onQuote(quote, "Approved")}>Approve</button><button onClick={() => onQuote(quote, "Declined")}>Decline</button>{quote.attachment && <QuotationPdfPreview attachment={quote.attachment} title={quote.title} />}</div> : quote.attachment ? <QuotationPdfPreview attachment={quote.attachment} title={quote.title} /> : <button className="icon-button" onClick={() => onToast(`Opening ${quote.id} preview.`)} aria-label={`Open quotation ${quote.id}`}>↗</button>}</article>)}</div></section>;
     })}</div> : <div className="quote-list">{visibleQuotes.filter((item) => filter === "All" || item.status === filter).map((quote) => <article className="quote-row" key={quote.id}><span className="quote-file-icon">▤</span><div className="quote-row-main"><strong>{quote.title}</strong><span>{quote.id} · {quote.project} · {quote.date}</span></div><div className="quote-row-client"><small>CLIENT</small><strong>{quote.client}</strong></div><strong className="quote-row-amount">{formatCurrency(quote.amount)}</strong><StatusBadge status={quote.status} />{quote.attachment ? <QuotationPdfPreview attachment={quote.attachment} title={quote.title} /> : <button className="icon-button" onClick={() => onToast(`Opening ${quote.id} preview.`)} aria-label={`Open quotation ${quote.id}`}>↗</button>}</article>)}</div>}</section>}
-    {role !== "Client" && page === "Expenses" && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">MONEY IN MOTION</span><h2 className="list-title">Expenses & receipts</h2></div><div className="toolbar-actions"><select className="select-button" aria-label="Filter expenses" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>Pending review</option><option>Logged</option><option>Approved</option><option>Declined</option><option>Paid</option></select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Add expense</button>}{role === "Employee" && <button className="button button-primary" onClick={() => onCreate("expense")}>＋ Add expense</button>}</div></div><ExpenseRows expenses={visibleExpenses.filter((item) => filter === "All" || item.status === filter)} detailed onAction={(expense) => {
+    {role !== "Client" && page === "Expenses" && <>
+      <section className="panel feature-panel">
+        <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED SPENDING</span><h2 className="list-title">{role === "Owner" ? "Engineer fund allocations" : "Your assigned funds"}</h2></div>
+          <div className="toolbar-actions">
+            {role === "Owner" && <button className="button button-outline" onClick={() => onCreate("expense-allocation")}>＋ Assign funds</button>}
+            {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
+          </div>
+        </div>
+        {role === "Employee" && <p className="feature-subtitle">Log project spending from your assigned funds. Need more money? Submit an extra-funds request below.</p>}
+        {visibleExpenseAllocations.length ? <div className="project-details-list">{allocationPageRecords.map((allocation) => <article key={allocation.id}>
+          <div><strong>{role === "Owner" ? allocation.engineer : `Assigned ${allocation.assignedAt}`}</strong><span>{formatCurrency(allocation.spentAmount)} spent · {formatCurrency(allocation.remainingAmount)} remaining</span></div>
+          <strong>{formatCurrency(allocation.amount)}</strong>
+        </article>)}</div> : <div className="inline-empty">{role === "Owner" ? "No funds have been assigned to engineers yet." : "No funds have been assigned to you yet."}</div>}
+        <RecordPagination page={currentAllocationPage} totalItems={visibleExpenseAllocations.length} onPageChange={setAllocationPage} />
+      </section>
+      <section className="panel feature-panel">
+        <div className="list-toolbar"><div><span className="panel-kicker">MONEY IN MOTION</span><h2 className="list-title">Expenses & receipts</h2></div>
+          <div className="toolbar-actions">
+            <select className="select-button" aria-label="Filter expenses" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>Pending review</option><option>Logged</option><option>Approved</option><option>Declined</option><option>Paid</option></select>
+            {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense")}>＋ Request extra funds</button>}
+            {role === "Owner" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
+          </div>
+        </div>
+        <ExpenseRows expenses={expensePageRecords} detailed onAction={(expense) => {
       onToast(`${expense.id}: ${expense.description} · ${formatCurrency(expense.amount)} · Submitted by ${expense.submittedBy}.`);
-    }} onApprove={role === "Owner" ? (expense) => onExpenseStatus(expense, "Approved") : undefined} onDecline={role === "Owner" ? (expense) => onExpenseStatus(expense, "Declined") : undefined} /></section>}
+    }} onApprove={role === "Owner" ? (expense) => onExpenseStatus(expense, "Approved") : undefined} onDecline={role === "Owner" ? (expense) => onExpenseStatus(expense, "Declined") : undefined} />
+        <RecordPagination page={currentExpensePage} totalItems={filteredExpenses.length} onPageChange={setExpensePage} />
+      </section>
+    </>}
     {page === "Progress Updates" && <section className="panel feature-panel"><div className="feature-intro"><div><span className="panel-kicker">FIELD REPORTING</span><h2>Progress updates</h2><p>Keep owners and clients up to date with work completed on site.</p></div><button className="button button-primary" onClick={() => onCreate("progress")}>＋ Submit daily update</button></div><div className="list-toolbar"><span className="panel-kicker">MY SITE UPDATES</span><div className="toolbar-actions"><select className="select-button" aria-label="Filter progress updates by project" value={workProgressProject} onChange={(event) => { setWorkProgressProject(event.target.value); setSelectedWorkProgress(null); }}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select><div className="work-progress-date-filter"><input aria-label="Filter progress updates by date" type="date" value={workProgressDate} onChange={(event) => { setWorkProgressDate(event.currentTarget.value); setSelectedWorkProgress(null); }} /></div></div></div>{(() => {
       const engineerUpdates = data.activities.filter((item) =>
         item.kind === "progress" &&

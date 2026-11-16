@@ -3,6 +3,7 @@ import {
   attendance,
   attendanceLeaveRequests,
   attendanceRegularizationRequests,
+  expenseAllocations,
   expenses,
   feedback,
   materialRequests,
@@ -12,7 +13,8 @@ import {
   quotations,
   siteVisits,
   type AccountRole,
-  type Activity
+  type Activity,
+  type ExpenseAllocation
 } from "../../data/store";
 import type { WorkspaceUpdate } from "../../realtime";
 import { authenticateBearerHeader, type AuthenticatedSession } from "./session";
@@ -26,6 +28,7 @@ const employeeReadRoutes = new Set([
   "/api/materials",
   "/api/material-requests",
   "/api/expenses",
+  "/api/expenses/allocations",
   "/api/progress",
   "/api/site-visits",
   "/api/attendance",
@@ -112,7 +115,11 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   const body = request.body && typeof request.body === "object" ? request.body as Record<string, unknown> : {};
   const projectNames = assignedProjectNames(session);
 
-  if (session.role === "owner") return { allowed: true };
+  if (session.role === "owner") {
+    if (method === "POST" && path === "/api/expenses/allocations") body.assignedBy = session.name;
+    if (method === "POST" && path === "/api/expenses") body.submittedBy = session.name;
+    return { allowed: true };
+  }
   if (path === "/api/push/subscriptions" && (method === "POST" || method === "DELETE")) return { allowed: true };
 
   if (session.role === "employee") {
@@ -145,6 +152,14 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
         body.requestedBy = session.name;
       } else {
         body.submittedBy = session.name;
+        if (body.entryType === "log") {
+          const allocation = expenseAllocations.find((item) => item.id === body.allocationId &&
+            sameName(item.engineer, session.name));
+          if (!allocation) {
+            return { allowed: false, status: 403, error: "You can only log expenses against your own assigned funds." };
+          }
+          body.requireAllocation = true;
+        }
       }
       return { allowed: true };
     }
@@ -251,6 +266,10 @@ function scopeDashboard(data: Record<string, unknown>, session: AuthenticatedSes
     projects: projects.filter((project) => projectNames.has(project.name)),
     quotes: isEmployee ? [] : filterProjects(data.quotes),
     expenses: isEmployee ? filterProjects(data.expenses) : [],
+    expenseAllocations: isEmployee
+      ? (Array.isArray(data.expenseAllocations) ? data.expenseAllocations as ExpenseAllocation[] : [])
+        .filter((allocation) => sameName(allocation.engineer, session.name))
+      : [],
     siteVisits: isEmployee ? siteVisits.filter((visit) => projectNames.has(visit.project) && sameName(visit.engineer, ownName)) : [],
     activities: filterActivities(data.activities),
     materials: isEmployee ? filterProjects(data.materials) : [],
@@ -275,6 +294,16 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
   if (pathname === "/api/projects") return projects.filter((project) => projectNames.has(project.name));
   if (pathname === "/api/people") return people.filter((person) => typeof person.email === "string" &&
     person.email.toLowerCase() === session.email.toLowerCase());
+  if (pathname === "/api/expenses/allocations") {
+    return session.role === "employee"
+      ? expenseAllocations.filter((allocation) => sameName(allocation.engineer, session.name)).map((allocation) => {
+        const totals = expenses.filter((expense) => expense.allocationId === allocation.id &&
+          (expense.entryType === "log" || (!expense.entryType && expense.status === "Logged")))
+          .reduce((total, expense) => total + expense.amount, 0);
+        return { ...allocation, spentAmount: totals, remainingAmount: Math.max(0, allocation.amount - totals) };
+      })
+      : body;
+  }
   if (pathname === "/api/attendance" || pathname === "/api/attendance/leave-requests" ||
     pathname === "/api/attendance/regularization-requests") {
     return body.filter((item) => item && typeof item === "object" &&
@@ -298,6 +327,8 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
 export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: AuthenticatedSession): WorkspaceUpdate | undefined {
   if (session.role === "owner") return update;
   if (session.role === "employee") {
+    if (update.resource === "expenseAllocations" && update.allocation &&
+      sameName(update.allocation.engineer, session.name)) return update;
     if (update.resource === "siteVisits" && update.visit && sameName(update.visit.engineer, session.name) &&
       assignedProjectNames(session).has(update.visit.project)) return update;
     if (update.resource === "attendance" && update.push?.targets.some((target) => ownPushTarget(session, target))) {

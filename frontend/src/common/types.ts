@@ -1,7 +1,7 @@
 export type Role = "Owner" | "Employee" | "Client";
 export type RoleId = "owner" | "employee" | "client";
 export type PaletteId = "current" | "previous" | "reference";
-export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "visit" | "material" | "material-request" | "person";
+export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "visit" | "material" | "material-request" | "person";
 export type SessionUser = { name: string; email: string; role: RoleId };
 export type Project = {
   id: string;
@@ -16,7 +16,8 @@ export type Project = {
   image: string;
 };
 export type Quote = { id: string; project: string; title: string; client: string; clientEmail?: string; amount: number; date: string; status: string; attachment?: string };
-export type Expense = { id: string; project: string; category: string; description: string; amount: number; date: string; submittedBy: string; status: string; attachment?: string };
+export type Expense = { id: string; project: string; category: string; description: string; amount: number; date: string; submittedBy: string; status: string; attachment?: string; entryType?: "request" | "log"; allocationId?: string };
+export type ExpenseAllocation = { id: string; engineer: string; amount: number; assignedAt: string; assignedBy: string; spentAmount: number; remainingAmount: number };
 export type SiteVisitProof = { image: string; capturedAt: string };
 export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; status: string; purpose?: string; checkIn?: SiteVisitProof; checkOut?: SiteVisitProof };
 export type Activity = { id: string; actor: string; action: string; project: string; time: string; kind: string; description?: string; attachment?: string; attachments?: string[]; createdAt?: string; stage?: "Start" | "Progress" | "Completion" };
@@ -32,5 +33,5 @@ export type Feedback = { id: string; project: string; client: string; rating: nu
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string };
-export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
+export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
 export type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };

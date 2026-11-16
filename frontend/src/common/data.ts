@@ -27,6 +27,7 @@ export const emptyDashboardData: DashboardData = {
   projects: [],
   quotes: [],
   expenses: [],
+  expenseAllocations: [],
   siteVisits: [],
   activities: [],
   materials: [],

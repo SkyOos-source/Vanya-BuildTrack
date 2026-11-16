@@ -324,6 +324,16 @@
 			},
 			"Expense": {
 				"properties": {
+					"allocationId": {
+						"type": "string"
+					},
+					"entryType": {
+						"type": "string",
+						"enum": [
+							"request",
+							"log"
+						]
+					},
 					"attachment": {
 						"type": "string"
 					},
@@ -1396,6 +1406,86 @@
 				}
 			}
 		},
+		"/api/expenses/allocations": {
+			"get": {
+				"operationId": "ListAllocations",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"properties": {
+											"assignedBy": {
+												"type": "string"
+											},
+											"assignedAt": {
+												"type": "string"
+											},
+											"amount": {
+												"type": "number",
+												"format": "double"
+											},
+											"engineer": {
+												"type": "string"
+											},
+											"id": {
+												"type": "string"
+											},
+											"remainingAmount": {
+												"type": "number",
+												"format": "double"
+											},
+											"spentAmount": {
+												"type": "number",
+												"format": "double"
+											}
+										},
+										"required": [
+											"assignedBy",
+											"assignedAt",
+											"amount",
+											"engineer",
+											"id",
+											"remainingAmount",
+											"spentAmount"
+										],
+										"type": "object"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "CreateAllocation",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/expenses/{id}": {
 			"patch": {
 				"operationId": "Update",
@@ -1488,6 +1578,47 @@
 											},
 											"type": "array"
 										},
+										"expenseAllocations": {
+											"items": {
+												"properties": {
+													"assignedBy": {
+														"type": "string"
+													},
+													"assignedAt": {
+														"type": "string"
+													},
+													"amount": {
+														"type": "number",
+														"format": "double"
+													},
+													"engineer": {
+														"type": "string"
+													},
+													"id": {
+														"type": "string"
+													},
+													"remainingAmount": {
+														"type": "number",
+														"format": "double"
+													},
+													"spentAmount": {
+														"type": "number",
+														"format": "double"
+													}
+												},
+												"required": [
+													"assignedBy",
+													"assignedAt",
+													"amount",
+													"engineer",
+													"id",
+													"remainingAmount",
+													"spentAmount"
+												],
+												"type": "object"
+											},
+											"type": "array"
+										},
 										"expenses": {
 											"items": {
 												"$ref": "#/components/schemas/Expense"
@@ -1555,6 +1686,7 @@
 										"materials",
 										"activities",
 										"siteVisits",
+										"expenseAllocations",
 										"expenses",
 										"quotes",
 										"projects"

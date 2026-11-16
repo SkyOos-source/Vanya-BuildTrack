@@ -1,11 +1,12 @@
 import { sendPushNotification, type PushMessage } from "./push";
-import type { SiteVisit } from "./data/store";
+import type { ExpenseAllocation, SiteVisit } from "./data/store";
 
 export type WorkspaceUpdate = {
-  resource: "materials" | "materialRequests" | "expenses" | "progress" | "quotations" | "siteVisits" | "attendance";
+  resource: "materials" | "materialRequests" | "expenses" | "expenseAllocations" | "progress" | "quotations" | "siteVisits" | "attendance";
   project?: string;
   push?: PushMessage;
   visit?: SiteVisit;
+  allocation?: ExpenseAllocation;
   action?: "scheduled" | "check-in" | "check-out";
 };
 

@@ -84,7 +84,7 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Expense": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"attachment":{"dataType":"string"},"status":{"dataType":"string","required":true},"submittedBy":{"dataType":"string","required":true},"date":{"dataType":"string","required":true},"amount":{"dataType":"double","required":true},"description":{"dataType":"string","required":true},"category":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"allocationId":{"dataType":"string"},"entryType":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["request"]},{"dataType":"enum","enums":["log"]}]},"attachment":{"dataType":"string"},"status":{"dataType":"string","required":true},"submittedBy":{"dataType":"string","required":true},"date":{"dataType":"string","required":true},"amount":{"dataType":"double","required":true},"description":{"dataType":"string","required":true},"category":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "AttendanceProof": {
@@ -966,6 +966,65 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'list',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsExpensesController_listAllocations: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        app.get('/api/expenses/allocations',
+            ...(fetchMiddlewares<RequestHandler>(ExpensesController)),
+            ...(fetchMiddlewares<RequestHandler>(ExpensesController.prototype.listAllocations)),
+
+            async function ExpensesController_listAllocations(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsExpensesController_listAllocations, request, response });
+
+                const controller = new ExpensesController();
+
+              await templateService.apiHandler({
+                methodName: 'listAllocations',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsExpensesController_createAllocation: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.post('/api/expenses/allocations',
+            ...(fetchMiddlewares<RequestHandler>(ExpensesController)),
+            ...(fetchMiddlewares<RequestHandler>(ExpensesController.prototype.createAllocation)),
+
+            async function ExpensesController_createAllocation(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsExpensesController_createAllocation, request, response });
+
+                const controller = new ExpensesController();
+
+              await templateService.apiHandler({
+                methodName: 'createAllocation',
                 controller,
                 response,
                 next,

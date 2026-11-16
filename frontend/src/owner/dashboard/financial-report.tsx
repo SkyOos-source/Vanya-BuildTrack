@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { DashboardData, Project } from "../../common/types";
-import { formatCurrency } from "../../common/utils";
+import { formatCurrency, isLoggedExpense } from "../../common/utils";
 
 type ProjectFinancials = { project: Project; revenue: number; expenditure: number; profit: number };
 
@@ -19,7 +19,7 @@ export default function OwnerFinancialReport({ data, onBack }: { data: Dashboard
   const filteredQuotes = data.quotes.filter((quote) =>
     (projectFilter === "All" || quote.project === projectFilter) && isWithinPeriod(quote.date)
   );
-  const filteredExpenses = data.expenses.filter((expense) =>
+  const filteredExpenses = data.expenses.filter(isLoggedExpense).filter((expense) =>
     (projectFilter === "All" || expense.project === projectFilter) && isWithinPeriod(expense.date)
   );
   const projectFinancials: ProjectFinancials[] = data.projects.map((project) => {

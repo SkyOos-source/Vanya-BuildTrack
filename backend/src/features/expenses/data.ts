@@ -1,1 +1,1 @@
-export { expenses } from "../../data/store";
+export { expenses, expenseAllocations } from "../../data/store";

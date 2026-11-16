@@ -39,6 +39,16 @@ export type Expense = {
   submittedBy: string;
   status: string;
   attachment?: string;
+  entryType?: "request" | "log";
+  allocationId?: string;
+};
+
+export type ExpenseAllocation = {
+  id: string;
+  engineer: string;
+  amount: number;
+  assignedAt: string;
+  assignedBy: string;
 };
 
 export type SiteVisit = {
@@ -93,6 +103,8 @@ export const quotations: Quote[] = [];
 
 export const expenses: Expense[] = [];
 
+export const expenseAllocations: ExpenseAllocation[] = [];
+
 export const siteVisits: SiteVisit[] = [];
 
 export const activities: Activity[] = [];
@@ -112,10 +124,11 @@ export const clientCredentials: EmployeeCredential[] = [];
 export const pushSubscriptions: PushSubscriptionRecord[] = [];
 export const ownerAccounts: OwnerAccount[] = [];
 
-export const store = { projects, quotations, expenses, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, attendanceLeaveRequests, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfiles, ownerAccounts, ownerAuditLogs };
+export const store = { projects, quotations, expenses, expenseAllocations, siteVisits, activities, materials, materialRequests, attendance, attendanceLeaves, attendanceLeaveRequests, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfiles, ownerAccounts, ownerAuditLogs };
 let projectSequence = 1;
 let quotationSequence = 1;
 let expenseSequence = 1;
+let expenseAllocationSequence = 1;
 let visitSequence = 1;
 let updateSequence = 1;
 let attendanceSequence = 1;
@@ -246,6 +259,7 @@ export async function initializeStore() {
   restore(projects, "projects");
   restore(quotations, "quotations");
   restore(expenses, "expenses");
+  restore(expenseAllocations, "expenseAllocations");
   restore(siteVisits, "siteVisits");
   restore(activities, "activities");
   restore(materials, "materials");
@@ -293,6 +307,7 @@ export async function initializeStore() {
   projectSequence = nextSequence(projects, "PRJ-", projectSequence);
   quotationSequence = nextSequence(quotations, "QT-", quotationSequence);
   expenseSequence = nextSequence(expenses, "EXP-", expenseSequence);
+  expenseAllocationSequence = nextSequence(expenseAllocations, "EAL-", expenseAllocationSequence);
   visitSequence = nextSequence(siteVisits, "VIS-", visitSequence);
   attendanceSequence = nextSequence(attendance, "ATT-", attendanceSequence);
   attendanceLeaveRequestSequence = nextSequence(attendanceLeaveRequests, "ALREQ-", attendanceLeaveRequestSequence);
@@ -367,6 +382,11 @@ export function restoreStoreSnapshot(snapshot: string) {
   restoreArray(projects, "projects");
   restoreArray(quotations, "quotations");
   restoreArray(expenses, "expenses");
+  if (Array.isArray(saved.expenseAllocations)) {
+    expenseAllocations.splice(0, expenseAllocations.length, ...saved.expenseAllocations as ExpenseAllocation[]);
+  } else if (saved.expenseAllocations !== undefined) {
+    throw new Error("Workspace snapshot field 'expenseAllocations' must be an array.");
+  }
   restoreArray(siteVisits, "siteVisits");
   restoreArray(activities, "activities");
   restoreArray(materials, "materials");
@@ -505,6 +525,7 @@ export function nextId(kind: string): string {
     project: { prefix: "PRJ-", next: () => projectSequence++ },
     quotation: { prefix: "QT-", next: () => quotationSequence++ },
     expense: { prefix: "EXP-", next: () => expenseSequence++ },
+    "expense-allocation": { prefix: "EAL-", next: () => expenseAllocationSequence++ },
     visit: { prefix: "VIS-", next: () => visitSequence++ },
     progress: { prefix: "UPD-", next: () => updateSequence++ },
     attendance: { prefix: "ATT-", next: () => attendanceSequence++ },

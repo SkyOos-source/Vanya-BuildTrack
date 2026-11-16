@@ -5,7 +5,7 @@ import express from "express";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { RegisterRoutes } from "./generated/routes";
-import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type SiteVisit } from "./data/store";
+import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type ExpenseAllocation, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 import { authenticateBearerHeader } from "./features/auth/session";
@@ -21,13 +21,16 @@ function auditOwnerRequest(request: express.Request, body: unknown) {
   const owner = session?.role === "owner" ? findOwnerAccount(session.email) : undefined;
   if (!owner || request.path.startsWith("/api/push/") || request.path.startsWith("/api/auth/")) return;
   const parts = request.path.split("/").filter(Boolean);
-  const collection = parts[1] === "attendance" && ["leaves", "leave-requests", "regularization-requests"].includes(parts[2] ?? "")
-    ? parts[2]
-    : parts[1] ?? "workspace";
+  const collection = parts[1] === "expenses" && parts[2] === "allocations"
+    ? "expense-allocations"
+    : parts[1] === "attendance" && ["leaves", "leave-requests", "regularization-requests"].includes(parts[2] ?? "")
+      ? parts[2]
+      : parts[1] ?? "workspace";
   const resources: Record<string, string> = {
     projects: "Project",
     quotations: "Quotation",
     expenses: "Expense",
+    "expense-allocations": "Expense allocation",
     "site-visits": "Site visit",
     progress: "Progress update",
     materials: "Material",
@@ -171,6 +174,20 @@ app.use((request, response, next) => {
     response.locals.persistencePending = true;
     void saveStore().then(() => {
       response.locals.storeSnapshot = undefined;
+      if (request.method === "POST" && request.path === "/api/expenses/allocations") {
+        const allocation = (body as { record?: ExpenseAllocation } | null)?.record;
+        if (allocation) {
+          publishWorkspaceUpdate({
+            resource: "expenseAllocations",
+            allocation,
+            push: {
+              title: "Expense funds assigned",
+              body: `${allocation.amount} assigned for your project expenses.`,
+              targets: [{ role: "employee", userName: allocation.engineer, url: "/engineer/expenses" }]
+            }
+          });
+        }
+      }
       if (request.path === "/api/site-visits" || /^\/api\/site-visits\/[^/]+$/.test(request.path)) {
         const visit = (body as { record?: SiteVisit } | null)?.record;
         if (visit) {
