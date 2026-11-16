@@ -5,14 +5,16 @@ import express from "express";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { RegisterRoutes } from "./generated/routes";
-import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, saveStore, type SiteVisit } from "./data/store";
+import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 import { authenticateBearerHeader } from "./features/auth/session";
+import { apiAccessMiddleware, scopeApiResponse, scopeWorkspaceUpdate } from "./features/auth/access";
 import { createInitialOwnerSetupCode } from "./features/auth/service";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
+let workspaceRequestQueue: Promise<void> = Promise.resolve();
 
 function auditOwnerRequest(request: express.Request, body: unknown) {
   const session = authenticateBearerHeader(request.get("authorization"));
@@ -69,13 +71,25 @@ app.use((request, response, next) => {
     request.path === "/api/dashboard" ||
     request.path === "/api/reports/attendance"
   );
-  if ((request.method === "GET" && !attendanceReadMayMaterializeRecords) ||
-    request.method === "HEAD" || request.method === "OPTIONS") {
-    next();
-    return;
-  }
   const sendJson = response.json.bind(response);
+  const releaseIfClosed = () => {
+    if (response.locals.workspaceResponseClosed === true) {
+      const release = response.locals.releaseWorkspaceRequest;
+      if (typeof release === "function") release();
+    }
+  };
   const sendResponse = (body: unknown) => {
+    if (response.statusCode >= 400 && typeof response.locals.storeSnapshot === "string") {
+      try {
+        restoreStoreSnapshot(response.locals.storeSnapshot);
+      } catch (error) {
+        console.error("Unable to roll back a failed workspace request:", error);
+      }
+      response.locals.storeSnapshot = undefined;
+    } else if (response.statusCode < 400) {
+      response.locals.storeSnapshot = undefined;
+    }
+    response.locals.persistencePending = false;
     if (response.statusCode < 400) {
       const record = (body as { record?: Record<string, unknown> } | null)?.record;
       if (request.method === "POST" && request.path === "/api/materials") {
@@ -141,14 +155,22 @@ app.use((request, response, next) => {
         });
       }
     }
-    return sendJson(body);
+    const scopedBody = scopeApiResponse(request.path, body, response.locals.authSession);
+    const sentResponse = sendJson(scopedBody);
+    releaseIfClosed();
+    return sentResponse;
   };
   response.json = ((body: unknown) => {
     if (response.statusCode >= 400) return sendResponse(body);
     if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") {
       auditOwnerRequest(request, body);
     }
+    const shouldPersist = request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS" &&
+      !request.path.startsWith("/api/auth/");
+    if (!shouldPersist && !attendanceReadMayMaterializeRecords) return sendResponse(body);
+    response.locals.persistencePending = true;
     void saveStore().then(() => {
+      response.locals.storeSnapshot = undefined;
       if (request.path === "/api/site-visits" || /^\/api\/site-visits\/[^/]+$/.test(request.path)) {
         const visit = (body as { record?: SiteVisit } | null)?.record;
         if (visit) {
@@ -181,15 +203,73 @@ app.use((request, response, next) => {
       return sendResponse(body);
     }).catch((error: unknown) => {
       console.error("Unable to persist workspace data:", error);
+      if (typeof response.locals.storeSnapshot === "string") {
+        try {
+          restoreStoreSnapshot(response.locals.storeSnapshot);
+        } catch (restoreError) {
+          console.error("Unable to roll back a failed workspace request:", restoreError);
+        }
+        response.locals.storeSnapshot = undefined;
+      }
       response.status(500);
+      response.locals.persistencePending = false;
       sendJson({ error: "The record could not be saved to the database." });
+      releaseIfClosed();
     });
     return response;
   }) as typeof response.json;
   next();
 });
 
+app.use(apiAccessMiddleware);
+
+app.use((request, response, next) => {
+  const isWorkspaceWrite = request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS" &&
+    !request.path.startsWith("/api/auth/");
+  const isAuthStoreWrite = request.method === "POST" &&
+    (request.path === "/api/auth/setup" || request.path === "/api/auth/verify-code");
+  const materializesAttendance = request.method === "GET" && (
+    request.path === "/api/attendance" ||
+    request.path === "/api/dashboard" ||
+    request.path === "/api/reports/attendance"
+  );
+  if (!isWorkspaceWrite && !isAuthStoreWrite && !materializesAttendance) {
+    next();
+    return;
+  }
+
+  const queuedRequest = workspaceRequestQueue.then(() => new Promise<void>((resolve) => {
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      response.removeListener("finish", release);
+      response.removeListener("close", onClose);
+      resolve();
+    };
+    const onClose = () => {
+      response.locals.workspaceResponseClosed = true;
+      if (response.locals.persistencePending !== true) release();
+    };
+    response.once("finish", release);
+    response.locals.workspaceResponseClosed = false;
+    response.locals.persistencePending = true;
+    response.locals.releaseWorkspaceRequest = release;
+    response.once("close", onClose);
+    if (request.aborted || response.destroyed) {
+      release();
+      return;
+    }
+    response.locals.storeSnapshot = snapshotStore();
+    next();
+  }));
+  workspaceRequestQueue = queuedRequest.catch((error: unknown) => {
+    console.error("Unable to serialize a workspace request:", error);
+  });
+});
+
 app.get("/api/events", (_request, response) => {
+  const session = response.locals.authSession;
   response.status(200).set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -200,7 +280,8 @@ app.get("/api/events", (_request, response) => {
 
   const unsubscribe = subscribeToWorkspaceUpdates((update) => {
     if (!response.destroyed && !response.writableEnded) {
-      response.write(`data: ${JSON.stringify(update)}\n\n`);
+      const scopedUpdate = scopeWorkspaceUpdate(update, session);
+      if (scopedUpdate) response.write(`data: ${JSON.stringify(scopedUpdate)}\n\n`);
     }
   });
   const heartbeat = setInterval(() => {
@@ -223,24 +304,27 @@ app.post("/api/push/subscriptions", (request, response) => {
     return;
   }
   const body = request.body && typeof request.body === "object" ? request.body as Record<string, unknown> : {};
-  const { subscription, role, userName, userEmail } = body;
-  if ((role !== "owner" && role !== "employee" && role !== "client") || typeof userName !== "string" || !userName.trim() ||
-    userEmail !== undefined && (typeof userEmail !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) ||
-    !isPushSubscription(subscription)) {
-    response.status(400).json({ error: "A valid role, push subscription, and user name are required." });
+  const { subscription } = body;
+  const session = response.locals.authSession;
+  if (!session || !isPushSubscription(subscription)) {
+    response.status(400).json({ error: "A valid push subscription is required." });
     return;
   }
-  savePushSubscription(subscription, userName.trim(), role, typeof userEmail === "string" ? userEmail.trim() : undefined);
+  if (!savePushSubscription(subscription, session.name, session.role, session.email)) {
+    response.status(409).json({ error: "This push subscription belongs to another account." });
+    return;
+  }
   response.status(201).json({ enabled: true });
 });
 
 app.delete("/api/push/subscriptions", (request, response) => {
   const endpoint = request.body?.endpoint;
+  const session = response.locals.authSession;
   if (typeof endpoint !== "string" || !endpoint.startsWith("https://")) {
     response.status(400).json({ error: "A valid push subscription endpoint is required." });
     return;
   }
-  removePushSubscription(endpoint);
+  if (session) removePushSubscription(endpoint, { role: session.role, email: session.email, name: session.name });
   response.json({ enabled: false });
 });
 

@@ -27,6 +27,7 @@ export function createQuotation(body: any) {
   quotations.unshift(quote);
   publishWorkspaceUpdate({
     resource: "quotations",
+    project: quote.project,
     ...(quote.client !== "Unassigned" ? {
       push: {
         title: "New quotation from Vanya BuildTrack",
@@ -47,6 +48,7 @@ export function updateQuotation(id: string, body: any) {
   quote.status = status;
   publishWorkspaceUpdate({
     resource: "quotations",
+    project: quote.project,
     ...(newlyApproved ? {
       push: {
         title: "Quotation approved",

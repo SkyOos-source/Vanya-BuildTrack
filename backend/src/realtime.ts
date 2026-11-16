@@ -3,6 +3,7 @@ import type { SiteVisit } from "./data/store";
 
 export type WorkspaceUpdate = {
   resource: "materials" | "materialRequests" | "expenses" | "progress" | "quotations" | "siteVisits" | "attendance";
+  project?: string;
   push?: PushMessage;
   visit?: SiteVisit;
   action?: "scheduled" | "check-in" | "check-out";

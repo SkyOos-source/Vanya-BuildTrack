@@ -345,12 +345,66 @@ export function nextSequence(records: Array<{ id: string }>, prefix: string, fal
   return Math.max(fallback, highest + 1);
 }
 
+function serializeStore() {
+  return JSON.stringify({ ...store, employeeCredentials, clientCredentials });
+}
+
+export function snapshotStore() {
+  return serializeStore();
+}
+
+export function restoreStoreSnapshot(snapshot: string) {
+  const parsed: unknown = JSON.parse(snapshot);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Cannot restore an invalid workspace snapshot.");
+  }
+  const saved = parsed as Record<string, unknown>;
+  const restoreArray = (target: unknown[], key: string) => {
+    const records = saved[key];
+    if (!Array.isArray(records)) throw new Error(`Workspace snapshot field '${key}' must be an array.`);
+    target.splice(0, target.length, ...records);
+  };
+  restoreArray(projects, "projects");
+  restoreArray(quotations, "quotations");
+  restoreArray(expenses, "expenses");
+  restoreArray(siteVisits, "siteVisits");
+  restoreArray(activities, "activities");
+  restoreArray(materials, "materials");
+  restoreArray(materialRequests, "materialRequests");
+  restoreArray(attendance, "attendance");
+  restoreArray(attendanceLeaves, "attendanceLeaves");
+  restoreArray(attendanceLeaveRequests, "attendanceLeaveRequests");
+  restoreArray(attendanceRegularizationRequests, "attendanceRegularizationRequests");
+  restoreArray(feedback, "feedback");
+  restoreArray(backups, "backups");
+  restoreArray(people, "people");
+  restoreArray(ownerAuditLogs, "ownerAuditLogs");
+  restoreArray(pushSubscriptions, "pushSubscriptions");
+  restoreArray(ownerAccounts, "ownerAccounts");
+  restoreArray(employeeCredentials, "employeeCredentials");
+  restoreArray(clientCredentials, "clientCredentials");
+
+  const profiles = saved.ownerProfiles;
+  if (!profiles || typeof profiles !== "object" || Array.isArray(profiles)) {
+    throw new Error("Workspace snapshot field 'ownerProfiles' must be an object.");
+  }
+  for (const key of Object.keys(ownerProfiles)) delete ownerProfiles[key];
+  Object.assign(ownerProfiles, profiles);
+}
+
+let pendingStoreWrite: Promise<void> = Promise.resolve();
+
 export async function saveStore() {
-  await prisma.appState.upsert({
-    where: { id: "workspace" },
-    create: { id: "workspace", payload: JSON.stringify({ ...store, employeeCredentials, clientCredentials }) },
-    update: { payload: JSON.stringify({ ...store, employeeCredentials, clientCredentials }) }
+  const payload = serializeStore();
+  const write = pendingStoreWrite.catch(() => undefined).then(async () => {
+    await prisma.appState.upsert({
+      where: { id: "workspace" },
+      create: { id: "workspace", payload },
+      update: { payload }
+    });
   });
+  pendingStoreWrite = write;
+  await write;
 }
 
 export async function consumeClientLoginQuota(email: string): Promise<boolean> {

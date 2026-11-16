@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
-import { apiFetch } from "./api";
+import { apiFetch, connectWorkspaceEvents } from "./api";
 import { compressImageFile, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
 import OwnerDashboard from "../owner/dashboard/page";
@@ -46,6 +46,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState<DashboardData>(emptyDashboardData);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsLoadError, setProjectsLoadError] = useState("");
+  const [peopleLoading, setPeopleLoading] = useState(role === "Owner");
+  const [peopleLoadError, setPeopleLoadError] = useState("");
   const page = pageFromPath(location.pathname, role);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
@@ -64,6 +68,53 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     setPersonCreationRole(personRole);
     setModal("person");
   };
+
+  useEffect(() => {
+    let active = true;
+    const loadProjects = async () => {
+      try {
+        const response = await apiFetch("/api/projects");
+        if (!response.ok) throw new Error(`Project list request failed (${response.status}).`);
+        const projects: unknown = await response.json();
+        if (!Array.isArray(projects)) throw new Error("Project list request returned invalid data.");
+        if (active) {
+          setData((current) => ({ ...current, projects: projects as DashboardData["projects"] }));
+          setProjectsLoadError("");
+        }
+      } catch (error) {
+        console.error("Unable to load projects for project selectors:", error);
+        if (active) setProjectsLoadError(error instanceof Error ? error.message : "Project list request failed.");
+      } finally {
+        if (active) setProjectsLoading(false);
+      }
+    };
+    void loadProjects();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (role !== "Owner") return;
+    let active = true;
+    const loadPeople = async () => {
+      try {
+        const response = await apiFetch("/api/people");
+        if (!response.ok) throw new Error(`People list request failed (${response.status}).`);
+        const people: unknown = await response.json();
+        if (!Array.isArray(people)) throw new Error("People list request returned invalid data.");
+        if (active) {
+          setData((current) => ({ ...current, people: people as DashboardData["people"] }));
+          setPeopleLoadError("");
+        }
+      } catch (error) {
+        console.error("Unable to load people for record selectors:", error);
+        if (active) setPeopleLoadError(error instanceof Error ? error.message : "People list request failed.");
+      } finally {
+        if (active) setPeopleLoading(false);
+      }
+    };
+    void loadPeople();
+    return () => { active = false; };
+  }, [role]);
 
   useEffect(() => {
     if (role === "Client") return;
@@ -190,6 +241,12 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         const result: DashboardData = await response.json();
         if (active) {
           setData(result);
+          setProjectsLoading(false);
+          setProjectsLoadError("");
+          if (role === "Owner") {
+            setPeopleLoading(false);
+            setPeopleLoadError("");
+          }
         }
       } catch (error) {
         console.error("Unable to load workspace data from the API:", error);
@@ -249,8 +306,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, [attendanceReviewVersion, data.attendance, role, userName]);
 
   useEffect(() => {
-    const events = new EventSource("/api/events");
-    events.onmessage = (event) => {
+    const events = connectWorkspaceEvents((eventData) => {
       let update: {
         resource?: unknown;
         visit?: SiteVisit;
@@ -258,7 +314,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         push?: { body: string; targets: Array<{ role: string; userName?: string }> };
       };
       try {
-        update = JSON.parse(event.data) as typeof update;
+        update = JSON.parse(eventData) as typeof update;
       } catch (error) {
         console.error("Unable to parse a real-time workspace update:", error);
         return;
@@ -346,11 +402,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           console.error(`Unable to refresh ${resource} after a real-time update:`, error);
         }
       })();
-    };
-    events.onerror = () => {
-      console.error("Real-time workspace connection interrupted; the browser will retry automatically.");
-    };
-    return () => events.close();
+    }, (error) => {
+      console.error("Real-time workspace connection interrupted; reconnecting:", error);
+    });
+    return () => events.abort();
   }, [data.people, data.projects, role, userName]);
 
   useEffect(() => {
@@ -418,6 +473,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
         const result: unknown = await response.json();
         if (!active || !Array.isArray(result)) return;
+        if (page === "Projects & Sites" || page === "My Sites" || page === "My Projects") {
+          setProjectsLoading(false);
+          setProjectsLoadError("");
+        }
+        if (page === "People") {
+          setPeopleLoading(false);
+          setPeopleLoadError("");
+        }
         setData((current) => {
           switch (page) {
             case "Projects & Sites":
@@ -1082,7 +1145,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} initialPersonRole={personCreationRole} projects={data.projects} people={data.people} onClose={() => setModal(null)} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} initialPersonRole={personCreationRole} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} onClose={() => setModal(null)} onSubmit={createRecord} />}
     </div>
   );
 }

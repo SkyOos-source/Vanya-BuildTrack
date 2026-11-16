@@ -52,3 +52,62 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   const renewedToken = await refreshAccessToken();
   return renewedToken ? fetchWithToken(renewedToken) : response;
 }
+
+export function connectWorkspaceEvents(
+  onMessage: (data: string) => void,
+  onError: (error: unknown) => void
+): AbortController {
+  const controller = new AbortController();
+  const reconnectDelay = () => new Promise<void>((resolve) => {
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      controller.signal.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const timer = window.setTimeout(() => {
+      controller.signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, 1500);
+    controller.signal.addEventListener("abort", onAbort, { once: true });
+  });
+
+  const connect = async () => {
+    while (!controller.signal.aborted) {
+      try {
+        const response = await apiFetch("/api/events", {
+          headers: { Accept: "text/event-stream" },
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`Real-time workspace connection failed (${response.status}).`);
+        if (!response.body) throw new Error("Real-time workspace response has no stream body.");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (!controller.signal.aborted) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary >= 0) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const data = frame.split("\n")
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).replace(/^ /, ""))
+              .join("\n");
+            if (data) onMessage(data);
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+        if (!controller.signal.aborted) throw new Error("Real-time workspace connection ended.");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        onError(error);
+        await reconnectDelay();
+      }
+    }
+  };
+  void connect();
+  return controller;
+}

@@ -24,6 +24,9 @@ export function createPerson(body: any) {
   if (role === "Client" && !projects.some((item) => item.name === project)) {
     return failure(400, "Select an existing project to assign to this client.");
   }
+  if (people.some((person) => person.role === role && person.name.toLowerCase() === name.toLowerCase())) {
+    return failure(409, "A person with this name already exists for this role.");
+  }
   if (people.some((person) => person.email.toLowerCase() === email.toLowerCase())) {
     return failure(409, "A person with this email already exists.");
   }
@@ -53,6 +56,9 @@ export function updatePerson(id: string, body: any) {
   }
   if (people.some((item) => item.id !== id && item.email.toLowerCase() === email.toLowerCase())) {
     return failure(409, "A person with this email already exists.");
+  }
+  if (people.some((item) => item.id !== id && item.role === person.role && item.name.toLowerCase() === name.toLowerCase())) {
+    return failure(409, "A person with this name already exists for this role.");
   }
 
   const previousName = person.name;

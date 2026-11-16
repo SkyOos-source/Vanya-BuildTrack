@@ -53,6 +53,6 @@ export function createProgress(body: any) {
       ...(assignedProject?.client ? [{ role: "client" as const, userName: assignedProject.client, url: "/client/timeline" }] : [])
     ]
   };
-  publishWorkspaceUpdate({ resource: "progress", push });
+  publishWorkspaceUpdate({ resource: "progress", project, push });
   return result({ record: activity, project: assignedProject }, 201);
 }

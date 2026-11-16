@@ -68,7 +68,7 @@ Open the production HTTPS domain, choose **Complete initial setup**, and enter t
 
 To deploy an update, pull the desired code and run `docker compose --profile prod up -d --build`. The API health endpoint should report `"database":"postgresql"` when the database is reachable. Back up PostgreSQL before upgrades or VPS maintenance. The named volume `buildtrack-prod-postgres-data` contains the production database; `buildtrack-prod-data` contains generated push keys and any old database files. Do not remove either volume when updating containers.
 
-This project still describes its real-mode authentication as a starter rather than production-ready. Review and harden authentication/authorization and operational backup/restore procedures before using it with sensitive production data.
+Protected API routes validate bearer access tokens server-side. Owners have full workspace access; site engineers and clients are limited to their assigned projects and role-specific actions. Health, sign-in/setup, push configuration, and QR-linked public profiles remain public. The access token cache is process-local, so keep the app to one replica until workspace persistence is migrated to concurrency-safe multi-instance storage. This is a single-workspace app, not a multi-tenant service; continue to test backup and restore procedures before production use.
 
 The initial setup page lets you choose names, emails, phone numbers, and passwords for two full-access owner accounts. Passwords are saved only as salted hashes in the workspace database and are not needed from the environment on later restarts. Successful owner changes are attributed to the signed-in owner and appear in **Settings & Backup → Audit log**. Create employee and client logins from either owner's **People** page. The old ignored `backend/data/buildtrack.json` file is not read or imported.
 
@@ -98,7 +98,7 @@ Web Push requires HTTPS (localhost is supported for local development). If VAPID
 
 ### Backend architecture
 
-The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns workspace collections, account credentials, sequence recovery, and database persistence.
+The API uses TSOA decorators to generate Express route registration from the feature controllers in `backend/src/features`. Each feature is organized into `controller.ts` (HTTP paths and status responses), `service.ts` (validation and business rules), and `data.ts` (feature data access). `backend/src/data/store.ts` owns workspace collections, account credentials, sequence recovery, and database persistence. API writes are serialized within the app process because the workspace is persisted as one JSON record.
 
 Profile QR codes link to the frontend origin. In local development, the API derives it from the request host and maps port `3001` to Vite's default port `5173`. If the frontend is hosted separately in production, set `FRONTEND_URL` to its public origin (for example, `https://buildtrack.example.com`).
 
@@ -124,7 +124,7 @@ The generated Express bindings are written under `backend/src/generated`, and th
 
 ## Real-mode API
 
-The dashboard loads its initial data from `GET /api/dashboard`. Feature pages request their own data from the matching resource endpoint.
+The dashboard loads its initial data from `GET /api/dashboard`. Feature pages request their own data from the matching resource endpoint. Protected requests require `Authorization: Bearer <accessToken>`; the server scopes engineer/client responses and writes to the authenticated role and assigned projects.
 
 - `GET /api/health` — API status and the configured database provider; also verifies database connectivity.
 - `POST /api/auth/login` and `POST /api/auth/logout` — real-mode sign-in and sign-out.
@@ -143,4 +143,4 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
 - `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 
-The database stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Local development uses SQLite; production uses a private PostgreSQL service. Employee and client passwords are salted and hashed before storage. Browser sessions remain client-side; this app is still a local starter and should not be treated as production-ready authentication or multi-tenant authorization.
+The database stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Local development uses SQLite; production uses a private PostgreSQL service. Employee and client passwords are salted and hashed before storage. Express validates bearer tokens and applies role/project-scoped access; access tokens are cached in process memory, so production should run a single app replica.

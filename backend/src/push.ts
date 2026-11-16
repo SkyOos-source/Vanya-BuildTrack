@@ -62,7 +62,7 @@ export function isPushSubscription(value: unknown): value is PushSubscription {
     typeof keys.auth === "string" && /^[A-Za-z0-9_-]+$/.test(keys.auth);
 }
 
-export function savePushSubscription(subscription: PushSubscription, userName: string, role: AccountRole, userEmail?: string): void {
+export function savePushSubscription(subscription: PushSubscription, userName: string, role: AccountRole, userEmail?: string): boolean {
   const record: PushSubscriptionRecord = {
     endpoint: subscription.endpoint,
     keys: subscription.keys,
@@ -72,12 +72,25 @@ export function savePushSubscription(subscription: PushSubscription, userName: s
   };
   const existingIndex = pushSubscriptions.findIndex((item) => item.endpoint === subscription.endpoint);
   if (existingIndex < 0) pushSubscriptions.push(record);
-  else pushSubscriptions[existingIndex] = record;
+  else {
+    const existing = pushSubscriptions[existingIndex];
+    const sameAccount = existing.userEmail
+      ? existing.userEmail.toLowerCase() === userEmail?.toLowerCase()
+      : existing.userName.toLowerCase() === userName.toLowerCase();
+    if (existing.role !== role || !sameAccount) return false;
+    pushSubscriptions[existingIndex] = record;
+  }
+  return true;
 }
 
-export function removePushSubscription(endpoint: string): void {
-  const index = pushSubscriptions.findIndex((item) => item.endpoint === endpoint);
-  if (index >= 0) pushSubscriptions.splice(index, 1);
+export function removePushSubscription(endpoint: string, owner?: { role: AccountRole; email: string; name: string }): boolean {
+  const index = pushSubscriptions.findIndex((item) => item.endpoint === endpoint &&
+    (!owner || item.role === owner.role && (item.userEmail
+      ? item.userEmail.toLowerCase() === owner.email.toLowerCase()
+      : item.userName.toLowerCase() === owner.name.toLowerCase())));
+  if (index < 0) return false;
+  pushSubscriptions.splice(index, 1);
+  return true;
 }
 
 export async function sendPushNotification(message: PushMessage): Promise<void> {
