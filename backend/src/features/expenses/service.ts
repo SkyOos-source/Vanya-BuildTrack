@@ -4,12 +4,29 @@ import { failure, result, today } from "../shared";
 
 export const listExpenses = () => expenses;
 
+function readPositiveCurrencyAmount(value: unknown) {
+  const amount = readAmount(value);
+  if (amount === null || amount <= 0) return null;
+  const cents = Math.round(amount * 100);
+  if (!Number.isSafeInteger(cents) || Math.abs(amount * 100 - cents) > 1e-7) return null;
+  return cents / 100;
+}
+
+function amountInCents(amount: number) {
+  return Math.round(amount * 100);
+}
+
 function allocationTotals(allocation: ExpenseAllocation) {
-  const spentAmount = expenses
+  const spentCents = expenses
     .filter((expense) => expense.allocationId === allocation.id &&
       (expense.entryType === "log" || (!expense.entryType && expense.status === "Logged")))
-    .reduce((total, expense) => total + expense.amount, 0);
-  return { ...allocation, spentAmount, remainingAmount: Math.max(0, allocation.amount - spentAmount) };
+    .reduce((total, expense) => total + amountInCents(expense.amount), 0);
+  const allocationCents = amountInCents(allocation.amount);
+  return {
+    ...allocation,
+    spentAmount: spentCents / 100,
+    remainingAmount: Math.max(0, allocationCents - spentCents) / 100
+  };
 }
 
 export const listExpenseAllocations = (engineer?: string) =>
@@ -18,9 +35,9 @@ export const listExpenseAllocations = (engineer?: string) =>
 
 export function createExpenseAllocation(body: any) {
   const engineer = readText(body?.engineer);
-  const amount = readAmount(body?.amount);
-  if (!engineer || amount === null || amount <= 0) {
-    return failure(400, "A site engineer and a positive allocation amount are required.");
+  const amount = readPositiveCurrencyAmount(body?.amount);
+  if (!engineer || amount === null) {
+    return failure(400, "A site engineer and a positive allocation amount with no more than two decimal places are required.");
   }
   if (!people.some((person) => person.role === "Site Engineer" && person.name.toLowerCase() === engineer.toLowerCase())) {
     return failure(400, "Select an existing site engineer.");
@@ -39,14 +56,14 @@ export function createExpenseAllocation(body: any) {
 export function createExpense(body: any) {
   const description = readText(body?.description);
   const project = readText(body?.project);
-  const amount = readAmount(body?.amount);
+  const amount = readPositiveCurrencyAmount(body?.amount);
   const attachment = readAttachment(body?.attachment);
   const isLog = body?.entryType === "log";
   if (!project || !projects.some((item) => item.name === project)) {
     return failure(400, "Select an existing project for this expense.");
   }
-  if (!description || amount === null || amount <= 0 || (body?.attachment && !attachment)) {
-    return failure(400, "Expense description, project, positive amount, and a supported attachment are required.");
+  if (!description || amount === null || (body?.attachment && !attachment)) {
+    return failure(400, "Expense description, project, positive amount with no more than two decimal places, and a supported attachment are required.");
   }
   let allocation: ExpenseAllocation | undefined;
   const allocationId = readText(body?.allocationId);
@@ -59,7 +76,7 @@ export function createExpense(body: any) {
       return failure(400, "Select one of your assigned expense allocations.");
     }
     if (!isLog) return failure(400, "Expense requests cannot be charged to an allocation.");
-    if (amount > allocationTotals(allocation).remainingAmount) {
+    if (amountInCents(amount) > amountInCents(allocationTotals(allocation).remainingAmount)) {
       return failure(400, "The expense amount exceeds the remaining allocated funds.");
     }
   }
@@ -75,10 +92,13 @@ export function createExpense(body: any) {
 }
 
 export function updateExpense(id: string, body: any) {
-  const status = body?.status;
-  if (!["Approved", "Declined", "Paid"].includes(status)) return failure(400, "Expense status must be Approved, Declined, or Paid.");
   const expense = expenses.find((item) => item.id === id);
   if (!expense) return failure(404, "Expense not found.");
+  if (expense.entryType === "log" || expense.status === "Logged") {
+    return failure(400, "Logged expenses are recorded immediately and do not require approval.");
+  }
+  const status = body?.status;
+  if (!["Approved", "Declined", "Paid"].includes(status)) return failure(400, "Expense status must be Approved, Declined, or Paid.");
   expense.status = status;
   return result({ record: expense });
 }

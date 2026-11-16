@@ -206,6 +206,17 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .financial-summary-top small { color: #aaa29b; font-size: 9px; }
 .financial-summary-profit { text-align: right; }
 .financial-summary-top .financial-summary-profit strong { color: var(--palette-contrast-accent); }
+.engineer-expense-summary { min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; color: var(--graphite); }
+.engineer-expense-summary .financial-summary-top { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; gap: 12px; }
+.engineer-expense-summary .financial-summary-top > div { min-height: 82px; align-content: center; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; box-shadow: var(--shadow); text-align: center; }
+.engineer-expense-summary .financial-summary-top > div + div { border-left: 1px solid var(--border); }
+.engineer-expense-summary .financial-summary-top > div > span { display: flex; align-items: center; justify-content: center; gap: 7px; color: #81776f; font-size: 9px; font-weight: 600; letter-spacing: .45px; text-transform: uppercase; }
+.engineer-expense-summary .financial-summary-top > div > span::before { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #e2a36a; content: ""; }
+.engineer-expense-summary .financial-summary-top > div:nth-child(2) > span::before { background: #b6aaa0; }
+.engineer-expense-summary .financial-summary-top > div:nth-child(3) > span::before { background: #9dc79d; }
+.engineer-expense-summary .financial-summary-top > div > strong { color: #38322d; font-size: 23px; letter-spacing: -.5px; }
+.engineer-expense-summary .financial-summary-top .financial-summary-profit strong { color: var(--orange-dark); }
+.engineer-expense-summary .engineer-expense-summary-spent { text-align: center; }
 .financial-summary-track { overflow: hidden; height: 6px; border-radius: 10px; background: #514b46; }
 .financial-summary-track span { display: block; height: 100%; border-radius: inherit; background: var(--palette-highlight); }
 .financial-summary-foot { display: flex; align-items: center; justify-content: space-between; color: #c7c0ba; font-size: 9px; }

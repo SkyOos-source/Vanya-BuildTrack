@@ -297,10 +297,11 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
   if (pathname === "/api/expenses/allocations") {
     return session.role === "employee"
       ? expenseAllocations.filter((allocation) => sameName(allocation.engineer, session.name)).map((allocation) => {
-        const totals = expenses.filter((expense) => expense.allocationId === allocation.id &&
+        const spentCents = expenses.filter((expense) => expense.allocationId === allocation.id &&
           (expense.entryType === "log" || (!expense.entryType && expense.status === "Logged")))
-          .reduce((total, expense) => total + expense.amount, 0);
-        return { ...allocation, spentAmount: totals, remainingAmount: Math.max(0, allocation.amount - totals) };
+          .reduce((total, expense) => total + Math.round(expense.amount * 100), 0);
+        const allocationCents = Math.round(allocation.amount * 100);
+        return { ...allocation, spentAmount: spentCents / 100, remainingAmount: Math.max(0, allocationCents - spentCents) / 100 };
       })
       : body;
   }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request } from "express";
-import { people, projects, quotations, type Project, type Quote } from "../src/data/store";
+import { expenseAllocations, people, projects, quotations, type Project, type Quote } from "../src/data/store";
 import { authorizeApiRequest, scopeApiResponse } from "../src/features/auth/access";
 import type { AuthenticatedSession } from "../src/features/auth/session";
 import { createProject } from "../src/features/projects/service";
@@ -71,6 +71,7 @@ test("unauthenticated requests are denied and project access is role-scoped", ()
 test("engineers can only create project records for assigned projects and identity is session-derived", () => {
   const projectsBefore = [...projects];
   const peopleBefore = [...people];
+  const allocationsBefore = [...expenseAllocations];
   try {
     projects.splice(0, projects.length,
       project("p1", "Alpha", employee.name, client.name),
@@ -96,6 +97,47 @@ test("engineers can only create project records for assigned projects and identi
   } finally {
     projects.splice(0, projects.length, ...projectsBefore);
     people.splice(0, people.length, ...peopleBefore);
+    expenseAllocations.splice(0, expenseAllocations.length, ...allocationsBefore);
+  }
+});
+
+test("engineers can only log expenses against their own funds and assigned projects", () => {
+  const projectsBefore = [...projects];
+  const peopleBefore = [...people];
+  const allocationsBefore = [...expenseAllocations];
+  try {
+    projects.splice(0, projects.length,
+      project("p1", "Alpha", employee.name, client.name),
+      project("p2", "Beta", "Another Engineer", "Another Client")
+    );
+    people.splice(0, people.length, {
+      id: "e1",
+      name: employee.name,
+      email: employee.email,
+      role: "Site Engineer",
+      project: "No assigned sites"
+    });
+    expenseAllocations.splice(0, expenseAllocations.length, {
+      id: "allocation-e1",
+      engineer: employee.name,
+      amount: 100,
+      assignedAt: "16 Nov 2026",
+      assignedBy: owner.name
+    });
+
+    const forgedAllocation = { project: "Alpha", entryType: "log", allocationId: "allocation-other" };
+    assert.equal(authorizeApiRequest(request("POST", "/api/expenses", forgedAllocation), employee).allowed, false);
+    const unassignedProject = { project: "Beta", entryType: "log", allocationId: "allocation-e1" };
+    assert.equal(authorizeApiRequest(request("POST", "/api/expenses", unassignedProject), employee).allowed, false);
+
+    const validLog = { project: "Alpha", entryType: "log", allocationId: "allocation-e1", submittedBy: "Forged Name" };
+    assert.equal(authorizeApiRequest(request("POST", "/api/expenses", validLog), employee).allowed, true);
+    assert.equal(validLog.submittedBy, employee.name);
+    assert.equal((validLog as Record<string, unknown>).requireAllocation, true);
+  } finally {
+    projects.splice(0, projects.length, ...projectsBefore);
+    people.splice(0, people.length, ...peopleBefore);
+    expenseAllocations.splice(0, expenseAllocations.length, ...allocationsBefore);
   }
 });
 

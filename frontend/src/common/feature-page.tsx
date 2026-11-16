@@ -53,6 +53,9 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const [clientPage, setClientPage] = useState(1);
   const [allocationPage, setAllocationPage] = useState(1);
   const [expensePage, setExpensePage] = useState(1);
+  const [allocationDateFilter, setAllocationDateFilter] = useState("");
+  const [expenseProjectFilter, setExpenseProjectFilter] = useState("All");
+  const [expenseDateFilter, setExpenseDateFilter] = useState("");
   const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [personPendingDeletion, setPersonPendingDeletion] = useState<Person | null>(null);
@@ -109,10 +112,18 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
     : data.expenseAllocations;
   const totalAssignedFunds = visibleExpenseAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const totalLoggedExpenses = visibleExpenses.filter(isLoggedExpense).reduce((total, expense) => total + expense.amount, 0);
-  const filteredExpenses = visibleExpenses.filter((item) => filter === "All" || item.status === filter);
-  const currentAllocationPage = Math.min(allocationPage, Math.max(1, Math.ceil(visibleExpenseAllocations.length / RECORDS_PER_PAGE)));
+  const remainingFunds = totalAssignedFunds - totalLoggedExpenses;
+  const filteredExpenseAllocations = visibleExpenseAllocations.filter((allocation) =>
+    !allocationDateFilter || localDateKey(allocation.assignedAt) === allocationDateFilter
+  );
+  const filteredExpenses = visibleExpenses.filter((item) => {
+    if (expenseProjectFilter !== "All" && item.project !== expenseProjectFilter) return false;
+    if (expenseDateFilter && localDateKey(item.date) !== expenseDateFilter) return false;
+    return true;
+  });
+  const currentAllocationPage = Math.min(allocationPage, Math.max(1, Math.ceil(filteredExpenseAllocations.length / RECORDS_PER_PAGE)));
   const currentExpensePage = Math.min(expensePage, Math.max(1, Math.ceil(filteredExpenses.length / RECORDS_PER_PAGE)));
-  const allocationPageRecords = visibleExpenseAllocations.slice(
+  const allocationPageRecords = filteredExpenseAllocations.slice(
     (currentAllocationPage - 1) * RECORDS_PER_PAGE,
     currentAllocationPage * RECORDS_PER_PAGE
   );
@@ -122,7 +133,10 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   );
   useEffect(() => {
     setExpensePage(1);
-  }, [filter, page]);
+  }, [expenseDateFilter, expenseProjectFilter, page]);
+  useEffect(() => {
+    setAllocationPage(1);
+  }, [allocationDateFilter, page]);
   const clientWorkProgress = data.activities.filter((item) =>
     item.kind === "progress" &&
     scopedProjects.some((project) => project.name === item.project) &&
@@ -229,31 +243,33 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
     })}</div> : <div className="quote-list">{visibleQuotes.filter((item) => filter === "All" || item.status === filter).map((quote) => <article className="quote-row" key={quote.id}><span className="quote-file-icon">▤</span><div className="quote-row-main"><strong>{quote.title}</strong><span>{quote.id} · {quote.project} · {quote.date}</span></div><div className="quote-row-client"><small>CLIENT</small><strong>{quote.client}</strong></div><strong className="quote-row-amount">{formatCurrency(quote.amount)}</strong><StatusBadge status={quote.status} />{quote.attachment ? <QuotationPdfPreview attachment={quote.attachment} title={quote.title} /> : <button className="icon-button" onClick={() => onToast(`Opening ${quote.id} preview.`)} aria-label={`Open quotation ${quote.id}`}>↗</button>}</article>)}</div>}</section>}
     {role === "Employee" && page === "Expenses" && <section className="financial-summary-card engineer-expense-summary" aria-label="Your expense summary">
       <div className="financial-summary-top">
-        <div><span>Total assigned funds</span><strong>{formatCurrency(totalAssignedFunds)}</strong><small>Across {visibleExpenseAllocations.length} allocations</small></div>
-        <div className="financial-summary-profit"><span>Total expenses logged</span><strong>{formatCurrency(totalLoggedExpenses)}</strong><small>Recorded project spending</small></div>
+        <div><span>Total funds</span><strong>{formatCurrency(totalAssignedFunds)}</strong></div>
+        <div className="engineer-expense-summary-spent"><span>Spent (logged expenses)</span><strong>{formatCurrency(totalLoggedExpenses)}</strong></div>
+        <div className="financial-summary-profit"><span>Remaining funds</span><strong>{remainingFunds >= 0 ? `+${formatCurrency(remainingFunds)}` : `-${formatCurrency(Math.abs(remainingFunds))}`}</strong></div>
       </div>
-      <div className="financial-summary-foot"><span>Remaining funds</span><strong>{totalLoggedExpenses > totalAssignedFunds ? "-" : formatCurrency(totalAssignedFunds - totalLoggedExpenses)}</strong></div>
     </section>}
     {role !== "Client" && page === "Expenses" && <>
       <section className="panel feature-panel">
         <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED SPENDING</span><h2 className="list-title">{role === "Owner" ? "Engineer fund allocations" : "Your assigned funds"}</h2></div>
           <div className="toolbar-actions">
+            <label className="work-progress-date-filter"><input aria-label="Filter fund allocations by assignment date" type="date" value={allocationDateFilter} onChange={(event) => setAllocationDateFilter(event.currentTarget.value)} /></label>
             {role === "Owner" && <button className="button button-outline" onClick={() => onCreate("expense-allocation")}>＋ Assign funds</button>}
             {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense")}>＋ Request extra funds</button>}
           </div>
         </div>
         {role === "Employee" && <p className="feature-subtitle">Review the funds assigned to you. Request extra funds here if you need more.</p>}
-        {visibleExpenseAllocations.length ? <div className="project-details-list">{allocationPageRecords.map((allocation) => <article key={allocation.id}>
+        {filteredExpenseAllocations.length ? <div className="project-details-list">{allocationPageRecords.map((allocation) => <article key={allocation.id}>
           <div><strong>{role === "Owner" ? allocation.engineer : `Assigned ${allocation.assignedAt}`}</strong><span>{formatCurrency(allocation.spentAmount)} spent · {formatCurrency(allocation.remainingAmount)} remaining</span></div>
           <strong>{formatCurrency(allocation.amount)}</strong>
-        </article>)}</div> : <div className="inline-empty">{role === "Owner" ? "No funds have been assigned to engineers yet." : "No funds have been assigned to you yet."}</div>}
-        <RecordPagination page={currentAllocationPage} totalItems={visibleExpenseAllocations.length} onPageChange={setAllocationPage} />
+        </article>)}</div> : <div className="inline-empty">{visibleExpenseAllocations.length ? "No fund allocations match this date." : role === "Owner" ? "No funds have been assigned to engineers yet." : "No funds have been assigned to you yet."}</div>}
+        <RecordPagination page={currentAllocationPage} totalItems={filteredExpenseAllocations.length} onPageChange={setAllocationPage} />
       </section>
       <section className="panel feature-panel">
         <div className="list-toolbar"><div><span className="panel-kicker">MONEY IN MOTION</span><h2 className="list-title">Expenses & receipts</h2></div>
           <div className="toolbar-actions">
-            <select className="select-button" aria-label="Filter expenses" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>Pending review</option><option>Logged</option><option>Approved</option><option>Declined</option><option>Paid</option></select>
-            {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
+            <select className="select-button" aria-label="Filter expenses by project" value={expenseProjectFilter} onChange={(event) => setExpenseProjectFilter(event.target.value)}><option value="All">All projects</option>{data.projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>
+            <label className="work-progress-date-filter"><input aria-label="Filter expenses by date" type="date" value={expenseDateFilter} onChange={(event) => setExpenseDateFilter(event.currentTarget.value)} /></label>
+            {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
             {role === "Owner" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
           </div>
         </div>
