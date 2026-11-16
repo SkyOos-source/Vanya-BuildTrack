@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Attendance, AttendanceLeave, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
 import { StatusBadge } from "./components";
 import { apiFetch } from "./api";
-import { compressImageFile } from "./utils";
+import { captureCameraPhoto, compressImageFile } from "./utils";
 
 type AttendancePageProps = {
   data: DashboardData;
@@ -147,10 +147,9 @@ function AttendanceTable({ records, leaves, requests, now, owner, employee, onPr
 
 export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize, onReviewRequest, onReviewLeaveRequest }: AttendancePageProps) {
   const today = localDateKey(new Date());
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState("");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -249,16 +248,6 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     if (cameraVideoRef.current) cameraVideoRef.current.srcObject = cameraStream;
     return () => cameraStream.getTracks().forEach((track) => track.stop());
   }, [cameraStream]);
-
-  useEffect(() => {
-    if (!photo) {
-      setPreviewUrl("");
-      return;
-    }
-    const url = URL.createObjectURL(photo);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [photo]);
 
   const currentRecord = data.attendance.find((record) =>
     record.date === today && record.engineer === currentUser
@@ -417,6 +406,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const openCamera = async (facingMode: "user" | "environment") => {
     const requestId = ++cameraRequestRef.current;
     setError("");
+    setCameraReady(false);
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access is unavailable. Open this page over HTTPS and allow camera access.");
       return;
@@ -431,7 +421,6 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
-      setPhoto(null);
       setCameraOpen(true);
       setCameraStream(stream);
     } catch (cameraError) {
@@ -449,58 +438,34 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     cameraRequestRef.current += 1;
     setCaptureOpen(false);
     setCameraOpen(false);
+    setCameraReady(false);
     setCameraLoading(false);
     setCameraStream(null);
   };
 
-  const capturePhoto = async () => {
-    const video = cameraVideoRef.current;
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
-      setError("Camera is not ready yet. Please wait a moment and try again.");
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      setError("Could not capture the camera image. Please try again.");
-      return;
-    }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Camera capture failed.")), "image/jpeg", 0.9);
-      });
-      setPhoto(new File([blob], `attendance-${Date.now()}.jpg`, { type: "image/jpeg" }));
-      setCameraOpen(false);
-      setCameraStream(null);
-      setError("");
-    } catch (captureError) {
-      console.error("Unable to capture attendance photo:", captureError);
-      setError("Could not capture the camera image. Please try again.");
-    }
-  };
-
   const submit = async () => {
-    if (!photo) {
-      setError("Add a photo before recording attendance.");
+    const video = cameraVideoRef.current;
+    if (!cameraReady || !video) {
+      setError("Camera is not ready yet. Please wait a moment and try again.");
       return;
     }
     setSubmitting(true);
     setError("");
     try {
+      const { file, capturedAt } = await captureCameraPhoto(video, "attendance");
       const position = await getCurrentPosition();
-      const image = await compressImageFile(photo);
+      const image = await compressImageFile(file);
       await onSubmit(action, today, {
         image,
-        capturedAt: new Date().toISOString(),
+        capturedAt,
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
         accuracy: position.coords.accuracy
       });
-      setPhoto(null);
       setCaptureOpen(false);
+      setCameraOpen(false);
+      setCameraReady(false);
+      setCameraStream(null);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Could not submit attendance.");
     } finally {
@@ -537,7 +502,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
               ? `You checked in at ${formatTime(currentRecord.checkIn.capturedAt)}. Check out when you finish.`
               : "You haven't checked in yet today."}</span>
         </div>
-        {!currentRecord?.checkOut && <button className="button button-primary attendance-submit" type="button" onClick={() => { setError(""); setPhoto(null); setCaptureOpen(true); setCameraOpen(false); setCameraStream(null); void openCamera("user"); }}>
+        {!currentRecord?.checkOut && <button className="button button-primary attendance-submit" type="button" onClick={() => { setError(""); setCaptureOpen(true); setCameraOpen(false); setCameraStream(null); void openCamera("user"); }}>
           ◷ {action === "check-in" ? "Check In" : "Check Out"}
         </button>}
       </div>
@@ -724,17 +689,15 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         <div className="attendance-preview-heading"><strong id="attendance-capture-title">{action === "check-in" ? "Check In Selfie" : "Check Out Selfie"}</strong><button type="button" aria-label="Close photo capture" disabled={submitting} onClick={closeCapture}>×</button></div>
         {cameraLoading && <p>Opening selfie camera…</p>}
         {cameraOpen && <div className="attendance-live-camera">
-          <video ref={cameraVideoRef} autoPlay muted playsInline aria-label="Live camera preview" />
-          <button className="button button-primary" type="button" onClick={() => void capturePhoto()}>Capture Photo</button>
+          <video ref={cameraVideoRef} autoPlay muted playsInline aria-label="Live camera preview" onLoadedData={() => setCameraReady(true)} />
         </div>}
         {!cameraOpen && !cameraLoading && error && <button className="button button-outline attendance-photo-option" type="button" disabled={submitting} onClick={() => void openCamera("user")}>Retry selfie camera</button>}
-        {previewUrl && <img className="attendance-capture-preview" src={previewUrl} alt="Selected attendance photo" />}
-        <p className="attendance-location-note">Your current location will be recorded when you confirm.</p>
+        <p className="attendance-location-note">Your photo and current location will be captured when you confirm.</p>
         {error && <p className="attendance-error" role="alert">{error}</p>}
         <div className="attendance-dialog-actions">
           <button className="button button-outline" type="button" disabled={submitting} onClick={closeCapture}>Cancel</button>
-          <button className="button button-primary" type="button" disabled={submitting || !photo} onClick={() => void submit()}>
-            {submitting ? "Recording…" : `Confirm ${action === "check-in" ? "Check In" : "Check Out"}`}
+          <button className="button button-primary" type="button" disabled={submitting || !cameraReady} onClick={() => void submit()}>
+            {submitting ? "Capturing & recording…" : `Confirm ${action === "check-in" ? "Check In" : "Check Out"}`}
           </button>
         </div>
       </section>

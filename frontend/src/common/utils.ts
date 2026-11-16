@@ -6,6 +6,23 @@ export const isLoggedExpense = (expense: Expense) => expense.entryType === "log"
 
 const MAX_COMPRESSED_IMAGE_BYTES = 500 * 1024;
 
+export async function captureCameraPhoto(video: HTMLVideoElement, prefix: string): Promise<{ file: File; capturedAt: string }> {
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
+    throw new Error("Camera is not ready yet. Please wait a moment and try again.");
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not capture the camera image. Please try again.");
+  const capturedAt = new Date().toISOString();
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Could not capture the camera image. Please try again.")), "image/jpeg", 0.9);
+  });
+  return { file: new File([blob], `${prefix}-${Date.now()}.jpg`, { type: "image/jpeg" }), capturedAt };
+}
+
 export async function compressImageFile(file: File, maxDimension = 1280): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("Choose an image file.");
   if (file.size > 20_000_000) throw new Error("Choose an image smaller than 20 MB.");

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Role, SiteVisit, SiteVisitProof } from "./types";
 import { StatusBadge } from "./components";
-import { siteVisitDateParts } from "./utils";
-import { compressImageFile } from "./utils";
+import { captureCameraPhoto, compressImageFile, siteVisitDateParts } from "./utils";
 
 export type SiteVisitAction = "check-in" | "check-out";
 
@@ -22,9 +21,9 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
   onAction: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>;
 }) {
   const [capture, setCapture] = useState<{ visit: SiteVisit; action: SiteVisitAction } | null>(null);
-  const [photo, setPhoto] = useState<File | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -33,28 +32,17 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
   const [visitDateFilter, setVisitDateFilter] = useState("");
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraRequestRef = useRef(0);
-  const [previewUrl, setPreviewUrl] = useState("");
-
   useEffect(() => {
     if (!cameraStream) return;
     if (cameraVideoRef.current) cameraVideoRef.current.srcObject = cameraStream;
     return () => cameraStream.getTracks().forEach((track) => track.stop());
   }, [cameraStream]);
 
-  useEffect(() => {
-    if (!photo) {
-      setPreviewUrl("");
-      return;
-    }
-    const url = URL.createObjectURL(photo);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [photo]);
-
   const openCamera = async (facingMode: "user" | "environment") => {
     const requestId = ++cameraRequestRef.current;
     setError("");
     setCameraOpen(false);
+    setCameraReady(false);
     setCameraStream(null);
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access is unavailable. Open this page over HTTPS and allow camera access.");
@@ -67,7 +55,6 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
-      setPhoto(null);
       setCameraStream(stream);
       setCameraOpen(true);
     } catch (cameraError) {
@@ -84,39 +71,10 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
   const closeCapture = () => {
     cameraRequestRef.current += 1;
     setCapture(null);
-    setPhoto(null);
     setCameraOpen(false);
+    setCameraReady(false);
     setCameraLoading(false);
     setCameraStream(null);
-  };
-
-  const capturePhoto = async () => {
-    const video = cameraVideoRef.current;
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
-      setError("Camera is not ready yet. Please wait a moment and try again.");
-      return;
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      setError("Could not capture the camera image. Please try again.");
-      return;
-    }
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Camera capture failed.")), "image/jpeg", 0.9);
-      });
-      setPhoto(new File([blob], `site-visit-${Date.now()}.jpg`, { type: "image/jpeg" }));
-      setCameraOpen(false);
-      setCameraStream(null);
-      setError("");
-    } catch (captureError) {
-      console.error("Unable to capture the site visit photo:", captureError);
-      setError("Could not capture the camera image. Please try again.");
-    }
   };
 
   const visitDateKey = (value: string) => {
@@ -139,18 +97,20 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
 
   const submitProof = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!capture || !photo) {
-      setError("Capture a photo with the camera before continuing.");
+    const video = cameraVideoRef.current;
+    if (!capture || !cameraReady || !video) {
+      setError("Camera is not ready yet. Please wait a moment and try again.");
       return;
     }
     setSaving(true);
     setError("");
     try {
-      const proof = { image: await compressImageFile(photo), capturedAt: new Date().toISOString() };
+      const { file, capturedAt } = await captureCameraPhoto(video, "site-visit");
+      const proof = { image: await compressImageFile(file), capturedAt };
       await onAction(capture.visit, capture.action, proof);
       setCapture(null);
-      setPhoto(null);
       setCameraOpen(false);
+      setCameraReady(false);
       setCameraStream(null);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Could not save the site visit photo.");
@@ -190,8 +150,8 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
           </div>
           <div className="visit-card-end">
             <StatusBadge status={visit.status} />
-            {role === "Employee" && visit.status === "Scheduled" && <button className="button button-primary" onClick={() => { setError(""); setPhoto(null); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-in" }); void openCamera("user"); }}>Check in with photo</button>}
-            {role === "Employee" && visit.status === "Checked in" && <button className="button button-primary" onClick={() => { setError(""); setPhoto(null); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-out" }); void openCamera("user"); }}>Check out with photo</button>}
+            {role === "Employee" && visit.status === "Scheduled" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-in" }); void openCamera("user"); }}>Check in with photo</button>}
+            {role === "Employee" && visit.status === "Checked in" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-out" }); void openCamera("user"); }}>Check out with photo</button>}
           </div>
         </article>;
         })}</div>
@@ -205,14 +165,12 @@ export function SiteVisitsPage({ visits, role, currentUser, onSchedule, onAction
         <div className="attendance-preview-heading"><strong id="site-visit-capture-title">{capture.action === "check-in" ? "Site visit check-in" : "Site visit check-out"}</strong>
           <button type="button" aria-label="Close dialog" disabled={saving} onClick={closeCapture}>×</button>
         </div>
-        <p>{capture.visit.project} · {capture.visit.site}<br />{capture.action === "check-in" ? "Take a photo when you arrive at the site." : "Take a photo before leaving the site."}</p>
+        <p>{capture.visit.project} · {capture.visit.site}<br />{capture.action === "check-in" ? "Your photo will be captured when you confirm check-in." : "Your photo will be captured when you confirm check-out."}</p>
         {cameraLoading && <p>Opening selfie camera…</p>}
-        {cameraOpen && <div className="attendance-live-camera"><video ref={cameraVideoRef} autoPlay muted playsInline aria-label="Live camera preview" /><button className="button button-primary" type="button" onClick={() => void capturePhoto()}>Capture Photo</button></div>}
+        {cameraOpen && <div className="attendance-live-camera"><video ref={cameraVideoRef} autoPlay muted playsInline aria-label="Live camera preview" onLoadedData={() => setCameraReady(true)} /></div>}
         {!cameraOpen && !cameraLoading && error && <button className="button button-outline attendance-photo-option" type="button" disabled={saving} onClick={() => void openCamera("user")}>Retry selfie camera</button>}
-        {previewUrl && photo && <img className="attendance-capture-preview" src={previewUrl} alt="Selected site visit photo" />}
-        {photo && <p className="site-visit-selected-photo">{photo.name}</p>}
         {error && <p className="attendance-error" role="alert">{error}</p>}
-        <div className="attendance-dialog-actions"><button className="button button-outline" type="button" disabled={saving} onClick={closeCapture}>Cancel</button><button className="button button-primary" type="submit" disabled={saving || !photo}>{saving ? "Saving…" : capture.action === "check-in" ? "Save check-in" : "Save check-out"}</button></div>
+        <div className="attendance-dialog-actions"><button className="button button-outline" type="button" disabled={saving} onClick={closeCapture}>Cancel</button><button className="button button-primary" type="submit" disabled={saving || !cameraReady}>{saving ? "Capturing & saving…" : capture.action === "check-in" ? "Confirm check-in" : "Confirm check-out"}</button></div>
       </form>
     </div>}
   </>;
