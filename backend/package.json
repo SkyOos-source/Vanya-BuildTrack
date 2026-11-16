@@ -4,15 +4,19 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "npm run routes && npm run prisma:deploy && tsx watch src/index.ts",
+    "dev": "npm run routes && npm run prisma:generate:local && npm run prisma:deploy:local && tsx watch src/index.ts",
     "routes": "tsoa routes -c tsoa.json",
     "spec": "tsoa spec -c tsoa.json",
     "generate": "npm run spec && npm run routes",
     "build": "npm run prisma:generate && npm run generate && tsc -p tsconfig.json",
     "start": "npm run prisma:deploy && node dist/index.js",
     "prisma:generate": "prisma generate",
+    "prisma:generate:local": "prisma generate --schema prisma/sqlite/schema.prisma",
+    "prisma:generate:production": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:local": "prisma migrate dev --schema prisma/sqlite/schema.prisma",
     "prisma:deploy": "prisma migrate deploy",
+    "prisma:deploy:local": "prisma migrate deploy --schema prisma/sqlite/schema.prisma",
     "prisma:studio": "prisma studio"
   },
   "dependencies": {

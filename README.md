@@ -4,7 +4,7 @@ A construction project management SaaS starter with role-based Owner, Site Engin
 
 ## Run BuildTrack
 
-Requirements: Node.js 20.19+ or 22.12+, npm, and Docker Compose.
+Requirements: Node.js 20.19+ or 22.12+ and npm. Production deployment requires Docker Compose.
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
@@ -18,11 +18,11 @@ Open http://localhost:5173. The public landing page is `/`, the sign-in page is 
 
 BuildTrack can be installed from its landing page as a progressive web app. On a supported browser, select **Install app** to open the browser's install prompt. On iPhone or iPad, select **Install app** for the Safari **Share → Add to Home Screen** steps. App installation requires a secure site (HTTPS, or localhost for development).
 
-The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. `npm run dev` starts a local PostgreSQL container on loopback port `5433`, then applies migrations when the backend starts. Workspace data and sign-in are served by PostgreSQL; a new database starts empty and requires one-time owner setup.
+The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. Local development uses SQLite at `backend/prisma/sqlite/local.db` and applies its migrations when the backend starts. Production uses PostgreSQL. A new database starts empty and requires one-time owner setup.
 
 ### Deploy to a production VPS
 
-The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Both local development and production use PostgreSQL. Production uses a private PostgreSQL container with a persistent database volume; the app binds only to localhost port `3102`, so use a reverse proxy for public HTTPS access.
+The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Production uses a private PostgreSQL container with a persistent database volume; the app binds only to localhost port `3102`, so use a reverse proxy for public HTTPS access.
 
 Before deploying, point `vanyabuildtrack.duckdns.org` at the VPS public IP. Install Docker Engine with the Compose plugin and Nginx on the VPS, then clone this repository. MFA is off by default, so Twilio credentials are not required unless you decide to enable it.
 
@@ -116,13 +116,11 @@ The generated Express bindings are written under `backend/src/generated`, and th
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the local PostgreSQL container, frontend, and API in watch mode |
+| `npm run dev` | Start the frontend and API in watch mode using local SQLite |
 | `npm run build` | Build both workspaces |
-| `npm run db:migrate` | Generate the Prisma client and run PostgreSQL development migrations |
+| `npm run db:migrate` | Generate the local SQLite Prisma client and run SQLite development migrations |
 | `npm run db:deploy` | Apply PostgreSQL migrations |
-| `npm run db:studio` | Open Prisma Studio for PostgreSQL |
-| `npm run db:local:up` | Start the local PostgreSQL container |
-| `npm run db:local:down` | Stop the local PostgreSQL container without deleting its data |
+| `npm run db:studio` | Open Prisma Studio for the local SQLite database |
 
 ## Real-mode API
 
@@ -145,4 +143,4 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET /api/backups`, `POST /api/backups`, and `GET /api/backups/:id/download` — create and download workspace JSON backups.
 - `GET /api/reports/:type` — build project, expense, material, attendance, and progress reports.
 
-The PostgreSQL database stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Local development uses a dedicated loopback-only PostgreSQL container; production uses a private PostgreSQL service. Employee and client passwords are salted and hashed before storage. Browser sessions remain client-side; this app is still a local starter and should not be treated as production-ready authentication or multi-tenant authorization.
+The database stores the workspace state as a single serialized record to keep the existing feature services compatible while replacing the JSON-file datastore. Local development uses SQLite; production uses a private PostgreSQL service. Employee and client passwords are salted and hashed before storage. Browser sessions remain client-side; this app is still a local starter and should not be treated as production-ready authentication or multi-tenant authorization.
