@@ -231,7 +231,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
       onToast(error instanceof Error ? error.message : "Could not download this backup.");
     }
   };
-  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""}`}>
+  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""}`}>
     {projectView && (selectedProject
       ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} onBack={() => setSelectedProjectId(null)} />
       : <section className="panel feature-panel"><div className="list-toolbar"><div className="search-box"><span>⌕</span><input aria-label="Search projects" placeholder="Search projects, sites, clients..." value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="toolbar-actions"><select className="select-button project-filter-select" aria-label="Filter projects" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>In progress</option><option>On track</option><option>At risk</option></select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("project")}>＋ New project</button>}</div></div><ProjectCards projects={scopedProjects} onOpen={(project) => setSelectedProjectId(project.id)} /></section>)}
