@@ -53,7 +53,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const [clientPage, setClientPage] = useState(1);
   const [allocationPage, setAllocationPage] = useState(1);
   const [expensePage, setExpensePage] = useState(1);
-  const [allocationDateFilter, setAllocationDateFilter] = useState("");
+  const [allocationEngineerFilter, setAllocationEngineerFilter] = useState("All");
   const [expenseProjectFilter, setExpenseProjectFilter] = useState("All");
   const [expenseDateFilter, setExpenseDateFilter] = useState("");
   const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null);
@@ -110,12 +110,14 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const visibleExpenseAllocations = role === "Employee"
     ? data.expenseAllocations.filter((allocation) => allocation.engineer === currentUser)
     : data.expenseAllocations;
+  const allocationEngineers = [...new Set(visibleExpenseAllocations.map((allocation) => allocation.engineer))]
+    .sort((left, right) => left.localeCompare(right));
+  const filteredExpenseAllocations = visibleExpenseAllocations.filter((allocation) =>
+    role !== "Owner" || allocationEngineerFilter === "All" || allocation.engineer === allocationEngineerFilter
+  );
   const totalAssignedFunds = visibleExpenseAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const totalLoggedExpenses = visibleExpenses.filter(isLoggedExpense).reduce((total, expense) => total + expense.amount, 0);
   const remainingFunds = totalAssignedFunds - totalLoggedExpenses;
-  const filteredExpenseAllocations = visibleExpenseAllocations.filter((allocation) =>
-    !allocationDateFilter || localDateKey(allocation.assignedAt) === allocationDateFilter
-  );
   const filteredExpenses = visibleExpenses.filter((item) => {
     if (expenseProjectFilter !== "All" && item.project !== expenseProjectFilter) return false;
     if (expenseDateFilter && localDateKey(item.date) !== expenseDateFilter) return false;
@@ -136,7 +138,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   }, [expenseDateFilter, expenseProjectFilter, page]);
   useEffect(() => {
     setAllocationPage(1);
-  }, [allocationDateFilter, page]);
+  }, [allocationEngineerFilter, page]);
   const clientWorkProgress = data.activities.filter((item) =>
     item.kind === "progress" &&
     scopedProjects.some((project) => project.name === item.project) &&
@@ -252,7 +254,10 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
       <section className="panel feature-panel">
         <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED SPENDING</span><h2 className="list-title">{role === "Owner" ? "Engineer fund allocations" : "Your assigned funds"}</h2></div>
           <div className="toolbar-actions">
-            <label className="work-progress-date-filter"><input aria-label="Filter fund allocations by assignment date" type="date" value={allocationDateFilter} onChange={(event) => setAllocationDateFilter(event.currentTarget.value)} /></label>
+            {role === "Owner" && <select className="select-button" aria-label="Filter fund allocations by engineer" value={allocationEngineerFilter} onChange={(event) => setAllocationEngineerFilter(event.target.value)}>
+              <option value="All">All engineers</option>
+              {allocationEngineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
+            </select>}
             {role === "Owner" && <button className="button button-outline" onClick={() => onCreate("expense-allocation")}>＋ Assign funds</button>}
             {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense")}>＋ Request extra funds</button>}
           </div>
@@ -261,7 +266,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
         {filteredExpenseAllocations.length ? <div className="project-details-list">{allocationPageRecords.map((allocation) => <article key={allocation.id}>
           <div><strong>{role === "Owner" ? allocation.engineer : `Assigned ${allocation.assignedAt}`}</strong><span>{formatCurrency(allocation.spentAmount)} spent · {formatCurrency(allocation.remainingAmount)} remaining</span></div>
           <strong>{formatCurrency(allocation.amount)}</strong>
-        </article>)}</div> : <div className="inline-empty">{visibleExpenseAllocations.length ? "No fund allocations match this date." : role === "Owner" ? "No funds have been assigned to engineers yet." : "No funds have been assigned to you yet."}</div>}
+        </article>)}</div> : <div className="inline-empty">{role === "Owner" ? allocationEngineerFilter === "All" ? "No funds have been assigned to engineers yet." : `No funds have been assigned to ${allocationEngineerFilter} yet.` : "No funds have been assigned to you yet."}</div>}
         <RecordPagination page={currentAllocationPage} totalItems={filteredExpenseAllocations.length} onPageChange={setAllocationPage} />
       </section>
       <section className="panel feature-panel">
