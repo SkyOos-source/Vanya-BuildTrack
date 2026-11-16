@@ -344,6 +344,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .footer-status i { width: 6px; height: 6px; }
 
 .feature-page { min-height: 530px; }
+.expenses-feature-page { display: grid; align-content: start; gap: 14px; }
 .feature-panel { padding: 19px; }
 .list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 18px; }
 .toolbar-actions { display: flex; align-items: center; gap: 9px; }

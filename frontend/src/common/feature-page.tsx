@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, OwnerAuditLog, Project, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
 import { apiFetch } from "./api";
-import { formatCurrency, initials } from "./utils";
+import { formatCurrency, initials, isLoggedExpense } from "./utils";
 import { ExpenseRows, ProjectCards, StatusBadge } from "./components";
 import { AttendancePage } from "./attendance-page";
 import { ProjectDetails } from "./project-details";
@@ -107,6 +107,8 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const visibleExpenseAllocations = role === "Employee"
     ? data.expenseAllocations.filter((allocation) => allocation.engineer === currentUser)
     : data.expenseAllocations;
+  const totalAssignedFunds = visibleExpenseAllocations.reduce((total, allocation) => total + allocation.amount, 0);
+  const totalLoggedExpenses = visibleExpenses.filter(isLoggedExpense).reduce((total, expense) => total + expense.amount, 0);
   const filteredExpenses = visibleExpenses.filter((item) => filter === "All" || item.status === filter);
   const currentAllocationPage = Math.min(allocationPage, Math.max(1, Math.ceil(visibleExpenseAllocations.length / RECORDS_PER_PAGE)));
   const currentExpensePage = Math.min(expensePage, Math.max(1, Math.ceil(filteredExpenses.length / RECORDS_PER_PAGE)));
@@ -215,7 +217,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
       onToast(error instanceof Error ? error.message : "Could not download this backup.");
     }
   };
-  return <div className="feature-page">
+  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""}`}>
     {projectView && (selectedProject
       ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} onBack={() => setSelectedProjectId(null)} />
       : <section className="panel feature-panel"><div className="list-toolbar"><div className="search-box"><span>⌕</span><input aria-label="Search projects" placeholder="Search projects, sites, clients..." value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="toolbar-actions"><select className="select-button project-filter-select" aria-label="Filter projects" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>In progress</option><option>On track</option><option>At risk</option></select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("project")}>＋ New project</button>}</div></div><ProjectCards projects={scopedProjects} onOpen={(project) => setSelectedProjectId(project.id)} /></section>)}
@@ -225,15 +227,22 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
       const projectTotal = projectQuotes.reduce((total, quote) => total + quote.amount, 0);
       return <section className="quotation-project-group" key={projectName}><header><div><span className="panel-kicker">PROJECT QUOTATIONS</span><h3>{projectName}</h3></div><div><small>COMBINED TOTAL</small><strong>{formatCurrency(projectTotal)}</strong></div></header><div className="quote-list">{filteredQuotes.map((quote) => <article className="quote-row" key={quote.id}><span className="quote-file-icon">▤</span><div className="quote-row-main"><strong>{quote.title}</strong><span>{quote.id} · {quote.date}</span></div><strong className="quote-row-amount">{formatCurrency(quote.amount)}</strong><StatusBadge status={quote.status} />{quote.status !== "Approved" && quote.status !== "Declined" ? <div className="inline-actions"><button onClick={() => onQuote(quote, "Approved")}>Approve</button><button onClick={() => onQuote(quote, "Declined")}>Decline</button>{quote.attachment && <QuotationPdfPreview attachment={quote.attachment} title={quote.title} />}</div> : quote.attachment ? <QuotationPdfPreview attachment={quote.attachment} title={quote.title} /> : <button className="icon-button" onClick={() => onToast(`Opening ${quote.id} preview.`)} aria-label={`Open quotation ${quote.id}`}>↗</button>}</article>)}</div></section>;
     })}</div> : <div className="quote-list">{visibleQuotes.filter((item) => filter === "All" || item.status === filter).map((quote) => <article className="quote-row" key={quote.id}><span className="quote-file-icon">▤</span><div className="quote-row-main"><strong>{quote.title}</strong><span>{quote.id} · {quote.project} · {quote.date}</span></div><div className="quote-row-client"><small>CLIENT</small><strong>{quote.client}</strong></div><strong className="quote-row-amount">{formatCurrency(quote.amount)}</strong><StatusBadge status={quote.status} />{quote.attachment ? <QuotationPdfPreview attachment={quote.attachment} title={quote.title} /> : <button className="icon-button" onClick={() => onToast(`Opening ${quote.id} preview.`)} aria-label={`Open quotation ${quote.id}`}>↗</button>}</article>)}</div>}</section>}
+    {role === "Employee" && page === "Expenses" && <section className="financial-summary-card engineer-expense-summary" aria-label="Your expense summary">
+      <div className="financial-summary-top">
+        <div><span>Total assigned funds</span><strong>{formatCurrency(totalAssignedFunds)}</strong><small>Across {visibleExpenseAllocations.length} allocations</small></div>
+        <div className="financial-summary-profit"><span>Total expenses logged</span><strong>{formatCurrency(totalLoggedExpenses)}</strong><small>Recorded project spending</small></div>
+      </div>
+      <div className="financial-summary-foot"><span>Remaining funds</span><strong>{totalLoggedExpenses > totalAssignedFunds ? "-" : formatCurrency(totalAssignedFunds - totalLoggedExpenses)}</strong></div>
+    </section>}
     {role !== "Client" && page === "Expenses" && <>
       <section className="panel feature-panel">
         <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED SPENDING</span><h2 className="list-title">{role === "Owner" ? "Engineer fund allocations" : "Your assigned funds"}</h2></div>
           <div className="toolbar-actions">
             {role === "Owner" && <button className="button button-outline" onClick={() => onCreate("expense-allocation")}>＋ Assign funds</button>}
-            {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
+            {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense")}>＋ Request extra funds</button>}
           </div>
         </div>
-        {role === "Employee" && <p className="feature-subtitle">Log project spending from your assigned funds. Need more money? Submit an extra-funds request below.</p>}
+        {role === "Employee" && <p className="feature-subtitle">Review the funds assigned to you. Request extra funds here if you need more.</p>}
         {visibleExpenseAllocations.length ? <div className="project-details-list">{allocationPageRecords.map((allocation) => <article key={allocation.id}>
           <div><strong>{role === "Owner" ? allocation.engineer : `Assigned ${allocation.assignedAt}`}</strong><span>{formatCurrency(allocation.spentAmount)} spent · {formatCurrency(allocation.remainingAmount)} remaining</span></div>
           <strong>{formatCurrency(allocation.amount)}</strong>
@@ -244,7 +253,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
         <div className="list-toolbar"><div><span className="panel-kicker">MONEY IN MOTION</span><h2 className="list-title">Expenses & receipts</h2></div>
           <div className="toolbar-actions">
             <select className="select-button" aria-label="Filter expenses" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>Pending review</option><option>Logged</option><option>Approved</option><option>Declined</option><option>Paid</option></select>
-            {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense")}>＋ Request extra funds</button>}
+            {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
             {role === "Owner" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
           </div>
         </div>
