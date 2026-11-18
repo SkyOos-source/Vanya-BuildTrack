@@ -301,7 +301,7 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
           (expense.entryType === "log" || (!expense.entryType && expense.status === "Logged")))
           .reduce((total, expense) => total + Math.round(expense.amount * 100), 0);
         const allocationCents = Math.round(allocation.amount * 100);
-        return { ...allocation, spentAmount: spentCents / 100, remainingAmount: Math.max(0, allocationCents - spentCents) / 100 };
+        return { ...allocation, spentAmount: spentCents / 100, remainingAmount: (allocationCents - spentCents) / 100 };
       })
       : body;
   }

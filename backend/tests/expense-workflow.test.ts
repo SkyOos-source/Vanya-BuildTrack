@@ -100,14 +100,23 @@ test("allocated funds are reduced only by logged project expenses", () => {
 
     const overspendResult = createExpense({
       project: "Expense Test Project",
-      description: "Overspend attempt",
+      description: "Overspend",
       amount: 700,
       submittedBy: "Expense Test Engineer",
       entryType: "log",
       allocationId: allocation.id
     });
-    assert.equal(overspendResult.status, 400);
-    assert.equal(expenses.filter((expense) => expense.description === "Overspend attempt").length, 0);
+    assert.equal(overspendResult.status, 201);
+    assert.equal(listExpenseAllocations("Expense Test Engineer").find((item) => item.id === allocation.id)?.remainingAmount, -100);
+    assert.equal(expenses.filter((expense) => expense.description === "Overspend").length, 1);
+
+    const additionalAllocationResult = createExpenseAllocation({ engineer: "Expense Test Engineer", amount: 50 });
+    assert.equal(additionalAllocationResult.status, 201);
+    const additionalAllocation = additionalAllocationResult.body.record as { id: string; remainingAmount: number };
+    assert.equal(additionalAllocation.remainingAmount, 50);
+    const allocationBalances = listExpenseAllocations("Expense Test Engineer");
+    assert.equal(allocationBalances.find((item) => item.id === allocation.id)?.remainingAmount, -100);
+    assert.equal(allocationBalances.reduce((total, item) => total + item.remainingAmount, 0), -50);
 
     const decimalAllocationResult = createExpenseAllocation({ engineer: "Expense Test Engineer", amount: 0.3 });
     assert.equal(decimalAllocationResult.status, 201);
@@ -130,8 +139,9 @@ test("allocated funds are reduced only by logged project expenses", () => {
       submittedBy: "Expense Test Engineer",
       entryType: "log",
       allocationId: decimalAllocation.id
-    }).status, 400);
-    assert.equal(expenseAllocations.length, 2);
+    }).status, 201);
+    assert.equal(listExpenseAllocations("Expense Test Engineer").find((item) => item.id === decimalAllocation.id)?.remainingAmount, -0.01);
+    assert.equal(expenseAllocations.length, 3);
   } finally {
     restoreStoreSnapshot(original);
   }

@@ -25,7 +25,7 @@ function allocationTotals(allocation: ExpenseAllocation) {
   return {
     ...allocation,
     spentAmount: spentCents / 100,
-    remainingAmount: Math.max(0, allocationCents - spentCents) / 100
+    remainingAmount: (allocationCents - spentCents) / 100
   };
 }
 
@@ -76,9 +76,6 @@ export function createExpense(body: any) {
       return failure(400, "Select one of your assigned expense allocations.");
     }
     if (!isLog) return failure(400, "Expense requests cannot be charged to an allocation.");
-    if (amountInCents(amount) > amountInCents(allocationTotals(allocation).remainingAmount)) {
-      return failure(400, "The expense amount exceeds the remaining allocated funds.");
-    }
   }
   const expense = {
     id: nextId("expense"), project, category: "Other", description, amount, date: today(),

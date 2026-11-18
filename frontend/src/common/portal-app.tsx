@@ -759,7 +759,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           expenses: [expense, ...current.expenses],
           expenseAllocations: expense.allocationId
             ? current.expenseAllocations.map((allocation) => allocation.id === expense.allocationId
-              ? { ...allocation, spentAmount: allocation.spentAmount + expense.amount, remainingAmount: Math.max(0, allocation.remainingAmount - expense.amount) }
+              ? { ...allocation, spentAmount: allocation.spentAmount + expense.amount, remainingAmount: allocation.remainingAmount - expense.amount }
               : allocation)
             : current.expenseAllocations
         }));
@@ -772,7 +772,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           expenses: [expense, ...current.expenses],
           expenseAllocations: expense.allocationId
             ? current.expenseAllocations.map((allocation) => allocation.id === expense.allocationId
-              ? { ...allocation, spentAmount: allocation.spentAmount + expense.amount, remainingAmount: Math.max(0, allocation.remainingAmount - expense.amount) }
+              ? { ...allocation, spentAmount: allocation.spentAmount + expense.amount, remainingAmount: allocation.remainingAmount - expense.amount }
               : allocation)
             : current.expenseAllocations
         }));

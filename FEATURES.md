@@ -20,7 +20,7 @@ Owners manage their organization, projects, people, finances, and overall constr
   - Add site engineers and assign them to projects and sites.
 - **Materials and expenses**
   - Track construction materials received, used, and remaining by project or site.
-  - Assign spending funds to site engineers and track each allocation's spent and remaining balance.
+  - Assign spending funds to site engineers and track each allocation's spent and remaining balance, including negative balances when spending exceeds assigned funds.
   - Log project expenses with descriptions and receipt or photo attachments; only logged expenses count toward project expenditure and profit.
   - Review engineers' requests for additional funds separately from logged spending.
   - View project-wise expense reports.
@@ -44,7 +44,7 @@ Site engineers record field activity and keep owners and clients informed.
 - Upload construction progress photos.
 - Record the overall project completion percentage and mark start or completion photos.
 - Record materials received and materials used.
-- Log expenses against owner-assigned funds, select a project, and upload supporting receipts.
+- Log expenses against owner-assigned funds even when spending exceeds the remaining balance; show the balance as negative until the owner assigns more funds. Select a project and upload supporting receipts.
 - Request additional funds separately when the assigned balance is insufficient.
 - Record worker attendance and upload supporting photos.
 - View instructions and updates from the owner.
