@@ -487,10 +487,23 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .visit-purpose { margin-top: 9px; color: #a09992; font-size: 8px; }
 .visit-proofs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .visit-proof { display: flex; align-items: center; gap: 7px; color: #625a53; font-size: 9px; text-decoration: none; }
+.visit-proof > a:first-child { display: block; flex: 0 0 auto; }
+.visit-proof span > a { color: var(--orange-dark); font-size: 8px; text-decoration: none; }
+.visit-proof span > a:hover { text-decoration: underline; }
 .visit-proof img { width: 42px; height: 42px; border-radius: 4px; object-fit: cover; }
 .visit-proof span { display: grid; gap: 3px; }
 .visit-proof small { color: #928a83; font-size: 8px; }
 .site-visit-capture-dialog > p { margin: 0; color: #77716b; font-size: 11px; line-height: 1.5; }
+ .site-visit-capture-dialog { max-height: calc(100vh - 40px); overflow-y: auto; }
+ .site-visit-capture-dialog > label { display: grid; gap: 7px; color: #514b45; font-size: 10px; font-weight: 700; }
+ .site-visit-capture-dialog > label select,
+ .site-visit-capture-dialog > label input { width: 100%; min-height: 42px; box-sizing: border-box; padding: 9px 11px; border: 1px solid #e7e1da; border-radius: 7px; background: #fff; color: #48423c; font: 600 11px "Manrope", sans-serif; }
+ .site-visit-capture-dialog > label select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m2.5 4.5 3.5 3 3.5-3' fill='none' stroke='%238d7665' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
+ .site-visit-capture-dialog .attendance-preview-heading { padding-bottom: 12px; border-bottom: 1px solid #eee8e1; }
+ .site-visit-capture-dialog .attendance-preview-heading > div { display: grid; gap: 4px; }
+ .site-visit-capture-dialog .attendance-preview-heading strong { color: #302b27; font: 700 17px "Manrope", sans-serif; }
+ .site-visit-capture-dialog .attendance-live-camera { overflow: hidden; border: 1px solid #e7e1da; border-radius: 8px; background: #211e1c; }
+ .site-visit-capture-dialog .attendance-live-camera video { min-height: 220px; max-height: min(42vh, 360px); border-radius: 7px; object-fit: cover; }
 .site-visit-photo-input { display: grid; gap: 7px; color: #514b45; font-size: 10px; }
 .site-visit-photo-input input { width: 100%; padding: 9px; border: 1px solid var(--border); border-radius: 5px; background: #fff; font: inherit; }
 .site-visit-selected-photo { margin: -8px 0 0; color: #77716b; font-size: 10px; }
@@ -950,6 +963,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .footer > span:nth-child(2) { display: none; }
   .list-toolbar { align-items: stretch; flex-direction: column; }
   .toolbar-actions { justify-content: space-between; }
+   .site-visits-feature-page .toolbar-actions,
+   .feature-panel:has(.visit-cards) .toolbar-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+   .site-visits-feature-page .toolbar-actions > *,
+   .feature-panel:has(.visit-cards) .toolbar-actions > * { width: 100%; }
+   .feature-panel:has(.visit-cards) .toolbar-actions > .button { grid-column: 1 / -1; }
   .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div { min-height: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 12px; text-align: left; }
   .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div > span { justify-content: flex-start; font-size: 8px; text-align: left; }
@@ -1230,6 +1248,26 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .attendance-leave-item b { color: #514b45; font-size: 9px; }
 .attendance-leave-item small { color: #77716b; font-size: 9px; }
 .attendance-leave-item .icon-button { flex: 0 0 auto; }
+
+@media (max-width: 620px) {
+  .attendance-preview-scrim { align-items: end; padding: 10px; }
+  .attendance-capture-dialog.site-visit-capture-dialog { width: 100%; max-height: calc(100vh - 20px); gap: 12px; padding: 16px 14px; border-radius: 12px 12px 8px 8px; }
+  .site-visit-capture-dialog .attendance-preview-heading strong { font-size: 16px; }
+  .site-visit-capture-dialog .attendance-live-camera video { min-height: 190px; max-height: 38vh; }
+  .attendance-dialog-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+  .attendance-dialog-actions .button { width: 100%; min-height: 42px; }
+  .feature-panel:has(.visit-cards) .toolbar-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .feature-panel:has(.visit-cards) .toolbar-actions > .select-button,
+  .feature-panel:has(.visit-cards) .toolbar-actions > .work-progress-date-filter,
+  .feature-panel:has(.visit-cards) .toolbar-actions > .button { width: 100%; min-width: 0; min-height: 40px; }
+  .feature-panel:has(.visit-cards) .work-progress-date-filter input { width: 100%; min-height: 40px; box-sizing: border-box; }
+  .visit-card { grid-template-columns: 56px minmax(0, 1fr); align-items: start; }
+  .visit-card-end { width: 100%; grid-column: 1 / -1; justify-content: space-between; }
+  .visit-card-end .button { min-height: 40px; }
+  .visit-proof { min-width: 0; }
+  .visit-proof span { min-width: 0; }
+  .visit-proof small { overflow-wrap: anywhere; }
+}
 
 @media (max-width: 620px) {
   .attendance-today-card { align-items: start; flex-direction: column; padding: 15px; }

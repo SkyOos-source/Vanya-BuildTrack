@@ -1,4 +1,4 @@
-import { nextId, people, projects, readCompressedImage, readText, type SiteVisitProof } from "../../data/store";
+import { nextId, people, projects, readCompressedImage, readProject, readText, type SiteVisitProof } from "../../data/store";
 import { siteVisits } from "./data";
 import { failure, result } from "../shared";
 
@@ -16,11 +16,81 @@ function readSiteVisitProof(value: unknown): SiteVisitProof | null {
   const image = readCompressedImage(proof.image);
   if (!image ||
     typeof proof.capturedAt !== "string" ||
-    !Number.isFinite(Date.parse(proof.capturedAt))) return null;
-  return { image, capturedAt: new Date(proof.capturedAt).toISOString() };
+    !Number.isFinite(Date.parse(proof.capturedAt)) ||
+    typeof proof.latitude !== "number" ||
+    typeof proof.longitude !== "number" ||
+    typeof proof.accuracy !== "number" ||
+    !Number.isFinite(proof.latitude) ||
+    !Number.isFinite(proof.longitude) ||
+    !Number.isFinite(proof.accuracy) ||
+    proof.latitude < -90 || proof.latitude > 90 ||
+    proof.longitude < -180 || proof.longitude > 180 ||
+    proof.accuracy < 0) return null;
+  return {
+    image,
+    capturedAt: new Date(proof.capturedAt).toISOString(),
+    latitude: proof.latitude,
+    longitude: proof.longitude,
+    accuracy: proof.accuracy
+  };
 }
 
 export function createSiteVisit(body: any) {
+  const action = body?.action;
+  if (action === "check-in") {
+    const engineer = readText(body?.engineer);
+    const proof = readSiteVisitProof(body?.proof);
+    if (!engineer) return failure(400, "Engineer name is required.");
+    if (!proof) return failure(400, "A valid site photo and capture time are required.");
+
+    const activeVisit = siteVisits.find((item) => item.engineer === engineer && item.status === "Checked in");
+    if (activeVisit) return failure(409, "Check out of the current site before starting another visit.");
+
+    let projectName = readText(body?.project);
+    let siteName = readText(body?.site);
+    if (body?.createProject === true || body?.createProject === "true") {
+      const newProjectName = readText(body?.name);
+      if (!newProjectName) return failure(400, "A new project/site name is required.");
+      projectName = newProjectName;
+      siteName = readText(body?.site) ?? newProjectName;
+      if (projects.some((item) => item.name.toLowerCase() === newProjectName.toLowerCase())) {
+        return failure(409, "A project/site with this name already exists.");
+      }
+      const project = readProject({
+        name: projectName,
+        site: siteName,
+        engineer,
+        status: "Planning",
+        progress: 0,
+        budget: 0,
+        spent: 0,
+        quotationAmount: 0,
+        dueDate: "To be confirmed"
+      }, nextId("project"));
+      if (!project) return failure(400, "Could not create the new project/site.");
+      projects.unshift(project);
+    }
+    if (!projectName) return failure(400, "Choose a project/site or create a new one.");
+    const selectedProject = projects.find((item) => item.name === projectName);
+    if (!selectedProject) return failure(400, "Choose a valid project/site.");
+
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(readText(body?.date) ?? "")
+      ? readText(body?.date)!
+      : new Date().toISOString().slice(0, 10);
+    const visit = {
+      id: nextId("visit"),
+      project: selectedProject.name,
+      site: selectedProject.site,
+      engineer,
+      date,
+      purpose: readText(body?.description) ?? undefined,
+      status: "Checked in",
+      checkIn: proof
+    };
+    siteVisits.unshift(visit);
+    return result({ record: visit, project: body?.createProject ? selectedProject : undefined }, 201);
+  }
+
   const project = readText(body?.project);
   const engineer = readText(body?.engineer);
   const date = readText(body?.date);

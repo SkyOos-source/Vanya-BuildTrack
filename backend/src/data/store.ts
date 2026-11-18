@@ -63,7 +63,7 @@ export type SiteVisit = {
   checkOut?: SiteVisitProof;
 };
 
-export type SiteVisitProof = { image: string; capturedAt: string };
+export type SiteVisitProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number };
 
 export type Activity = {
   id: string;

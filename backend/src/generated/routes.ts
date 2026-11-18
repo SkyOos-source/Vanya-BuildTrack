@@ -44,7 +44,7 @@ import type { Request as ExRequest, Response as ExResponse, RequestHandler, Rout
 const models: TsoaRoute.Models = {
     "SiteVisitProof": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"capturedAt":{"dataType":"string","required":true},"image":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"accuracy":{"dataType":"double","required":true},"longitude":{"dataType":"double","required":true},"latitude":{"dataType":"double","required":true},"capturedAt":{"dataType":"string","required":true},"image":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "SiteVisit": {

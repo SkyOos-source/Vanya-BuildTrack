@@ -18,6 +18,13 @@ import type { SiteVisitAction } from "./site-visits-page";
 
 type PushStatus = "checking" | "ready" | "enabled" | "unsupported" | "unconfigured" | "denied" | "error";
 
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function decodeVapidPublicKey(value: string): ArrayBuffer {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   const raw = window.atob(base64 + "=".repeat((4 - base64.length % 4) % 4));
@@ -857,6 +864,40 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     }
   };
 
+  const checkInVisit = async (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => {
+    try {
+      const response = await apiFetch("/api/site-visits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "check-in",
+          engineer: currentUser,
+          project,
+          name: createProject ? project : undefined,
+          site,
+          createProject,
+          date: localDateKey(new Date()),
+          proof
+        })
+      });
+      const result = await response.json() as { record?: SiteVisit; project?: Project; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Site visit check-in failed (${response.status})`);
+      setData((current) => ({
+        ...current,
+        siteVisits: [result.record!, ...current.siteVisits],
+        projects: result.project
+          ? [result.project, ...current.projects.filter((item) => item.id !== result.project!.id)]
+          : current.projects
+      }));
+      showToast(`Checked in at ${result.record.project}.`);
+    } catch (error) {
+      console.error("Unable to check in for site visit:", error);
+      const message = error instanceof Error ? error.message : "Could not check in at the site.";
+      showToast(message);
+      throw error instanceof Error ? error : new Error(message);
+    }
+  };
+
   const removePerson = async (person: Person) => {
     try {
       const response = await apiFetch(`/api/people/${person.id}`, { method: "DELETE" });
@@ -1086,7 +1127,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     Attendance: "Review daily attendance across your construction sites.",
     Reports: "Project-wise progress, expenses, materials, and activity.",
     "Financial Overview": "Review revenue, expenses, quotations, and profit across your projects.",
-    "Site Visits": "Plan and follow up on engineer site visits.",
+    "Site Visits": "View and filter engineer site check-ins and check-outs.",
     "Settings & Backup": "Manage your profile and request an account data backup.",
     Settings: "Choose your personal color palette and workspace appearance.",
     Profile: "Manage your BuildTrack contact details and profile photo.",
@@ -1109,6 +1150,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     onQuote: updateQuote,
     onExpenseStatus: updateExpense,
     onVisitStatus: updateVisit,
+    onVisitCheckIn: checkInVisit,
     onUpdatePerson: updatePerson,
     onRemovePerson: removePerson,
     onAttendanceSubmit: submitAttendance,

@@ -9,6 +9,18 @@
 		"schemas": {
 			"SiteVisitProof": {
 				"properties": {
+					"accuracy": {
+						"type": "number",
+						"format": "double"
+					},
+					"longitude": {
+						"type": "number",
+						"format": "double"
+					},
+					"latitude": {
+						"type": "number",
+						"format": "double"
+					},
 					"capturedAt": {
 						"type": "string"
 					},
@@ -17,6 +29,9 @@
 					}
 				},
 				"required": [
+					"accuracy",
+					"longitude",
+					"latitude",
 					"capturedAt",
 					"image"
 				],
