@@ -116,6 +116,9 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   const projectNames = assignedProjectNames(session);
 
   if (session.role === "owner") {
+    if (method === "POST" && path === "/api/site-visits") {
+      return { allowed: false, status: 403, error: "Owners view engineer site visits and do not schedule them." };
+    }
     if (method === "POST" && path === "/api/expenses/allocations") body.assignedBy = session.name;
     if (method === "POST" && path === "/api/expenses") body.submittedBy = session.name;
     return { allowed: true };
@@ -123,6 +126,17 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   if (path === "/api/push/subscriptions" && (method === "POST" || method === "DELETE")) return { allowed: true };
 
   if (session.role === "employee") {
+    if (method === "POST" && path === "/api/site-visits") {
+      if (body.action !== "check-in") {
+        return { allowed: false, status: 403, error: "Site engineers can check in directly but cannot schedule owner visits." };
+      }
+      body.engineer = session.name;
+      if (body.createProject !== true && body.createProject !== "true" &&
+        !belongsToAssignedProject(session, body.project)) {
+        return { allowed: false, status: 403, error: "You can only check in at your assigned projects/sites." };
+      }
+      return { allowed: true };
+    }
     if (method === "POST" && path === "/api/attendance") {
       body.engineer = session.name;
       return { allowed: true };

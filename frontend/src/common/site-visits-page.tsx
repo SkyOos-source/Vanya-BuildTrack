@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Project, Role, SiteVisit, SiteVisitProof } from "./types";
 import { StatusBadge } from "./components";
-import { captureCameraPhoto, compressImageFile, siteVisitDateParts } from "./utils";
+import { captureCameraPhoto, compressImageFile, reverseGeocode, siteVisitDateParts } from "./utils";
 
 export type SiteVisitAction = "check-in" | "check-out";
 
-function VisitProof({ proof, label }: { proof?: SiteVisitProof; label: string }) {
+function VisitProof({ proof, label, fallbackLocation }: { proof?: SiteVisitProof; label: string; fallbackLocation: string }) {
   if (!proof) return null;
   return <div className="visit-proof">
     <a href={proof.image} target="_blank" rel="noreferrer" aria-label={`Open ${label} photo`}>
       <img src={proof.image} alt={`${label} photo`} />
     </a>
-    <span>{label}<small>{new Date(proof.capturedAt).toLocaleString()}</small><a href={`https://www.google.com/maps?q=${proof.latitude},${proof.longitude}`} target="_blank" rel="noreferrer">⌖ View location · ±{Math.round(proof.accuracy)} m</a></span>
+    <span>{label}<small>{new Date(proof.capturedAt).toLocaleString()}</small><a href={`https://www.google.com/maps?q=${proof.latitude},${proof.longitude}`} target="_blank" rel="noreferrer">⌖ {proof.locationName || fallbackLocation || "Location name unavailable"} · ±{Math.round(proof.accuracy)} m</a></span>
   </div>;
 }
 
@@ -140,7 +140,8 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
         capturedAt,
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy
+        accuracy: position.coords.accuracy,
+        locationName: await reverseGeocode(position.coords.latitude, position.coords.longitude)
       };
       if (capture.visit) {
         await onAction(capture.visit, capture.action, proof);
@@ -211,7 +212,7 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
             <h3>{visit.project}</h3>
             <p>⌖ {visit.site} · {role === "Owner" ? `Assigned engineer: ${visit.engineer}` : "Assigned to you"}</p>
             {visit.purpose && <div className="visit-purpose">{visit.purpose}</div>}
-            {(visit.checkIn || visit.checkOut) && <div className="visit-proofs"><VisitProof proof={visit.checkIn} label="Check-in photo" /><VisitProof proof={visit.checkOut} label="Check-out photo" /></div>}
+            {(visit.checkIn || visit.checkOut) && <div className="visit-proofs"><VisitProof proof={visit.checkIn} label="Check-in photo" fallbackLocation={visit.site} /><VisitProof proof={visit.checkOut} label="Check-out photo" fallbackLocation={visit.site} /></div>}
           </div>
           <div className="visit-card-end">
             <StatusBadge status={visit.status} />

@@ -18,7 +18,10 @@ services:
 
   buildtrack-prod:
     profiles: ["prod"]
-    build: .
+    build:
+      context: .
+      args:
+        VITE_REVERSE_GEOCODER_URL: ${VITE_REVERSE_GEOCODER_URL:-}
     image: buildtrack:latest
     restart: unless-stopped
     depends_on:

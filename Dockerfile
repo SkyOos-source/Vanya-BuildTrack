@@ -14,6 +14,8 @@ RUN npm ci
 
 COPY backend ./backend
 COPY frontend ./frontend
+ARG VITE_REVERSE_GEOCODER_URL
+ENV VITE_REVERSE_GEOCODER_URL=${VITE_REVERSE_GEOCODER_URL}
 RUN DATABASE_URL="postgresql://localhost:5432/buildtrack" npm run build \
   && mkdir -p backend/public \
   && cp -a frontend/dist/. backend/public/

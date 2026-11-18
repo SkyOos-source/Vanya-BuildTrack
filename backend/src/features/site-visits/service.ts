@@ -31,7 +31,10 @@ function readSiteVisitProof(value: unknown): SiteVisitProof | null {
     capturedAt: new Date(proof.capturedAt).toISOString(),
     latitude: proof.latitude,
     longitude: proof.longitude,
-    accuracy: proof.accuracy
+    accuracy: proof.accuracy,
+    ...(typeof proof.locationName === "string" && proof.locationName.trim()
+      ? { locationName: proof.locationName.trim().slice(0, 300) }
+      : {})
   };
 }
 

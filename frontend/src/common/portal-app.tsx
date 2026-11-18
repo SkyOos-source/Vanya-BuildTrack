@@ -852,7 +852,17 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, engineer: currentUser, proof })
       });
-      const result = await response.json() as { record?: SiteVisit; error?: string };
+      const responseText = await response.text();
+      let result: { record?: SiteVisit; error?: string } = {};
+      if (responseText) {
+        try {
+          result = JSON.parse(responseText) as { record?: SiteVisit; error?: string };
+        } catch {
+          throw new Error(`The server returned an invalid site visit response (${response.status}).`);
+        }
+      } else if (!response.ok) {
+        throw new Error(`Site visit update failed (${response.status}).`);
+      }
       if (!response.ok || !result.record) throw new Error(result.error || `Site visit update failed (${response.status})`);
       setData((current) => ({ ...current, siteVisits: current.siteVisits.map((item) => item.id === visit.id ? result.record! : item) }));
       showToast(`Site visit ${action === "check-in" ? "check-in" : "check-out"} saved.`);
@@ -880,7 +890,17 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           proof
         })
       });
-      const result = await response.json() as { record?: SiteVisit; project?: Project; error?: string };
+      const responseText = await response.text();
+      let result: { record?: SiteVisit; project?: Project; error?: string } = {};
+      if (responseText) {
+        try {
+          result = JSON.parse(responseText) as { record?: SiteVisit; project?: Project; error?: string };
+        } catch {
+          throw new Error(`The server returned an invalid check-in response (${response.status}).`);
+        }
+      } else if (!response.ok) {
+        throw new Error(`Site visit check-in failed (${response.status}).`);
+      }
       if (!response.ok || !result.record) throw new Error(result.error || `Site visit check-in failed (${response.status})`);
       setData((current) => ({
         ...current,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Attendance, AttendanceLeave, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
 import { StatusBadge } from "./components";
 import { apiFetch } from "./api";
-import { captureCameraPhoto, compressImageFile } from "./utils";
+import { captureCameraPhoto, compressImageFile, reverseGeocode } from "./utils";
 
 type AttendancePageProps = {
   data: DashboardData;
@@ -89,7 +89,7 @@ function AttendanceProofCell({ proof, label, onPreview }: { proof?: AttendancePr
     </button>
     <span className="attendance-proof-time">{formatTime(proof.capturedAt)}</span>
     <a href={`https://www.google.com/maps?q=${proof.latitude},${proof.longitude}`} target="_blank" rel="noreferrer">
-      ⌖ {coordinates}
+    ⌖ {proof.locationName || coordinates}
     </a>
     <small>±{Math.round(proof.accuracy)} m</small>
   </div>;
@@ -110,10 +110,10 @@ function AttendanceTable({ records, leaves, requests, now, owner, employee, onPr
         <td>{record.engineer}</td>
         <td><div className="attendance-proof-cell">
           {record.checkIn
-            ? <a className="attendance-location-link" href={`https://www.google.com/maps?q=${record.checkIn.latitude},${record.checkIn.longitude}`} target="_blank" rel="noreferrer">⌖ Check-in location</a>
+            ? <a className="attendance-location-link" href={`https://www.google.com/maps?q=${record.checkIn.latitude},${record.checkIn.longitude}`} target="_blank" rel="noreferrer">⌖ Check-in · {record.checkIn.locationName || "Location name unavailable"}</a>
             : <span className="attendance-missing">Check-in location not recorded</span>}
           {record.checkOut
-            ? <a className="attendance-location-link" href={`https://www.google.com/maps?q=${record.checkOut.latitude},${record.checkOut.longitude}`} target="_blank" rel="noreferrer">⌖ Check-out location</a>
+            ? <a className="attendance-location-link" href={`https://www.google.com/maps?q=${record.checkOut.latitude},${record.checkOut.longitude}`} target="_blank" rel="noreferrer">⌖ Check-out · {record.checkOut.locationName || "Location name unavailable"}</a>
             : <span className="attendance-missing">Check-out location not recorded</span>}
         </div></td>
         <td>{record.checkIn ? formatTime(record.checkIn.capturedAt) : "—"}</td>
@@ -460,7 +460,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         capturedAt,
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy
+        accuracy: position.coords.accuracy,
+        locationName: await reverseGeocode(position.coords.latitude, position.coords.longitude)
       });
       setCaptureOpen(false);
       setCameraOpen(false);
@@ -709,7 +710,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         <img src={preview.proof.image} alt={`${preview.label} site evidence`} />
         <p>{new Date(preview.proof.capturedAt).toLocaleString()}</p>
         <a href={`https://www.google.com/maps?q=${preview.proof.latitude},${preview.proof.longitude}`} target="_blank" rel="noreferrer">
-          View location · {preview.proof.latitude.toFixed(6)}, {preview.proof.longitude.toFixed(6)} (±{Math.round(preview.proof.accuracy)} m) ↗
+          {preview.proof.locationName || `${preview.proof.latitude.toFixed(6)}, ${preview.proof.longitude.toFixed(6)}`} (±{Math.round(preview.proof.accuracy)} m) · View map ↗
         </a>
       </section>
     </div>}

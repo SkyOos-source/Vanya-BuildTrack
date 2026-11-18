@@ -9,6 +9,9 @@
 		"schemas": {
 			"SiteVisitProof": {
 				"properties": {
+					"locationName": {
+						"type": "string"
+					},
 					"accuracy": {
 						"type": "number",
 						"format": "double"
@@ -392,6 +395,9 @@
 			},
 			"AttendanceProof": {
 				"properties": {
+					"locationName": {
+						"type": "string"
+					},
 					"accuracy": {
 						"type": "number",
 						"format": "double"

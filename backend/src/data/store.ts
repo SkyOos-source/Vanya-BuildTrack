@@ -63,7 +63,7 @@ export type SiteVisit = {
   checkOut?: SiteVisitProof;
 };
 
-export type SiteVisitProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number };
+export type SiteVisitProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number; locationName?: string };
 
 export type Activity = {
   id: string;
@@ -81,7 +81,7 @@ export type Activity = {
 export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
 export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };
 export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string };
-export type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number };
+export type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number; locationName?: string };
 export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
 export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
 export type AttendanceLeave = { id: string; title: string; date: string };
@@ -218,7 +218,10 @@ export function readAttendanceProof(value: unknown): AttendanceProof | null {
     capturedAt: proof.capturedAt,
     latitude: proof.latitude,
     longitude: proof.longitude,
-    accuracy: proof.accuracy
+    accuracy: proof.accuracy,
+    ...(typeof proof.locationName === "string" && proof.locationName.trim()
+      ? { locationName: proof.locationName.trim().slice(0, 300) }
+      : {})
   };
 }
 

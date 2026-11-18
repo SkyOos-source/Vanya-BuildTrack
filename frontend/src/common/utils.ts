@@ -4,6 +4,57 @@ export const formatCurrency = (amount: number) => new Intl.NumberFormat("en-IN",
 export const initials = (name: string) => name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 export const isLoggedExpense = (expense: Expense) => expense.entryType === "log" || (!expense.entryType && expense.status === "Logged");
 
+export async function reverseGeocode(latitude: number, longitude: number): Promise<string | undefined> {
+  const endpoint = import.meta.env.VITE_REVERSE_GEOCODER_URL?.trim();
+  if (!endpoint) return undefined;
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    throw new Error("The self-hosted reverse geocoder URL is invalid.");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("The self-hosted reverse geocoder URL must use HTTP or HTTPS.");
+  }
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("lat", String(latitude));
+  url.searchParams.set("lon", String(longitude));
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Location name lookup failed (${response.status}).`);
+    let result: { display_name?: unknown; address?: Record<string, unknown> };
+    try {
+      result = await response.json() as { display_name?: unknown; address?: Record<string, unknown> };
+    } catch {
+      throw new Error("Location name lookup returned an invalid response.");
+    }
+    const displayName = typeof result.display_name === "string" ? result.display_name.trim() : "";
+    if (displayName) return displayName.slice(0, 300);
+    const address = result.address;
+    if (address) {
+      const parts = [address.road, address.neighbourhood, address.suburb, address.city, address.town, address.village, address.state, address.country]
+        .filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+        .map((value) => value.trim());
+      const uniqueParts = parts.filter((value, index) => parts.findIndex((part) => part.toLowerCase() === value.toLowerCase()) === index);
+      if (uniqueParts.length) return uniqueParts.join(", ").slice(0, 300);
+    }
+    return undefined;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Location name lookup timed out. Try again.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 const MAX_COMPRESSED_IMAGE_BYTES = 500 * 1024;
 
 export async function captureCameraPhoto(video: HTMLVideoElement, prefix: string): Promise<{ file: File; capturedAt: string }> {

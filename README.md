@@ -20,6 +20,8 @@ BuildTrack can be installed from its landing page as a progressive web app. On a
 
 The Vite frontend runs at http://localhost:5173 and the Express API runs at http://localhost:3001. Local development uses SQLite at `backend/prisma/sqlite/local.db` and applies its migrations when the backend starts. Production uses PostgreSQL. A new database starts empty and requires one-time owner setup.
 
+To display readable place names for site-visit and attendance check-in/check-out locations, configure `VITE_REVERSE_GEOCODER_URL` with the URL of a self-hosted Nominatim-compatible `/reverse` endpoint. For local development, copy `frontend/.env.example` to `frontend/.env` and set the endpoint; allow the Vite origin in the geocoder's CORS settings. For Docker production, set the same variable in the deployment root `.env` and rebuild the image. When unset, coordinates and map links continue to work; site visits show the saved site name and attendance shows that the place name is unavailable.
+
 ### Deploy to a production VPS
 
 The Docker deployment builds the React frontend and serves its static files from Express on the same origin as the API. Production uses a private PostgreSQL container with a persistent database volume; the app binds only to localhost port `3102`, so use a reverse proxy for public HTTPS access.
