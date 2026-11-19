@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request } from "express";
-import { expenseAllocations, people, projects, quotations, type Project, type Quote } from "../src/data/store";
+import { expenseAllocations, materialAllocations, people, projects, quotations, type Project, type Quote } from "../src/data/store";
 import { authorizeApiRequest, scopeApiResponse } from "../src/features/auth/access";
 import type { AuthenticatedSession } from "../src/features/auth/session";
 import { createProject } from "../src/features/projects/service";
@@ -138,6 +138,42 @@ test("engineers can only log expenses against their own funds and assigned proje
     projects.splice(0, projects.length, ...projectsBefore);
     people.splice(0, people.length, ...peopleBefore);
     expenseAllocations.splice(0, expenseAllocations.length, ...allocationsBefore);
+  }
+});
+
+test("engineers can only log usage against their own material assignments", () => {
+  const projectsBefore = [...projects];
+  const peopleBefore = [...people];
+  const materialAllocationsBefore = [...materialAllocations];
+  try {
+    projects.splice(0, projects.length,
+      project("p1", "Alpha", employee.name, client.name),
+      project("p2", "Beta", "Another Engineer", "Another Client")
+    );
+    people.splice(0, people.length, {
+      id: "e1",
+      name: employee.name,
+      email: employee.email,
+      role: "Site Engineer",
+      project: "Alpha"
+    });
+    materialAllocations.splice(0, materialAllocations.length,
+      { id: "material-a1", material: "Cement", project: "Alpha", engineer: employee.name, quantity: 10, unit: "bags", usedQuantity: 0, assignedAt: "16 Nov 2026", assignedBy: owner.name },
+      { id: "material-b1", material: "Sand", project: "Beta", engineer: "Another Engineer", quantity: 10, unit: "bags", usedQuantity: 0, assignedAt: "16 Nov 2026", assignedBy: owner.name }
+    );
+
+    assert.equal(authorizeApiRequest(request("POST", "/api/material-allocations", { project: "Alpha" }), employee).allowed, false);
+    assert.equal(authorizeApiRequest(request("POST", "/api/materials", { project: "Alpha" }), employee).allowed, false);
+    assert.equal(authorizeApiRequest(request("POST", "/api/material-usage", { project: "Alpha", allocationId: "material-b1" }), employee).allowed, false);
+    const validLog = { project: "Alpha", allocationId: "material-a1", engineer: "Forged Name" };
+    assert.equal(authorizeApiRequest(request("POST", "/api/material-usage", validLog), employee).allowed, true);
+    assert.equal(validLog.engineer, employee.name);
+    assert.equal(authorizeApiRequest(request("PATCH", "/api/material-requests/MREQ-1", { status: "Approved" }), employee).allowed, false);
+    assert.equal(authorizeApiRequest(request("PATCH", "/api/material-requests/MREQ-1", { status: "Approved" }), owner).allowed, true);
+  } finally {
+    projects.splice(0, projects.length, ...projectsBefore);
+    people.splice(0, people.length, ...peopleBefore);
+    materialAllocations.splice(0, materialAllocations.length, ...materialAllocationsBefore);
   }
 });
 

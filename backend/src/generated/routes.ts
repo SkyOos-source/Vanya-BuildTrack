@@ -22,6 +22,10 @@ import { MaterialsController } from './../features/materials/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { MaterialRequestsController } from './../features/materials/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { MaterialAllocationsController } from './../features/materials/controller';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { MaterialUsageController } from './../features/materials/controller';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { HealthController } from './../features/health/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { FeedbackController } from './../features/feedback/controller';
@@ -74,7 +78,12 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "MaterialRequest": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"status":{"dataType":"string","required":true},"requestedAt":{"dataType":"string","required":true},"note":{"dataType":"string"},"requestedBy":{"dataType":"string","required":true},"quantity":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"reviewedAt":{"dataType":"string"},"reviewedBy":{"dataType":"string"},"status":{"dataType":"string","required":true},"requestedAt":{"dataType":"string","required":true},"note":{"dataType":"string"},"requestedBy":{"dataType":"string","required":true},"quantity":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "MaterialUsageLog": {
+        "dataType": "refAlias",
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"loggedAt":{"dataType":"string","required":true},"note":{"dataType":"string"},"engineer":{"dataType":"string","required":true},"unit":{"dataType":"string","required":true},"quantity":{"dataType":"double","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"allocationId":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Feedback": {
@@ -846,6 +855,155 @@ export function RegisterRoutes(app: Router) {
                 validatedArgs = templateService.getValidatedArgs({ args: argsMaterialRequestsController_create, request, response });
 
                 const controller = new MaterialRequestsController();
+
+              await templateService.apiHandler({
+                methodName: 'create',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsMaterialRequestsController_update: Record<string, TsoaRoute.ParameterSchema> = {
+                id: {"in":"path","name":"id","required":true,"dataType":"string"},
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.patch('/api/material-requests/:id',
+            ...(fetchMiddlewares<RequestHandler>(MaterialRequestsController)),
+            ...(fetchMiddlewares<RequestHandler>(MaterialRequestsController.prototype.update)),
+
+            async function MaterialRequestsController_update(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsMaterialRequestsController_update, request, response });
+
+                const controller = new MaterialRequestsController();
+
+              await templateService.apiHandler({
+                methodName: 'update',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsMaterialAllocationsController_list: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        app.get('/api/material-allocations',
+            ...(fetchMiddlewares<RequestHandler>(MaterialAllocationsController)),
+            ...(fetchMiddlewares<RequestHandler>(MaterialAllocationsController.prototype.list)),
+
+            async function MaterialAllocationsController_list(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsMaterialAllocationsController_list, request, response });
+
+                const controller = new MaterialAllocationsController();
+
+              await templateService.apiHandler({
+                methodName: 'list',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsMaterialAllocationsController_create: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.post('/api/material-allocations',
+            ...(fetchMiddlewares<RequestHandler>(MaterialAllocationsController)),
+            ...(fetchMiddlewares<RequestHandler>(MaterialAllocationsController.prototype.create)),
+
+            async function MaterialAllocationsController_create(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsMaterialAllocationsController_create, request, response });
+
+                const controller = new MaterialAllocationsController();
+
+              await templateService.apiHandler({
+                methodName: 'create',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsMaterialUsageController_list: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        app.get('/api/material-usage',
+            ...(fetchMiddlewares<RequestHandler>(MaterialUsageController)),
+            ...(fetchMiddlewares<RequestHandler>(MaterialUsageController.prototype.list)),
+
+            async function MaterialUsageController_list(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsMaterialUsageController_list, request, response });
+
+                const controller = new MaterialUsageController();
+
+              await templateService.apiHandler({
+                methodName: 'list',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsMaterialUsageController_create: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.post('/api/material-usage',
+            ...(fetchMiddlewares<RequestHandler>(MaterialUsageController)),
+            ...(fetchMiddlewares<RequestHandler>(MaterialUsageController.prototype.create)),
+
+            async function MaterialUsageController_create(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsMaterialUsageController_create, request, response });
+
+                const controller = new MaterialUsageController();
 
               await templateService.apiHandler({
                 methodName: 'create',

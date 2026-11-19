@@ -31,6 +31,8 @@ export const emptyDashboardData: DashboardData = {
   siteVisits: [],
   activities: [],
   materials: [],
+  materialAllocations: [],
+  materialUsageLogs: [],
   materialRequests: [],
   attendance: [],
   feedback: [],

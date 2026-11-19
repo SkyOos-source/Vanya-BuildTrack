@@ -7,6 +7,8 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview";
 export function ProjectDetails({ project, data, role, currentUser, onBack }: { project: Project; data: DashboardData; role: Role; currentUser: string; onBack: () => void }) {
   const [showCompletionReport, setShowCompletionReport] = useState(false);
   const materials = data.materials.filter((item) => item.project === project.name);
+  const materialAllocations = data.materialAllocations.filter((item) => item.project === project.name);
+  const materialUsageLogs = data.materialUsageLogs.filter((item) => item.project === project.name);
   const quotations = data.quotes.filter((item) => item.project === project.name);
   const displayedQuotationAmount = quotations.length > 0
     ? quotations.reduce((total, quotation) => total + quotation.amount, 0)
@@ -91,9 +93,10 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
     </div>
 
     <div className="project-details-sections">
-      {role !== "Client" && <section><h3>Materials</h3>{materials.length > 0
-        ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Received</th><th>Used</th><th>In stock</th></tr></thead><tbody>{materials.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.received}</td><td>{item.used}</td><td>{item.stock}</td></tr>)}</tbody></table></div>
-        : <p className="project-details-empty">No materials recorded for this project.</p>}</section>}
+      {role !== "Client" && <section><h3>Materials</h3>{materials.length > 0 && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Received</th><th>Used</th><th>In stock</th></tr></thead><tbody>{materials.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.received}</td><td>{item.used}</td><td>{item.stock}</td></tr>)}</tbody></table></div>}
+        {materialAllocations.length > 0 && <><h4>Engineer assignments</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Engineer</th><th>Assigned</th><th>Used</th><th>Remaining</th></tr></thead><tbody>{materialAllocations.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.engineer}</td><td>{item.quantity} {item.unit}</td><td>{item.usedQuantity} {item.unit}</td><td>{item.remainingQuantity} {item.unit}</td></tr>)}</tbody></table></div></>}
+        {materialUsageLogs.length > 0 && <><h4>Material usage logs</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Used</th><th>Engineer</th><th>Logged</th><th>Note</th></tr></thead><tbody>{materialUsageLogs.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.quantity} {item.unit}</td><td>{item.engineer}</td><td>{item.loggedAt}</td><td>{item.note || "—"}</td></tr>)}</tbody></table></div></>}
+        {!materials.length && !materialAllocations.length && <p className="project-details-empty">No materials assigned or recorded for this project.</p>}</section>}
       <section><h3>Quotations</h3>{quotations.length > 0
         ? <div className="project-details-list">{quotations.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.id} · {item.date}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} />{item.attachment && <QuotationPdfPreview attachment={item.attachment} title={item.title} />}</article>)}</div>
         : <p className="project-details-empty">No additional quotations recorded.</p>}</section>

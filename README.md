@@ -137,7 +137,9 @@ The dashboard loads its initial data from `GET /api/dashboard`. Feature pages re
 - `GET`, `POST /api/expenses`, and `PATCH /api/expenses/:id` — submit expenses and update review status.
 - `GET` and `POST /api/progress` — list progress updates and submit updates with optional photo attachments.
 - `GET` and `POST /api/materials` — list inventory and log received/used materials.
-- `GET` and `POST /api/material-requests` — list and submit engineer material requests.
+- `GET` and `POST /api/material-allocations` — list and assign material quantities to project engineers.
+- `GET` and `POST /api/material-usage` — list usage logs and consume quantities from assigned material balances.
+- `GET`, `POST /api/material-requests`, and `PATCH /api/material-requests/:id` — submit requests for more materials and approve or decline requests; approval creates an assignment.
 - `GET`, `POST /api/site-visits`, and `PATCH /api/site-visits/:id` — schedule visits and mark them complete or cancelled.
 - `GET` and `POST /api/attendance` — retrieve attendance and record photo/location-backed check-in and check-out; an unfinished check-in becomes absent 24 hours after check-in, and a late employee check-out is rejected. `PATCH /api/attendance/:id/regularize` lets an owner enter the actual check-out time and reason for a missed check-out. `/api/attendance/leaves` supports listing, adding, and deleting owner-managed leave dates. Sundays and scheduled leave dates are treated as non-working days, not absences.
 - `GET`, `POST /api/people`, and `DELETE /api/people/:id` — manage the workspace people list; new site engineers receive login credentials set by the owner.

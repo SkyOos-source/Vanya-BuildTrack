@@ -1,4 +1,4 @@
-import { activities, attendance, createClientCredential, createEmployeeCredential, deleteClientCredential, deleteEmployeeCredential, expenses, feedback, materials, materialRequests, nextId, people, projects, quotations, readText, siteVisits, updatePersonCredentialEmail } from "../../data/store";
+import { activities, attendance, createClientCredential, createEmployeeCredential, deleteClientCredential, deleteEmployeeCredential, expenses, feedback, materialAllocations, materialRequests, materialUsageLogs, materials, nextId, people, projects, quotations, readText, siteVisits, updatePersonCredentialEmail } from "../../data/store";
 import { failure, result } from "../shared";
 
 export const listPeople = () => people;
@@ -83,6 +83,8 @@ export function updatePerson(id: string, body: any) {
     expenses.forEach((expense) => { if (expense.submittedBy === previousName) expense.submittedBy = name; });
     attendance.forEach((record) => { if (record.engineer === previousName) record.engineer = name; });
     materials.forEach((material) => { if (material.submittedBy === previousName) material.submittedBy = name; });
+    materialAllocations.forEach((allocation) => { if (allocation.engineer === previousName) allocation.engineer = name; });
+    materialUsageLogs.forEach((log) => { if (log.engineer === previousName) log.engineer = name; });
     materialRequests.forEach((request) => { if (request.requestedBy === previousName) request.requestedBy = name; });
   }
   return result({ record: person });

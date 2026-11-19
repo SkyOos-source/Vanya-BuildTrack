@@ -7,6 +7,8 @@ import {
   expenses,
   feedback,
   materialRequests,
+  materialAllocations,
+  materialUsageLogs,
   materials,
   people,
   projects,
@@ -26,6 +28,8 @@ const employeeReadRoutes = new Set([
   "/api/projects",
   "/api/people",
   "/api/materials",
+  "/api/material-allocations",
+  "/api/material-usage",
   "/api/material-requests",
   "/api/expenses",
   "/api/expenses/allocations",
@@ -120,6 +124,11 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
       return { allowed: false, status: 403, error: "Owners view engineer site visits and do not schedule them." };
     }
     if (method === "POST" && path === "/api/expenses/allocations") body.assignedBy = session.name;
+    if (method === "POST" && path === "/api/material-allocations") body.assignedBy = session.name;
+    if (method === "PATCH" && /^\/api\/material-requests\/[^/]+$/.test(path)) {
+      body.reviewedBy = session.name;
+      if (body.status === "Approved") body.assignedBy = session.name;
+    }
     if (method === "POST" && path === "/api/expenses") body.submittedBy = session.name;
     return { allowed: true };
   }
@@ -153,7 +162,7 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
       body.engineer = session.name;
       return { allowed: true };
     }
-    if (method === "POST" && ["/api/progress", "/api/materials", "/api/material-requests", "/api/expenses"].includes(path)) {
+    if (method === "POST" && ["/api/progress", "/api/material-requests", "/api/material-usage", "/api/expenses"].includes(path)) {
       if (!belongsToAssignedProject(session, body.project)) {
         return { allowed: false, status: 403, error: "You can only add records to your assigned projects." };
       }
@@ -164,6 +173,14 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
         body.submittedBy = session.name;
       } else if (path === "/api/material-requests") {
         body.requestedBy = session.name;
+      } else if (path === "/api/material-usage") {
+        const allocation = materialAllocations.find((item) => item.id === body.allocationId &&
+          sameName(item.engineer, session.name) && projectNames.has(item.project));
+        if (!allocation) {
+          return { allowed: false, status: 403, error: "You can only log usage against your own material assignments." };
+        }
+        body.engineer = session.name;
+        body.project = allocation.project;
       } else {
         body.submittedBy = session.name;
         if (body.entryType === "log") {
@@ -287,7 +304,18 @@ function scopeDashboard(data: Record<string, unknown>, session: AuthenticatedSes
     siteVisits: isEmployee ? siteVisits.filter((visit) => projectNames.has(visit.project) && sameName(visit.engineer, ownName)) : [],
     activities: filterActivities(data.activities),
     materials: isEmployee ? filterProjects(data.materials) : [],
-    materialRequests: isEmployee ? filterProjects(data.materialRequests) : [],
+    materialAllocations: isEmployee
+      ? (Array.isArray(data.materialAllocations) ? data.materialAllocations as typeof materialAllocations : [])
+        .filter((allocation) => sameName(allocation.engineer, session.name) && projectNames.has(allocation.project))
+      : [],
+    materialUsageLogs: isEmployee
+      ? (Array.isArray(data.materialUsageLogs) ? data.materialUsageLogs as typeof materialUsageLogs : [])
+        .filter((log) => sameName(log.engineer, session.name) && projectNames.has(log.project))
+      : [],
+    materialRequests: isEmployee
+      ? filterProjects(data.materialRequests).filter((request) =>
+        request && typeof request === "object" && sameName((request as { requestedBy?: unknown }).requestedBy, session.name))
+      : [],
     attendance: isEmployee ? attendance.filter((record) => sameName(record.engineer, ownName)) : [],
     attendanceLeaves: data.attendanceLeaves ?? [],
     attendanceLeaveRequests: isEmployee ? attendanceLeaveRequests.filter((item) => sameName(item.engineer, ownName)) : [],
@@ -330,9 +358,23 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
       sameName((item as { engineer?: unknown }).engineer, session.name) &&
       matchesProject(item as { project?: unknown }, projectNames));
   }
+  if (pathname === "/api/material-allocations") {
+    return session.role === "employee"
+      ? body.filter((allocation) => allocation && typeof allocation === "object" &&
+        sameName((allocation as { engineer?: unknown }).engineer, session.name) &&
+        matchesProject(allocation as { project?: unknown }, projectNames))
+      : body;
+  }
+  if (pathname === "/api/material-usage") {
+    return session.role === "employee"
+      ? body.filter((item) => item && typeof item === "object" && sameName((item as { engineer?: unknown }).engineer, session.name) && projectNames.has((item as { project?: string }).project ?? ""))
+      : body;
+  }
   if (["/api/quotations", "/api/expenses", "/api/materials", "/api/material-requests", "/api/progress", "/api/feedback"].includes(pathname)) {
     return body.filter((item) => item && typeof item === "object" &&
       matchesProject(item as { project?: unknown }, projectNames) &&
+      (pathname !== "/api/material-requests" || session.role !== "employee" ||
+        sameName((item as { requestedBy?: unknown }).requestedBy, session.name)) &&
       (session.role !== "client" || pathname !== "/api/progress" || (item as Activity).kind === "progress"));
   }
   if (pathname === "/api/backups") return [];
@@ -342,8 +384,16 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
 export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: AuthenticatedSession): WorkspaceUpdate | undefined {
   if (session.role === "owner") return update;
   if (session.role === "employee") {
+    const push = update.push;
+    if (update.resource === "materialRequests" && push?.targets.some((target) => ownPushTarget(session, target))) {
+      return { ...update, push: { ...push, targets: push.targets.filter((target) => ownPushTarget(session, target)) } };
+    }
     if (update.resource === "expenseAllocations" && update.allocation &&
       sameName(update.allocation.engineer, session.name)) return update;
+    if (update.resource === "materialAllocations" && update.materialAllocation &&
+      sameName(update.materialAllocation.engineer, session.name)) return update;
+    if (update.resource === "materialUsage" && update.engineer &&
+      sameName(update.engineer, session.name)) return update;
     if (update.resource === "siteVisits" && update.visit && sameName(update.visit.engineer, session.name) &&
       assignedProjectNames(session).has(update.visit.project)) return update;
     if (update.resource === "attendance" && update.push?.targets.some((target) => ownPushTarget(session, target))) {

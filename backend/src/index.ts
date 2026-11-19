@@ -5,7 +5,7 @@ import express from "express";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { RegisterRoutes } from "./generated/routes";
-import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type ExpenseAllocation, type SiteVisit } from "./data/store";
+import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type ExpenseAllocation, type MaterialAllocation, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 import { authenticateBearerHeader } from "./features/auth/session";
@@ -186,6 +186,49 @@ app.use((request, response, next) => {
               targets: [{ role: "employee", userName: allocation.engineer, url: "/engineer/expenses" }]
             }
           });
+        }
+      }
+      if (request.method === "POST" && request.path === "/api/material-allocations") {
+        const allocation = (body as { record?: MaterialAllocation } | null)?.record;
+        if (allocation) {
+          publishWorkspaceUpdate({
+            resource: "materialAllocations",
+            materialAllocation: allocation,
+            push: {
+              title: "Materials assigned",
+              body: `${allocation.quantity} ${allocation.unit} of ${allocation.material} assigned to ${allocation.project}.`,
+              targets: [{ role: "employee", userName: allocation.engineer, url: "/engineer/materials" }]
+            }
+          });
+        }
+      }
+      if (request.method === "POST" && request.path === "/api/material-usage") {
+        const log = (body as { record?: { engineer?: string } } | null)?.record;
+        if (log?.engineer) publishWorkspaceUpdate({ resource: "materialUsage", engineer: log.engineer });
+      }
+      if (request.method === "PATCH" && /^\/api\/material-requests\/[^/]+$/.test(request.path)) {
+        const payload = body as { record?: { project: string; requestedBy: string; status: string; material: string; quantity: string }; allocation?: MaterialAllocation; engineerEmail?: string } | null;
+        const requestRecord = payload?.record;
+        if (requestRecord) {
+          publishWorkspaceUpdate({
+            resource: "materialRequests",
+            ...(payload.allocation ? { materialAllocation: payload.allocation } : {}),
+            push: {
+              title: `Material request ${requestRecord.status.toLowerCase()}`,
+              body: requestRecord.status === "Approved"
+                ? `${requestRecord.quantity} of ${requestRecord.material} was assigned to ${requestRecord.project}.`
+                : `Your request for ${requestRecord.material} at ${requestRecord.project} was declined.`,
+              targets: [{
+                role: "employee",
+                userName: requestRecord.requestedBy,
+                ...(payload.engineerEmail ? { userEmail: payload.engineerEmail } : {}),
+                url: "/engineer/materials"
+              }]
+            }
+          });
+          if (payload.allocation) {
+            publishWorkspaceUpdate({ resource: "materialAllocations", materialAllocation: payload.allocation });
+          }
         }
       }
       if (request.path === "/api/site-visits" || /^\/api\/site-visits\/[^/]+$/.test(request.path)) {

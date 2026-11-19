@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
 import { compressImageFile, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
@@ -363,6 +363,40 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           })();
           return;
         }
+        if (update.resource === "materialAllocations" || update.resource === "materialUsage" || update.resource === "materialRequests") {
+          if (update.push?.targets.some((target) => target.role === "employee" && target.userName === userName)) {
+            showToast(update.push.body);
+          }
+          void (async () => {
+            try {
+              const [allocationsResponse, usageResponse, requestsResponse] = await Promise.all([
+                apiFetch("/api/material-allocations"),
+                apiFetch("/api/material-usage"),
+                apiFetch("/api/material-requests")
+              ]);
+              if (!allocationsResponse.ok || !usageResponse.ok || !requestsResponse.ok) {
+                throw new Error("Material assignments could not be refreshed.");
+              }
+              const [allocations, usage, requests] = await Promise.all([
+                allocationsResponse.json(),
+                usageResponse.json(),
+                requestsResponse.json()
+              ]);
+              if (!Array.isArray(allocations) || !Array.isArray(usage) || !Array.isArray(requests)) {
+                throw new Error("Material update returned invalid data.");
+              }
+              setData((current) => ({
+                ...current,
+                materialAllocations: allocations as DashboardData["materialAllocations"],
+                materialUsageLogs: usage as DashboardData["materialUsageLogs"],
+                materialRequests: requests as DashboardData["materialRequests"]
+              }));
+            } catch (error) {
+              console.error("Unable to refresh material assignments:", error);
+            }
+          })();
+          return;
+        }
         if (update.resource === "attendance") {
           if (update.push?.targets.some((target) => target.role === "employee" && target.userName === userName)) {
             showToast(update.push.body);
@@ -383,7 +417,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         return;
       }
       const resource = update.resource;
-      if (resource !== "materials" && resource !== "materialRequests" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
+      if (resource !== "materials" && resource !== "materialRequests" && resource !== "materialAllocations" && resource !== "materialUsage" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
@@ -408,7 +442,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           }
           const endpoint = resource === "materialRequests"
             ? "/api/material-requests"
-            : resource === "expenseAllocations" ? "/api/expenses/allocations" : `/api/${resource}`;
+            : resource === "materialAllocations" ? "/api/material-allocations"
+              : resource === "materialUsage" ? "/api/material-usage"
+                : resource === "expenseAllocations" ? "/api/expenses/allocations" : `/api/${resource}`;
           const response = await apiFetch(endpoint);
           if (!response.ok) throw new Error(`${resource} refresh failed (${response.status})`);
           const records: unknown = await response.json();
@@ -420,10 +456,26 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             if (!Array.isArray(allocations)) throw new Error("Expense allocation refresh returned invalid data.");
             return allocations as DashboardData["expenseAllocations"];
           })() : undefined;
+          const usageRelatedRecords = resource === "materialUsage" ? await Promise.all([
+            apiFetch("/api/material-allocations"),
+            apiFetch("/api/material-usage")
+          ]) : undefined;
+          if (usageRelatedRecords && usageRelatedRecords.some((item) => !item.ok)) {
+            throw new Error("Material assignments could not be refreshed.");
+          }
+          const refreshedMaterialAllocations = usageRelatedRecords ? await usageRelatedRecords[0].json() as DashboardData["materialAllocations"] : undefined;
+          const refreshedMaterialUsage = usageRelatedRecords ? await usageRelatedRecords[1].json() as DashboardData["materialUsageLogs"] : undefined;
           if (resource === "materials") {
             setData((current) => ({ ...current, materials: records as DashboardData["materials"] }));
           } else if (resource === "materialRequests") {
             setData((current) => ({ ...current, materialRequests: records as DashboardData["materialRequests"] }));
+          } else if (resource === "materialAllocations") {
+            setData((current) => ({ ...current, materialAllocations: records as DashboardData["materialAllocations"] }));
+          } else if (resource === "materialUsage") {
+            if (!Array.isArray(refreshedMaterialAllocations) || !Array.isArray(refreshedMaterialUsage)) {
+              throw new Error("Material assignment refresh returned invalid data.");
+            }
+            setData((current) => ({ ...current, materialAllocations: refreshedMaterialAllocations, materialUsageLogs: refreshedMaterialUsage }));
           } else if (resource === "quotations") {
             setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
           } else if (resource === "attendance") {
@@ -471,18 +523,29 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   useEffect(() => {
     if (page !== "Materials") return;
     let active = true;
-    const loadMaterialRequests = async () => {
+    const loadMaterialData = async () => {
       try {
-        const response = await apiFetch("/api/material-requests");
-        if (!response.ok) throw new Error(`Material request list failed (${response.status})`);
-        const requests: DashboardData["materialRequests"] = await response.json();
-        if (!Array.isArray(requests)) throw new Error("Material request list returned invalid data.");
-        if (active) setData((current) => ({ ...current, materialRequests: requests }));
+        const responses = await Promise.all([
+          apiFetch("/api/material-requests"),
+          apiFetch("/api/material-allocations"),
+          apiFetch("/api/material-usage")
+        ]);
+        if (responses.some((response) => !response.ok)) throw new Error("Material workflow data could not be loaded.");
+        const [requests, allocations, usage] = await Promise.all(responses.map((response) => response.json()));
+        if (!Array.isArray(requests) || !Array.isArray(allocations) || !Array.isArray(usage)) {
+          throw new Error("Material workflow returned invalid data.");
+        }
+        if (active) setData((current) => ({
+          ...current,
+          materialRequests: requests as DashboardData["materialRequests"],
+          materialAllocations: allocations as DashboardData["materialAllocations"],
+          materialUsageLogs: usage as DashboardData["materialUsageLogs"]
+        }));
       } catch (error) {
-        console.error("Unable to load material requests:", error);
+        console.error("Unable to load material workflow:", error);
       }
     };
-    void loadMaterialRequests();
+    void loadMaterialData();
     return () => { active = false; };
   }, [page]);
 
@@ -704,7 +767,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
     const amount = Number(form.get("amount") || 0);
     try {
-      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense-allocation" ? "expenses/allocations" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
+      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
       const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
       const attachment = modal === "expense" || modal === "expense-log" ? await readFileDataUrl(form.get("attachment")) : progressAttachments?.[0];
       const quotationFile = form.get("quotationFile");
@@ -732,6 +795,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         received: form.get("received"),
         used: form.get("used"),
         stock: form.get("stock"),
+        unit: form.get("unit"),
+        ...(modal === "material-log" ? { quantity: Number(form.get("quantity")), project: data.materialAllocations.find((item) => item.id === form.get("allocationId"))?.project } : {}),
         email: form.get("email"),
         phone: form.get("phone"),
         role: form.get("role"),
@@ -750,7 +815,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const result = await response.json() as { record?: Project | Quote | Expense | ExpenseAllocation | SiteVisit | Activity | Material | DashboardData["materialRequests"][number] | Person; project?: Project; error?: string };
+      const result = await response.json() as { record?: Project | Quote | Expense | ExpenseAllocation | SiteVisit | Activity | Material | MaterialAllocation | MaterialUsageLog | DashboardData["materialRequests"][number] | Person; allocation?: MaterialAllocation; project?: Project; error?: string };
       if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
       if (!record) throw new Error("The API returned no saved record.");
@@ -795,6 +860,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }));
       } else if (modal === "material") {
         setData((current) => ({ ...current, materials: [record as Material, ...current.materials] }));
+      } else if (modal === "material-allocation") {
+        setData((current) => ({ ...current, materialAllocations: [record as MaterialAllocation, ...current.materialAllocations] }));
+      } else if (modal === "material-log") {
+        setData((current) => ({
+          ...current,
+          materialUsageLogs: [record as MaterialUsageLog, ...current.materialUsageLogs],
+          materialAllocations: result.allocation
+            ? current.materialAllocations.map((item) => item.id === result.allocation!.id ? result.allocation! : item)
+            : current.materialAllocations
+        }));
       } else if (modal === "material-request") {
         setData((current) => ({ ...current, materialRequests: [record as DashboardData["materialRequests"][number], ...current.materialRequests] }));
       } else if (modal === "person") {
@@ -809,7 +884,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }
       }
       setModal(null);
-      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
+      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save record:", error);
       showToast(error instanceof Error ? error.message : "Could not save this record.");
@@ -842,6 +917,29 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to update expense:", error);
       showToast(error instanceof Error ? error.message : "Could not update expense.");
+    }
+  };
+
+  const updateMaterialRequest = async (request: MaterialRequest, status: "Approved" | "Declined") => {
+    try {
+      const response = await apiFetch(`/api/material-requests/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      const result = await response.json() as { record?: MaterialRequest; allocation?: MaterialAllocation; error?: string };
+      if (!response.ok || !result.record) throw new Error(result.error || `Material request update failed (${response.status})`);
+      setData((current) => ({
+        ...current,
+        materialRequests: current.materialRequests.map((item) => item.id === request.id ? result.record! : item),
+        materialAllocations: result.allocation
+          ? [result.allocation, ...current.materialAllocations]
+          : current.materialAllocations
+      }));
+      showToast(status === "Approved" ? "Request approved and material assigned." : "Material request declined.");
+    } catch (error) {
+      console.error("Unable to review material request:", error);
+      showToast(error instanceof Error ? error.message : "Could not update material request.");
     }
   };
 
@@ -1169,6 +1267,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     onCreatePerson: createPerson,
     onQuote: updateQuote,
     onExpenseStatus: updateExpense,
+    onMaterialRequestStatus: updateMaterialRequest,
     onVisitStatus: updateVisit,
     onVisitCheckIn: checkInVisit,
     onUpdatePerson: updatePerson,
@@ -1267,7 +1366,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} onClose={() => setModal(null)} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => setModal(null)} onSubmit={createRecord} />}
     </div>
   );
 }

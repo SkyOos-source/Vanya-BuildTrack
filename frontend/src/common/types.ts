@@ -1,7 +1,7 @@
 export type Role = "Owner" | "Employee" | "Client";
 export type RoleId = "owner" | "employee" | "client";
 export type PaletteId = "current" | "previous" | "reference";
-export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "visit" | "material" | "material-request" | "person";
+export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "visit" | "material" | "material-allocation" | "material-log" | "material-request" | "person";
 export type SessionUser = { name: string; email: string; role: RoleId };
 export type Project = {
   id: string;
@@ -22,7 +22,9 @@ export type SiteVisitProof = { image: string; capturedAt: string; latitude: numb
 export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; status: string; purpose?: string; checkIn?: SiteVisitProof; checkOut?: SiteVisitProof };
 export type Activity = { id: string; actor: string; action: string; project: string; time: string; kind: string; description?: string; attachment?: string; attachments?: string[]; createdAt?: string; stage?: "Start" | "Progress" | "Completion" };
 export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };
-export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string };
+export type MaterialAllocation = { id: string; material: string; project: string; engineer: string; quantity: number; unit: string; usedQuantity: number; remainingQuantity: number; assignedAt: string; assignedBy: string; requestId?: string };
+export type MaterialUsageLog = { id: string; allocationId: string; material: string; project: string; quantity: number; unit: string; engineer: string; note?: string; loggedAt: string };
+export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string; reviewedBy?: string; reviewedAt?: string };
 export type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number; locationName?: string };
 export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
 export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
@@ -33,5 +35,5 @@ export type Feedback = { id: string; project: string; client: string; rating: nu
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string };
-export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
+export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialAllocations: MaterialAllocation[]; materialUsageLogs: MaterialUsageLog[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
 export type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };

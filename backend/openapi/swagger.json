@@ -272,6 +272,12 @@
 			},
 			"MaterialRequest": {
 				"properties": {
+					"reviewedAt": {
+						"type": "string"
+					},
+					"reviewedBy": {
+						"type": "string"
+					},
 					"status": {
 						"type": "string"
 					},
@@ -304,6 +310,49 @@
 					"quantity",
 					"project",
 					"material",
+					"id"
+				],
+				"type": "object"
+			},
+			"MaterialUsageLog": {
+				"properties": {
+					"loggedAt": {
+						"type": "string"
+					},
+					"note": {
+						"type": "string"
+					},
+					"engineer": {
+						"type": "string"
+					},
+					"unit": {
+						"type": "string"
+					},
+					"quantity": {
+						"type": "number",
+						"format": "double"
+					},
+					"project": {
+						"type": "string"
+					},
+					"material": {
+						"type": "string"
+					},
+					"allocationId": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"loggedAt",
+					"engineer",
+					"unit",
+					"quantity",
+					"project",
+					"material",
+					"allocationId",
 					"id"
 				],
 				"type": "object"
@@ -1302,6 +1351,180 @@
 				}
 			}
 		},
+		"/api/material-requests/{id}": {
+			"patch": {
+				"operationId": "Update",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/material-allocations": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"properties": {
+											"requestId": {
+												"type": "string"
+											},
+											"assignedBy": {
+												"type": "string"
+											},
+											"assignedAt": {
+												"type": "string"
+											},
+											"usedQuantity": {
+												"type": "number",
+												"format": "double"
+											},
+											"unit": {
+												"type": "string"
+											},
+											"quantity": {
+												"type": "number",
+												"format": "double"
+											},
+											"engineer": {
+												"type": "string"
+											},
+											"project": {
+												"type": "string"
+											},
+											"material": {
+												"type": "string"
+											},
+											"id": {
+												"type": "string"
+											},
+											"remainingQuantity": {
+												"type": "number",
+												"format": "double"
+											}
+										},
+										"required": [
+											"assignedBy",
+											"assignedAt",
+											"usedQuantity",
+											"unit",
+											"quantity",
+											"engineer",
+											"project",
+											"material",
+											"id",
+											"remainingQuantity"
+										],
+										"type": "object"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/material-usage": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/MaterialUsageLog"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/health": {
 			"get": {
 				"operationId": "Get",
@@ -1581,6 +1804,68 @@
 											},
 											"type": "array"
 										},
+										"materialUsageLogs": {
+											"items": {
+												"$ref": "#/components/schemas/MaterialUsageLog"
+											},
+											"type": "array"
+										},
+										"materialAllocations": {
+											"items": {
+												"properties": {
+													"requestId": {
+														"type": "string"
+													},
+													"assignedBy": {
+														"type": "string"
+													},
+													"assignedAt": {
+														"type": "string"
+													},
+													"usedQuantity": {
+														"type": "number",
+														"format": "double"
+													},
+													"unit": {
+														"type": "string"
+													},
+													"quantity": {
+														"type": "number",
+														"format": "double"
+													},
+													"engineer": {
+														"type": "string"
+													},
+													"project": {
+														"type": "string"
+													},
+													"material": {
+														"type": "string"
+													},
+													"id": {
+														"type": "string"
+													},
+													"remainingQuantity": {
+														"type": "number",
+														"format": "double"
+													}
+												},
+												"required": [
+													"assignedBy",
+													"assignedAt",
+													"usedQuantity",
+													"unit",
+													"quantity",
+													"engineer",
+													"project",
+													"material",
+													"id",
+													"remainingQuantity"
+												],
+												"type": "object"
+											},
+											"type": "array"
+										},
 										"materials": {
 											"items": {
 												"$ref": "#/components/schemas/Material"
@@ -1704,6 +1989,8 @@
 										"feedback",
 										"attendance",
 										"materialRequests",
+										"materialUsageLogs",
+										"materialAllocations",
 										"materials",
 										"activities",
 										"siteVisits",
