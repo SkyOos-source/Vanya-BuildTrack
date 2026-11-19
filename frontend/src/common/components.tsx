@@ -71,18 +71,19 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
   const personRole = initialPersonRole;
   const visitEngineers = people.filter((person) => person.role === "Site Engineer");
   const selectableAllocations = expenseAllocations;
+  const selectableMaterialAllocations = materialAllocations.filter((allocation) => allocation.remainingQuantity > 0);
   const defaultVisitEngineer = visitEngineers.find((person) => person.name === projects[0]?.engineer)?.name ?? visitEngineers[0]?.name ?? projects[0]?.engineer ?? "";
   const [visitProject, setVisitProject] = useState(projects[0]?.name ?? "");
   const [visitEngineer, setVisitEngineer] = useState(defaultVisitEngineer);
   const [selectedProject, setSelectedProject] = useState(projects[0]?.name ?? "");
   const [clientProject, setClientProject] = useState("");
   const [selectedAllocation, setSelectedAllocation] = useState(selectableAllocations[0]?.id ?? "");
-  const [selectedMaterialAllocation, setSelectedMaterialAllocation] = useState(materialAllocations[0]?.id ?? "");
+  const [selectedMaterialAllocation, setSelectedMaterialAllocation] = useState(selectableMaterialAllocations[0]?.id ?? "");
   const projectSelectorRequired = ["material", "material-allocation", "material-request", "quote", "expense", "expense-log", "progress", "visit"].includes(modal);
   const projectSelectionUnavailable = projectSelectorRequired && (projectsLoading || projects.length === 0);
   const engineerSelectionUnavailable = (modal === "project" || modal === "expense-allocation") && (peopleLoading || visitEngineers.length === 0);
   const allocationSelectionUnavailable = modal === "expense-log" && role === "Employee" && selectableAllocations.length === 0 ||
-    modal === "material-log" && role === "Employee" && materialAllocations.length === 0;
+    modal === "material-log" && selectableMaterialAllocations.length === 0;
   const projectOptionMessage = projectsLoading ? "Loading projects…" : projectsLoadError ? "Could not load projects" : "No projects available";
   useEffect(() => {
     if (!projects.some((project) => project.name === visitProject)) setVisitProject(projects[0]?.name ?? "");
@@ -93,10 +94,10 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
     }
   }, [expenseAllocations, selectedAllocation]);
   useEffect(() => {
-    if (!materialAllocations.some((allocation) => allocation.id === selectedMaterialAllocation)) {
-      setSelectedMaterialAllocation(materialAllocations[0]?.id ?? "");
+    if (!selectableMaterialAllocations.some((allocation) => allocation.id === selectedMaterialAllocation)) {
+      setSelectedMaterialAllocation(selectableMaterialAllocations[0]?.id ?? "");
     }
-  }, [materialAllocations, selectedMaterialAllocation]);
+  }, [selectableMaterialAllocations, selectedMaterialAllocation]);
   const title = modal === "project" ? "Create a project" : modal === "quote" ? "New quotation" : modal === "progress" ? "Daily progress update" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log an expense" : modal === "expense-allocation" ? "Assign funds to an engineer" : modal === "visit" ? "Schedule a site visit" : modal === "material" ? "Record site stock" : modal === "material-allocation" ? "Assign materials to a site" : modal === "material-log" ? "Log material use" : modal === "material-request" ? "Request materials" : personRole === "Client" ? "Invite client" : "Invite engineer";
   const label = modal === "project" ? "Project name" : modal === "quote" ? "Quotation title" : modal === "progress" ? "What did you complete today?" : modal === "expense" || modal === "expense-log" ? "Expense description" : modal === "visit" ? "Visit purpose" : modal === "material" || modal === "material-request" ? "Material" : "Full name";
   return <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-heading"><div><span className="panel-kicker">BUILDTRACK WORKSPACE</span><h2 id="modal-title">{title}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" onClick={onClose}>×</button></div><form onSubmit={onSubmit}>
@@ -119,7 +120,7 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
     {modal === "material" && <><label>Material name<input name="material" required placeholder="e.g. M25 ready-mix concrete" /></label><label>Received quantity<input name="received" required placeholder="e.g. 12 m³" /></label><label>Used quantity<input name="used" defaultValue="0" /></label><label>Remaining stock<input name="stock" placeholder="Defaults to received quantity" /></label></>}
     {modal === "material-allocation" && <><label>Material name<input name="material" required placeholder="e.g. M25 ready-mix concrete" /></label><label>Quantity<input name="quantity" type="number" min="0.001" step="0.001" required placeholder="e.g. 12" /></label><label>Unit<input name="unit" placeholder="e.g. bags, m³, kg" /></label></>}
     {modal === "material-request" && <><label>Requested quantity<input name="quantity" required placeholder="e.g. 12 m³" /></label><label>Reason or site need<textarea name="note" rows={3} placeholder="Optional details for the owner" /></label></>}
-    {modal === "material-log" && <><label>Assigned material<select name="allocationId" required value={selectedMaterialAllocation} onChange={(event) => setSelectedMaterialAllocation(event.currentTarget.value)}><option value="" disabled>{materialAllocations.length ? "Select an assignment" : "No materials assigned"}</option>{materialAllocations.map((allocation) => <option key={allocation.id} value={allocation.id}>{allocation.material} · {allocation.project} · {allocation.remainingQuantity} {allocation.unit} remaining</option>)}</select>{materialAllocations.length === 0 && <small>Ask the owner to assign materials or request more.</small>}</label><label>Quantity used<input name="quantity" type="number" min="0.001" step="0.001" max={materialAllocations.find((item) => item.id === selectedMaterialAllocation)?.remainingQuantity} required placeholder="e.g. 2" /></label><label>Note<textarea name="note" rows={2} placeholder="Optional usage details" /></label></>}
+    {modal === "material-log" && <><label>Assigned material<select name="allocationId" required value={selectedMaterialAllocation} onChange={(event) => setSelectedMaterialAllocation(event.currentTarget.value)}><option value="" disabled>{selectableMaterialAllocations.length ? "Select an assignment" : "No remaining materials assigned"}</option>{selectableMaterialAllocations.map((allocation) => <option key={allocation.id} value={allocation.id}>{allocation.material} · {allocation.project}{role === "Owner" ? ` · ${allocation.engineer}` : ""} · {allocation.remainingQuantity} {allocation.unit} remaining</option>)}</select>{selectableMaterialAllocations.length === 0 && <small>{role === "Employee" ? "Ask the owner to assign materials or request more." : "Assign materials to a site before logging usage."}</small>}</label><label>Quantity used<input name="quantity" type="number" min="0.001" step="0.001" max={selectableMaterialAllocations.find((item) => item.id === selectedMaterialAllocation)?.remainingQuantity} required placeholder="e.g. 2" /></label><label>Note<textarea name="note" rows={2} placeholder="Optional usage details" /></label></>}
     {(modal === "quote" || modal === "expense" || modal === "expense-log") && <label>Amount (INR)<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" /></label>}
     {modal === "expense-log" && role === "Employee" && <label>Use assigned funds<select name="allocationId" required value={selectedAllocation} onChange={(event) => setSelectedAllocation(event.currentTarget.value)}><option value="" disabled>{selectableAllocations.length ? "Select an allocation" : "No funds assigned"}</option>{selectableAllocations.map((allocation) => <option key={allocation.id} value={allocation.id}>{formatCurrency(allocation.remainingAmount)} remaining · assigned {allocation.assignedAt}</option>)}</select>{allocationSelectionUnavailable && <small>Ask the owner to assign funds or request extra funds.</small>}</label>}
     {modal === "visit" && <><label>Engineer<select name="engineer" required value={visitEngineer} onChange={(event) => setVisitEngineer(event.currentTarget.value)}>{visitEngineer && !visitEngineers.some((person) => person.name === visitEngineer) && <option value={visitEngineer}>{visitEngineer}</option>}{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Visit date<input name="date" type="date" required /></label></>}

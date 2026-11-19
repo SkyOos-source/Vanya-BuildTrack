@@ -61,7 +61,44 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const [personPendingDeletion, setPersonPendingDeletion] = useState<Person | null>(null);
   const [personBeingEdited, setPersonBeingEdited] = useState<Person | null>(null);
   const [materialProjectFilter, setMaterialProjectFilter] = useState("All");
-  const [materialRequestStatusFilter, setMaterialRequestStatusFilter] = useState("All");
+  const [materialLogProjectFilter, setMaterialLogProjectFilter] = useState("All");
+  const [materialActivityStatusFilter, setMaterialActivityStatusFilter] = useState("All");
+  const materialAssignmentRows = [
+    ...data.materialAllocations
+      .filter((item) => (role !== "Employee" || item.engineer === currentUser) &&
+        (materialProjectFilter === "All" || item.project === materialProjectFilter))
+      .map((item) => ({
+        id: item.id,
+        type: "Assigned",
+        material: item.material,
+        project: item.project,
+        quantity: `${item.quantity} ${item.unit} assigned · ${item.remainingQuantity} ${item.unit} remaining`.trim(),
+        submittedBy: item.assignedBy,
+        date: item.assignedAt,
+        status: "Assigned",
+        note: ""
+      })),
+    ...data.materialRequests
+      .filter((request) => (role !== "Employee" || request.requestedBy === currentUser) &&
+        (materialProjectFilter === "All" || request.project === materialProjectFilter))
+      .map((request) => ({
+        id: request.id,
+        type: "Requested",
+        material: request.material,
+        project: request.project,
+        quantity: request.quantity,
+        submittedBy: request.requestedBy,
+        date: request.requestedAt,
+        status: request.status,
+        note: request.note
+      }))
+  ]
+    .filter((item) => materialActivityStatusFilter === "All" || item.status === materialActivityStatusFilter)
+    .sort((left, right) => Date.parse(right.date) - Date.parse(left.date));
+  const visibleMaterialLogs = data.materialUsageLogs.filter((log) =>
+    (role !== "Employee" || log.engineer === currentUser) &&
+    (materialLogProjectFilter === "All" || log.project === materialLogProjectFilter)
+  );
   const [ownerAuditLogs, setOwnerAuditLogs] = useState<OwnerAuditLog[]>([]);
   const [auditLogsError, setAuditLogsError] = useState("");
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
@@ -233,7 +270,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
       onToast(error instanceof Error ? error.message : "Could not download this backup.");
     }
   };
-  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""}`}>
+  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""} ${role === "Employee" && page === "Materials" ? "engineer-materials-feature-page" : ""}`}>
     {projectView && (selectedProject
       ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} onBack={() => setSelectedProjectId(null)} />
       : <section className="panel feature-panel"><div className="list-toolbar"><div className="search-box"><span>⌕</span><input aria-label="Search projects" placeholder="Search projects, sites, clients..." value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="toolbar-actions"><select className="select-button project-filter-select" aria-label="Filter projects" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>In progress</option><option>On track</option><option>At risk</option></select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("project")}>＋ New project</button>}</div></div><ProjectCards projects={scopedProjects} onOpen={(project) => setSelectedProjectId(project.id)} /></section>)}
@@ -295,17 +332,27 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
         ? <div className="progress-update-list">{engineerUpdates.map(renderProgressRow)}</div>
         : <div className="inline-empty">{workProgressDate ? "No work progress updates were shared on this date." : "No work progress updates have been shared yet."}</div>;
     })()}</section>}
-    {page === "Materials" && <><section className="panel feature-panel">
-      <div className="list-toolbar"><div><span className="panel-kicker">SITE INVENTORY</span><h2 className="list-title">Materials received & used</h2></div><div className="toolbar-actions">
-        <select className="select-button" aria-label="Filter materials by project" value={materialProjectFilter} onChange={(event) => setMaterialProjectFilter(event.target.value)}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>
-        {role === "Employee" && <><button className="button button-outline" onClick={() => onCreate("material-log")}>＋ Log material use</button><button className="button button-primary" onClick={() => onCreate("material-request")}>＋ Request material</button></>}
-      </div></div>
-      {data.materialAllocations.filter((item) => (role !== "Employee" || item.engineer === currentUser) && (materialProjectFilter === "All" || item.project === materialProjectFilter)).length
-        ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Project / site</th><th>Assigned</th><th>Used</th><th>Remaining</th><th>Assigned at</th></tr></thead><tbody>{data.materialAllocations.filter((item) => (role !== "Employee" || item.engineer === currentUser) && (materialProjectFilter === "All" || item.project === materialProjectFilter)).map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.project}</td><td>{item.quantity} {item.unit}</td><td>{item.usedQuantity} {item.unit}</td><td>{item.remainingQuantity} {item.unit}</td><td>{item.assignedAt}</td></tr>)}</tbody></table></div>
-        : <p className="people-empty">No materials have been assigned to your sites yet.</p>}
-    </section>
-    {data.materialUsageLogs.filter((log) => role !== "Employee" || log.engineer === currentUser).length > 0 && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">USAGE HISTORY</span><h2 className="list-title">Material usage logs</h2></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Project / site</th><th>Used</th><th>Engineer</th><th>Logged</th><th>Note</th></tr></thead><tbody>{data.materialUsageLogs.filter((log) => (role !== "Employee" || log.engineer === currentUser) && (materialProjectFilter === "All" || log.project === materialProjectFilter)).map((log) => <tr key={log.id}><td>{log.material}</td><td>{log.project}</td><td>{log.quantity} {log.unit}</td><td>{log.engineer}</td><td>{log.loggedAt}</td><td>{log.note || "—"}</td></tr>)}</tbody></table></div></section>}
-    {role === "Employee" && <><section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">REQUEST HISTORY</span><h2 className="list-title">My material requests</h2></div><select className="select-button" aria-label="Filter material requests by status" value={materialRequestStatusFilter} onChange={(event) => setMaterialRequestStatusFilter(event.target.value)}><option value="All">All statuses</option><option>Pending review</option><option>Approved</option><option>Declined</option></select></div>{data.materialRequests.filter((request) => request.requestedBy === currentUser && (materialRequestStatusFilter === "All" || request.status === materialRequestStatusFilter)).length > 0 ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Project / site</th><th>Quantity</th><th>Requested</th><th>Status</th></tr></thead><tbody>{data.materialRequests.filter((request) => request.requestedBy === currentUser && (materialRequestStatusFilter === "All" || request.status === materialRequestStatusFilter)).map((request) => <tr key={request.id}><td>{request.material}</td><td>{request.project}</td><td>{request.quantity}</td><td>{request.requestedAt}</td><td><StatusBadge status={request.status} /></td></tr>)}</tbody></table></div> : <p className="people-empty">No material requests match this filter.</p>}</section></>}</>}
+    {page === "Materials" && <>
+      <section className="panel feature-panel">
+        <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED & REQUESTED MATERIALS</span><h2 className="list-title">Assigned and requested materials</h2></div><div className="toolbar-actions">
+          <select className="select-button" aria-label="Filter assigned materials and requests by project" value={materialProjectFilter} onChange={(event) => setMaterialProjectFilter(event.target.value)}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>
+          <select className="select-button" aria-label="Filter assignments and requests by status" value={materialActivityStatusFilter} onChange={(event) => setMaterialActivityStatusFilter(event.target.value)}><option value="All">All statuses</option><option>Assigned</option><option>Pending review</option><option>Approved</option><option>Declined</option></select>
+          {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("material-request")}>＋ Request material</button>}
+        </div></div>
+        {materialAssignmentRows.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Type</th><th>Material</th><th>Project / site</th><th>Quantity / balance</th><th>Submitted by</th><th>Date</th><th>Status</th><th>Note</th></tr></thead><tbody>
+          {materialAssignmentRows.map((item) => <tr key={item.id}><td>{item.type}</td><td>{item.material}</td><td>{item.project}</td><td>{item.quantity}</td><td>{item.submittedBy}</td><td>{item.date}</td><td><StatusBadge status={item.status} /></td><td>{item.note || "—"}</td></tr>)}
+        </tbody></table></div> : <p className="people-empty">No assigned materials or requests match this filter.</p>}
+      </section>
+      <section className="panel feature-panel">
+        <div className="list-toolbar"><div><span className="panel-kicker">MATERIAL LOGS</span><h2 className="list-title">Material usage logs</h2></div><div className="toolbar-actions">
+          <select className="select-button" aria-label="Filter material logs by project" value={materialLogProjectFilter} onChange={(event) => setMaterialLogProjectFilter(event.target.value)}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>
+          {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("material-log")}>＋ Log material use</button>}
+        </div></div>
+        {visibleMaterialLogs.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Project / site</th><th>Used</th><th>Engineer</th><th>Logged</th><th>Note</th></tr></thead><tbody>
+          {visibleMaterialLogs.map((log) => <tr key={log.id}><td>{log.material}</td><td>{log.project}</td><td>{log.quantity} {log.unit}</td><td>{log.engineer}</td><td>{log.loggedAt}</td><td>{log.note || "—"}</td></tr>)}
+        </tbody></table></div> : <p className="people-empty">No material usage logs match this filter.</p>}
+      </section>
+    </>}
     {page === "Attendance" && <AttendancePage data={data} role={role} currentUser={currentUser} onSubmit={onAttendanceSubmit} onRegularize={onAttendanceRegularize} onReviewRequest={onAttendanceRequestReview} onReviewLeaveRequest={onAttendanceLeaveReview} />}
     {page === "Site Visits" && <SiteVisitsPage visits={data.siteVisits} projects={projects} role={role} currentUser={currentUser} onAction={onVisitStatus} onCheckIn={onVisitCheckIn} />}
     {page === "Reports" && <section className="report-grid"><article className="report-card panel"><span className="report-icon">▥</span><span className="panel-kicker">PROJECT PERFORMANCE</span><h2>Progress report</h2><p>Milestone completion and updates, by project and site.</p><button className="text-link" onClick={() => void downloadReport("progress")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">＄</span><span className="panel-kicker">FINANCIAL HEALTH</span><h2>Expense report</h2><p>Approved, pending, and paid expenses across your portfolio.</p><button className="text-link" onClick={() => void downloadReport("expenses")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">◈</span><span className="panel-kicker">SITE INVENTORY</span><h2>Materials report</h2><p>Material received, consumed, and remaining at every site.</p><button className="text-link" onClick={() => void downloadReport("materials")}>Generate report ↗</button></article></section>}

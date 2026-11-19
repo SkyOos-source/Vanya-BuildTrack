@@ -766,6 +766,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
     const amount = Number(form.get("amount") || 0);
+    const materialAllocation = modal === "material-log"
+      ? data.materialAllocations.find((item) => item.id === form.get("allocationId"))
+      : undefined;
     try {
       const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
       const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
@@ -783,7 +786,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         description: name,
         amount,
         project: form.get("project"),
-        engineer: form.get("engineer") || (modal === "project" ? form.get("engineer") : currentUser),
+        engineer: modal === "material-log"
+          ? materialAllocation?.engineer ?? currentUser
+          : form.get("engineer") || (modal === "project" ? form.get("engineer") : currentUser),
         date: form.get("date"),
         site: form.get("site"),
         client: modal === "person" && form.get("role") === "Client" ? name : form.get("client"),
@@ -802,6 +807,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         role: form.get("role"),
         password: form.get("password"),
         submittedBy: currentUser,
+        loggedBy: currentUser,
         entryType: modal === "expense-log" ? "log" : "request",
         allocationId: form.get("allocationId"),
         attachment,

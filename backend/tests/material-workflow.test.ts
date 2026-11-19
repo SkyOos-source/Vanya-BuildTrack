@@ -43,10 +43,12 @@ test("engineers can consume assigned material and approved requests create addit
     const logged = createMaterialUsage({
       allocationId: allocation.id,
       engineer: "Material Test Engineer",
+      loggedBy: "Test Owner",
       quantity: 4
     });
     assert.equal(logged.status, 201);
     assert.equal(logged.body.allocation.remainingQuantity, 6);
+    assert.equal(logged.body.record.loggedBy, "Test Owner");
     assert.equal(createMaterialUsage({ allocationId: allocation.id, engineer: "Material Test Engineer", quantity: 7 }).status, 400);
     assert.equal(createMaterialUsage({ allocationId: allocation.id, engineer: "Another Engineer", quantity: 1 }).status, 400);
     assert.equal(listMaterialAllocations().find((item) => item.id === allocation.id)?.remainingQuantity, 6);

@@ -322,6 +322,9 @@
 					"note": {
 						"type": "string"
 					},
+					"loggedBy": {
+						"type": "string"
+					},
 					"engineer": {
 						"type": "string"
 					},

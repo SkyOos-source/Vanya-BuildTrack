@@ -168,6 +168,9 @@ test("engineers can only log usage against their own material assignments", () =
     const validLog = { project: "Alpha", allocationId: "material-a1", engineer: "Forged Name" };
     assert.equal(authorizeApiRequest(request("POST", "/api/material-usage", validLog), employee).allowed, true);
     assert.equal(validLog.engineer, employee.name);
+    const ownerLog: Record<string, unknown> = { project: "Alpha", allocationId: "material-a1", engineer: employee.name };
+    assert.equal(authorizeApiRequest(request("POST", "/api/material-usage", ownerLog), owner).allowed, true);
+    assert.equal(ownerLog.loggedBy, owner.name);
     assert.equal(authorizeApiRequest(request("PATCH", "/api/material-requests/MREQ-1", { status: "Approved" }), employee).allowed, false);
     assert.equal(authorizeApiRequest(request("PATCH", "/api/material-requests/MREQ-1", { status: "Approved" }), owner).allowed, true);
   } finally {

@@ -125,6 +125,7 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
     }
     if (method === "POST" && path === "/api/expenses/allocations") body.assignedBy = session.name;
     if (method === "POST" && path === "/api/material-allocations") body.assignedBy = session.name;
+    if (method === "POST" && path === "/api/material-usage") body.loggedBy = session.name;
     if (method === "PATCH" && /^\/api\/material-requests\/[^/]+$/.test(path)) {
       body.reviewedBy = session.name;
       if (body.status === "Approved") body.assignedBy = session.name;
@@ -180,6 +181,7 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
           return { allowed: false, status: 403, error: "You can only log usage against your own material assignments." };
         }
         body.engineer = session.name;
+        body.loggedBy = session.name;
         body.project = allocation.project;
       } else {
         body.submittedBy = session.name;
@@ -240,7 +242,11 @@ function authorizeOwnProfile(request: Request, session: AuthenticatedSession): A
 
 export function authorizeApiRequest(request: Request, session?: AuthenticatedSession): AuthorizationDecision {
   if (!session) return { allowed: false, status: 401, error: "Sign-in is required to access this API." };
-  if (session.role === "owner") return { allowed: true };
+  if (session.role === "owner") {
+    return request.method === "GET" || request.method === "HEAD"
+      ? { allowed: true }
+      : authorizeMutation(request, session);
+  }
   if (!personForSession(session)) {
     return { allowed: false, status: 403, error: "Your account profile is missing or ambiguous. Contact a workspace owner." };
   }

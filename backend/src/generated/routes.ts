@@ -83,7 +83,7 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "MaterialUsageLog": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"loggedAt":{"dataType":"string","required":true},"note":{"dataType":"string"},"engineer":{"dataType":"string","required":true},"unit":{"dataType":"string","required":true},"quantity":{"dataType":"double","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"allocationId":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"loggedAt":{"dataType":"string","required":true},"note":{"dataType":"string"},"loggedBy":{"dataType":"string"},"engineer":{"dataType":"string","required":true},"unit":{"dataType":"string","required":true},"quantity":{"dataType":"double","required":true},"project":{"dataType":"string","required":true},"material":{"dataType":"string","required":true},"allocationId":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Feedback": {

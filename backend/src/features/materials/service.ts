@@ -88,6 +88,7 @@ export function createMaterialUsage(body: any) {
     quantity,
     unit: allocation.unit,
     engineer,
+    loggedBy: readText(body?.loggedBy) ?? engineer,
     note: readText(body?.note) ?? undefined,
     loggedAt: new Date().toLocaleString("en", { dateStyle: "medium", timeStyle: "short" })
   };

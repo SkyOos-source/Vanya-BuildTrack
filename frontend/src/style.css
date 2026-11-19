@@ -355,6 +355,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .footer-status i { width: 6px; height: 6px; }
 
 .feature-page { min-height: 530px; }
+.engineer-materials-feature-page, .owner-materials-page { display: grid; align-content: start; gap: 14px; }
+.material-request-history { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 .expenses-feature-page { display: grid; align-content: start; gap: 14px; }
 .engineer-expenses-feature-page { grid-template-columns: minmax(0, 1fr); }
 .engineer-expenses-feature-page > .feature-panel { grid-column: 1 / -1; }
@@ -969,10 +971,14 @@ button:disabled { cursor: not-allowed; opacity: .55; }
    .site-visits-feature-page .toolbar-actions > *,
    .feature-panel:has(.visit-cards) .toolbar-actions > * { width: 100%; }
    .feature-panel:has(.visit-cards) .toolbar-actions > .button { grid-column: 1 / -1; }
-  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div { min-height: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 12px; text-align: left; }
-  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div > span { justify-content: flex-start; font-size: 8px; text-align: left; }
-  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div > strong { font-size: 17px; }
+  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top,
+  .engineer-materials-feature-page .engineer-expense-summary .financial-summary-top { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div,
+  .engineer-materials-feature-page .engineer-expense-summary .financial-summary-top > div { min-height: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 12px; text-align: left; }
+  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div > span,
+  .engineer-materials-feature-page .engineer-expense-summary .financial-summary-top > div > span { justify-content: flex-start; font-size: 8px; text-align: left; }
+  .engineer-expenses-feature-page .engineer-expense-summary .financial-summary-top > div > strong,
+  .engineer-materials-feature-page .engineer-expense-summary .financial-summary-top > div > strong { font-size: 17px; }
   .engineer-expenses-feature-page .toolbar-actions { width: 100%; align-items: center; flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
   .engineer-expenses-feature-page .toolbar-actions > .select-button,
   .engineer-expenses-feature-page .toolbar-actions > .work-progress-date-filter { width: auto; min-width: 0; align-self: flex-start; }
