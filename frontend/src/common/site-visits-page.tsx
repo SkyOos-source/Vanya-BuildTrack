@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Project, Role, SiteVisit, SiteVisitProof } from "./types";
-import { StatusBadge } from "./components";
+import { DateInput, StatusBadge } from "./components";
 import { captureCameraPhoto, compressImageFile, reverseGeocode, siteVisitDateParts } from "./utils";
 
 export type SiteVisitAction = "check-in" | "check-out";
@@ -189,7 +189,7 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
               <option value="All">All projects</option>
               {availableProjects.map((project) => <option key={project} value={project}>{project}</option>)}
             </select>}
-          <label className="work-progress-date-filter"><input aria-label="Filter site visits by date" type="date" value={visitDateFilter} onChange={(event) => setVisitDateFilter(event.target.value)} /></label>
+          <label className="work-progress-date-filter"><DateInput aria-label="Filter site visits by date" value={visitDateFilter} onChange={(event) => setVisitDateFilter(event.target.value)} onClear={() => setVisitDateFilter("")} /></label>
           {role === "Employee" && <button className="button button-primary" onClick={() => {
             setError("");
             setCreateProject(projects.length === 0);

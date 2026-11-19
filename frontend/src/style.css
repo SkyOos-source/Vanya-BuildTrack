@@ -455,6 +455,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .photo-count { padding: 5px 7px; border: 1px solid var(--border); border-radius: 4px; white-space: nowrap; }
 .work-progress-date-filter { display: grid; gap: 5px; color: #77716a; font-size: 10px; }
 .work-progress-date-filter input { min-height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 5px; background: #fff; color: var(--graphite); font: inherit; }
+.date-input-wrap { position: relative; display: inline-flex; min-width: 0; align-items: center; gap: 6px; }
+.date-input-wrap > input { min-width: 0; flex: 1 1 auto; }
+.modal-card .date-input-wrap { width: 100%; }
+.modal-card .date-input-wrap > input { width: auto; }
+.date-input-format { display: none; }
+.date-input-clear { flex: 0 0 auto; padding: 5px 7px; border: 1px solid var(--border); border-radius: 4px; background: #fff; color: var(--muted); cursor: pointer; font-size: 10px; }
+.date-input-clear:hover { border-color: var(--orange); color: var(--orange-dark); }
 .client-work-progress-row { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .client-work-progress-row:hover .update-body strong, .client-work-progress-row:focus-visible .update-body strong { color: var(--orange-dark); }
 .client-work-progress-row:focus-visible { outline: 2px solid rgba(233, 79, 11, .45); outline-offset: 2px; }
@@ -1257,6 +1264,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .attendance-leave-item .icon-button { flex: 0 0 auto; }
 
 @media (max-width: 620px) {
+  .date-input-empty .date-input-format { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 10px; color: var(--muted); pointer-events: none; }
+  .date-input-wrap:focus-within .date-input-format { display: none; }
+  .work-progress-date-filter .date-input-wrap { width: 100%; }
+  .feature-panel:has(.visit-cards) .work-progress-date-filter .date-input-wrap > input { width: auto; }
   .attendance-preview-scrim { align-items: end; padding: 10px; }
   .attendance-capture-dialog.site-visit-capture-dialog { width: 100%; max-height: calc(100vh - 20px); gap: 12px; padding: 16px 14px; border-radius: 12px 12px 8px 8px; }
   .site-visit-capture-dialog .attendance-preview-heading strong { font-size: 16px; }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from "react";
+import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
 import type { Expense, ExpenseAllocation, MaterialAllocation, Person, Project, RecordModalType, Role } from "./types";
 import { formatCurrency } from "./utils";
 
@@ -67,6 +67,39 @@ export function PasswordInput(props: InputHTMLAttributes<HTMLInputElement>) {
   </span>;
 }
 
+export function DateInput({ value, defaultValue, onChange, onClear, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { onClear?: () => void }) {
+  const [hasValue, setHasValue] = useState(Boolean(value ?? defaultValue));
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (value !== undefined) setHasValue(Boolean(value));
+  }, [value]);
+  return <span className={`date-input-wrap ${hasValue ? "" : "date-input-empty"}`}>
+    <input
+      {...props}
+      ref={inputRef}
+      type="date"
+      value={value}
+      defaultValue={defaultValue}
+      onChange={(event) => {
+        setHasValue(Boolean(event.currentTarget.value));
+        onChange?.(event);
+      }}
+    />
+    <span className="date-input-format" aria-hidden="true">DD/MM/YYYY</span>
+    {hasValue && <button
+      className="date-input-clear"
+      type="button"
+      aria-label="Clear date"
+      title="Clear date"
+      onClick={() => {
+        if (value === undefined && inputRef.current) inputRef.current.value = "";
+        setHasValue(false);
+        onClear?.();
+      }}
+    >Clear</button>}
+  </span>;
+}
+
 export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", projects, projectsLoading, projectsLoadError, people, peopleLoading, peopleLoadError, expenseAllocations, materialAllocations, onClose, onSubmit }: { modal: RecordModalType; role: Role; initialPersonRole?: "Site Engineer" | "Client"; projects: Project[]; projectsLoading: boolean; projectsLoadError: string; people: Person[]; peopleLoading: boolean; peopleLoadError: string; expenseAllocations: ExpenseAllocation[]; materialAllocations: MaterialAllocation[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const personRole = initialPersonRole;
   const visitEngineers = people.filter((person) => person.role === "Site Engineer");
@@ -123,7 +156,7 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
     {modal === "material-log" && <><label>Assigned material<select name="allocationId" required value={selectedMaterialAllocation} onChange={(event) => setSelectedMaterialAllocation(event.currentTarget.value)}><option value="" disabled>{selectableMaterialAllocations.length ? "Select an assignment" : "No remaining materials assigned"}</option>{selectableMaterialAllocations.map((allocation) => <option key={allocation.id} value={allocation.id}>{allocation.material} · {allocation.project}{role === "Owner" ? ` · ${allocation.engineer}` : ""} · {allocation.remainingQuantity} {allocation.unit} remaining</option>)}</select>{selectableMaterialAllocations.length === 0 && <small>{role === "Employee" ? "Ask the owner to assign materials or request more." : "Assign materials to a site before logging usage."}</small>}</label><label>Quantity used<input name="quantity" type="number" min="0.001" step="0.001" max={selectableMaterialAllocations.find((item) => item.id === selectedMaterialAllocation)?.remainingQuantity} required placeholder="e.g. 2" /></label><label>Note<textarea name="note" rows={2} placeholder="Optional usage details" /></label></>}
     {(modal === "quote" || modal === "expense" || modal === "expense-log") && <label>Amount (INR)<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" /></label>}
     {modal === "expense-log" && role === "Employee" && <label>Use assigned funds<select name="allocationId" required value={selectedAllocation} onChange={(event) => setSelectedAllocation(event.currentTarget.value)}><option value="" disabled>{selectableAllocations.length ? "Select an allocation" : "No funds assigned"}</option>{selectableAllocations.map((allocation) => <option key={allocation.id} value={allocation.id}>{formatCurrency(allocation.remainingAmount)} remaining · assigned {allocation.assignedAt}</option>)}</select>{allocationSelectionUnavailable && <small>Ask the owner to assign funds or request extra funds.</small>}</label>}
-    {modal === "visit" && <><label>Engineer<select name="engineer" required value={visitEngineer} onChange={(event) => setVisitEngineer(event.currentTarget.value)}>{visitEngineer && !visitEngineers.some((person) => person.name === visitEngineer) && <option value={visitEngineer}>{visitEngineer}</option>}{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Visit date<input name="date" type="date" required /></label></>}
+    {modal === "visit" && <><label>Engineer<select name="engineer" required value={visitEngineer} onChange={(event) => setVisitEngineer(event.currentTarget.value)}>{visitEngineer && !visitEngineers.some((person) => person.name === visitEngineer) && <option value={visitEngineer}>{visitEngineer}</option>}{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Visit date<DateInput name="date" required /></label></>}
     {(modal === "progress" || modal === "expense" || modal === "expense-log") && <label>{modal === "progress" ? "Progress photos (up to 5)" : "Photos or receipt"}<input name={modal === "progress" ? "attachments" : "attachment"} type="file" accept={modal === "progress" ? "image/*" : "image/*,.pdf"} multiple={modal === "progress"} /></label>}
     <div className="modal-actions"><button className="button button-outline" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={projectSelectionUnavailable || engineerSelectionUnavailable || allocationSelectionUnavailable || modal === "person" && personRole === "Client" && (projectsLoading || projects.length === 0)}>{modal === "progress" ? "Submit update" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log expense" : modal === "expense-allocation" ? "Assign funds" : modal === "material-request" ? "Send material request" : modal === "material-allocation" ? "Assign materials" : modal === "material-log" ? "Log material use" : modal === "visit" ? "Schedule visit" : modal === "quote" ? "Save quotation" : modal === "material" ? "Save material" : modal === "person" ? personRole === "Client" ? "Invite client" : "Invite engineer" : "Create project"}</button></div></form></section></div>;
 }

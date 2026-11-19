@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Attendance, AttendanceLeave, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
-import { StatusBadge } from "./components";
+import { DateInput, StatusBadge } from "./components";
 import { apiFetch } from "./api";
 import { captureCameraPhoto, compressImageFile, reverseGeocode } from "./utils";
 
@@ -537,7 +537,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
     {role !== "Client" && <section className="panel feature-panel attendance-leave-requests-panel">
       <div className="list-toolbar"><div><span className="panel-kicker">{role === "Owner" ? "ENGINEER REQUESTS" : "TIME OFF"}</span><h2 className="list-title">{role === "Owner" ? "Engineer leave requests" : "Request a day off"}</h2></div></div>
       {role === "Employee" && <form className="attendance-leave-request-form" onSubmit={(event) => void submitLeaveRequest(event)}>
-        <label>Day off<input name="date" type="date" min={today} defaultValue={today} required /></label>
+        <label>Day off<DateInput name="date" min={today} defaultValue={today} required /></label>
         <label>Reason<textarea name="reason" maxLength={500} rows={2} placeholder="Why do you need this day off?" required /></label>
         <button className="button button-primary" type="submit" disabled={leaveRequestBusy}>{leaveRequestBusy ? "Submitting…" : "Submit leave request"}</button>
       </form>}
@@ -628,7 +628,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         <aside className="attendance-leave-list">
           {role === "Owner" && <form className="attendance-leave-form" onSubmit={(event) => void addLeave(event)}>
             <label>Leave name<input name="title" placeholder="e.g. Foundation Day" required /></label>
-            <label>Date<input name="date" type="date" defaultValue={today} required /></label>
+            <label>Date<DateInput name="date" defaultValue={today} required /></label>
             <button className="button button-primary" type="submit" disabled={leaveBusy}>＋ Add leave</button>
           </form>}
           {leaveError && <p className="attendance-error" role="alert">{leaveError}</p>}
@@ -644,7 +644,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         <h2>Attendance History</h2>
         <div className="attendance-history-filters">
           <label>Filter Date:
-            <input aria-label="Filter attendance by date" type="date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} />
+            <DateInput aria-label="Filter attendance by date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} onClear={() => setHistoryDate("")} />
           </label>
         </div>
       </div>
