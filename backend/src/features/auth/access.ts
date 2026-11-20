@@ -33,6 +33,7 @@ const employeeReadRoutes = new Set([
   "/api/material-requests",
   "/api/expenses",
   "/api/expenses/allocations",
+  "/api/quotations",
   "/api/progress",
   "/api/site-visits",
   "/api/attendance",
@@ -46,6 +47,8 @@ const employeeReadRoutes = new Set([
 const clientReadRoutes = new Set([
   "/api/dashboard",
   "/api/projects",
+  "/api/people",
+  "/api/people",
   "/api/progress",
   "/api/quotations",
   "/api/feedback",
@@ -340,8 +343,28 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
   if (!Array.isArray(body)) return body;
   const projectNames = assignedProjectNames(session);
   if (pathname === "/api/projects") return projects.filter((project) => projectNames.has(project.name));
-  if (pathname === "/api/people") return people.filter((person) => typeof person.email === "string" &&
-    person.email.toLowerCase() === session.email.toLowerCase());
+  if (pathname === "/api/people") {
+    const ownPeople = people.filter((person) => typeof person.email === "string" &&
+      person.email.toLowerCase() === session.email.toLowerCase());
+    if (session.role === "employee") {
+      const assignedClientNames = new Set(projects
+        .filter((project) => projectNames.has(project.name) && project.client.toLowerCase() !== "unassigned")
+        .map((project) => project.client.toLowerCase()));
+      return people.filter((person) => ownPeople.includes(person) ||
+        person.role === "Client" && (
+          typeof person.project === "string" && projectNames.has(person.project) ||
+          assignedClientNames.has(person.name.toLowerCase())
+        ));
+    }
+    if (session.role === "client") {
+      const assignedEngineerNames = new Set(projects
+        .filter((project) => projectNames.has(project.name) && project.engineer.toLowerCase() !== "unassigned")
+        .map((project) => project.engineer.toLowerCase()));
+      return people.filter((person) => ownPeople.includes(person) ||
+        person.role === "Site Engineer" && assignedEngineerNames.has(person.name.toLowerCase()));
+    }
+    return ownPeople;
+  }
   if (pathname === "/api/expenses/allocations") {
     return session.role === "employee"
       ? expenseAllocations.filter((allocation) => sameName(allocation.engineer, session.name)).map((allocation) => {

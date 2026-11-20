@@ -1,7 +1,7 @@
 import { Body, Get, Patch, Path, Query, Request, Route } from "tsoa";
 import type { Request as ExpressRequest } from "express";
 import { ApiController, failure } from "../shared";
-import { getMyProfile, getPublicProfile, updateMyProfile } from "./service";
+import { getMyProfile, getPublicProfile, getWorkspaceOwnerContacts, updateMyProfile } from "./service";
 
 @Route("api/profiles")
 export class ProfilesController extends ApiController {
@@ -31,6 +31,11 @@ export class ProfilesController extends ApiController {
   @Patch("me")
   public updateMe(@Query() role: string, @Query() email: string, @Body() body: unknown): any {
     return this.respond(updateMyProfile(role, email, body));
+  }
+
+  @Get("owners")
+  public owners(): any {
+    return this.respond(getWorkspaceOwnerContacts());
   }
 
   @Get("{id}")

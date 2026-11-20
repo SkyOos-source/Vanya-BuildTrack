@@ -95,54 +95,48 @@ function AttendanceProofCell({ proof, label, onPreview }: { proof?: AttendancePr
   </div>;
 }
 
-function AttendanceTable({ records, leaves, requests, now, owner, employee, onPreview, onRegularize, onRequestRegularization }: { records: Attendance[]; leaves: AttendanceLeave[]; requests: AttendanceRegularizationRequest[]; now: number; owner: boolean; employee: boolean; onPreview: (proof: AttendanceProof, label: string) => void; onRegularize: (record: Attendance) => void; onRequestRegularization: (record: Attendance) => void }) {
+function AttendanceCards({ records, leaves, requests, now, owner, employee, onPreview, onRegularize, onRequestRegularization }: { records: Attendance[]; leaves: AttendanceLeave[]; requests: AttendanceRegularizationRequest[]; now: number; owner: boolean; employee: boolean; onPreview: (proof: AttendanceProof, label: string) => void; onRegularize: (record: Attendance) => void; onRequestRegularization: (record: Attendance) => void }) {
   if (!records.length) return <div className="inline-empty">No attendance records have been submitted yet.</div>;
-  return <div className="data-table-wrap"><table className="data-table attendance-table">
-    <thead><tr><th>Date</th><th>Engineer</th><th>Locations</th><th>Check-in time</th><th>Check-in photo</th><th>Check-out time</th><th>Check-out photo</th><th>Status</th>{employee && <th>Regularization request</th>}{owner && <th>Owner action</th>}</tr></thead>
-    <tbody>{records.map((record) => {
+  return <div className="attendance-record-list">{records.map((record) => {
       const request = requests.find((item) => item.attendanceId === record.id);
       const canRequestRegularization = employee && Boolean(record.checkIn && !record.checkOut && !record.checkoutRegularization &&
         record.date && record.date < localDateKey(new Date(now)));
       const canRegularize = owner && Boolean(record.checkIn && !record.checkOut && !record.checkoutRegularization &&
         record.date && record.date < localDateKey(new Date(now)));
-      return <tr key={record.id}>
-        <td>{record.date ? new Date(`${record.date}T00:00:00`).toLocaleDateString() : "—"}</td>
-        <td>{record.engineer}</td>
-        <td><div className="attendance-proof-cell">
-          {record.checkIn
-            ? <a className="attendance-location-link" href={`https://www.google.com/maps?q=${record.checkIn.latitude},${record.checkIn.longitude}`} target="_blank" rel="noreferrer">⌖ Check-in · {record.checkIn.locationName || "Location name unavailable"}</a>
-            : <span className="attendance-missing">Check-in location not recorded</span>}
-          {record.checkOut
-            ? <a className="attendance-location-link" href={`https://www.google.com/maps?q=${record.checkOut.latitude},${record.checkOut.longitude}`} target="_blank" rel="noreferrer">⌖ Check-out · {record.checkOut.locationName || "Location name unavailable"}</a>
-            : <span className="attendance-missing">Check-out location not recorded</span>}
-        </div></td>
-        <td>{record.checkIn ? formatTime(record.checkIn.capturedAt) : "—"}</td>
-        <td><AttendanceProofCell proof={record.checkIn} label={`${record.engineer} check-in`} onPreview={onPreview} /></td>
-        <td>{record.checkOut ? formatTime(record.checkOut.capturedAt) : record.checkoutRegularization ? `${formatTime(record.checkoutRegularization.capturedAt)} · Regularized` : "—"}</td>
-        <td>{record.checkOut
-          ? <AttendanceProofCell proof={record.checkOut} label={`${record.engineer} check-out`} onPreview={onPreview} />
-          : record.checkoutRegularization
-            ? <div className="attendance-proof-cell"><strong>Owner regularization</strong><small>{record.checkoutRegularization.reason}</small><small>By {record.checkoutRegularization.regularizedBy} · {new Date(record.checkoutRegularization.regularizedAt).toLocaleString()}</small></div>
-            : <AttendanceProofCell label={`${record.engineer} check-out`} onPreview={onPreview} />}
-        </td>
-        <td><StatusBadge status={record.checkIn
+      const displayedStatus = record.checkIn
           ? attendanceStatus(record)
           : !record.checkOut
           ? leaves.find((leave) => leave.date === record.date)?.title ?? (record.date && isSunday(record.date) ? "Weekly Off" : record.status)
-          : record.status} /></td>
-        {employee && <td>{request?.status === "Declined"
-            ? <div className="attendance-dialog-actions"><StatusBadge status={request.status} />{canRequestRegularization && <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request again</button>}</div>
-          : request
-            ? <StatusBadge status={request.status} />
-            : canRequestRegularization
-              ? <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request regularization</button>
-              : <span className="attendance-missing">—</span>}</td>}
-        {owner && <td>{canRegularize
-          ? <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRegularize(record)}>Regularize</button>
-          : <span className="attendance-missing">—</span>}</td>}
-      </tr>
-    })}</tbody>
-  </table></div>;
+          : record.status;
+      return <article className="attendance-record-card" key={record.id}>
+        <div className="visit-card-status"><StatusBadge status={displayedStatus} /></div>
+        <div className="attendance-record-content">
+          <h3>{employee ? "My attendance" : record.engineer}</h3>
+          <div className="attendance-check-grid">
+            <section className="attendance-check-card">
+              <h4>Check-in</h4>
+              <AttendanceProofCell proof={record.checkIn} label={`${record.engineer} check-in`} onPreview={onPreview} />
+            </section>
+            <section className="attendance-check-card">
+              <h4>Check-out</h4>
+              {record.checkOut
+                ? <AttendanceProofCell proof={record.checkOut} label={`${record.engineer} check-out`} onPreview={onPreview} />
+                : record.checkoutRegularization
+                  ? <div className="attendance-proof-cell"><strong>{formatTime(record.checkoutRegularization.capturedAt)} · Regularized</strong><small>{record.checkoutRegularization.reason}</small><small>By {record.checkoutRegularization.regularizedBy} · {new Date(record.checkoutRegularization.regularizedAt).toLocaleString()}</small></div>
+                  : <AttendanceProofCell label={`${record.engineer} check-out`} onPreview={onPreview} />}
+            </section>
+          </div>
+          {(employee && (request || canRequestRegularization) || owner && canRegularize) && <div className="attendance-record-actions">
+            {employee && (request?.status === "Declined"
+              ? <><StatusBadge status={request.status} />{canRequestRegularization && <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request again</button>}</>
+              : request
+                ? <StatusBadge status={request.status} />
+                : canRequestRegularization && <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRequestRegularization(record)}>Request regularization</button>)}
+            {owner && canRegularize && <button className="button button-outline attendance-regularize-button" type="button" onClick={() => onRegularize(record)}>Regularize</button>}
+          </div>}
+        </div>
+      </article>;
+    })}</div>;
 }
 
 export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize, onReviewRequest, onReviewLeaveRequest }: AttendancePageProps) {
@@ -643,12 +637,10 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       <div className="attendance-history-heading">
         <h2>Attendance History</h2>
         <div className="attendance-history-filters">
-          <label>Filter Date:
-            <DateInput aria-label="Filter attendance by date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} onClear={() => setHistoryDate("")} />
-          </label>
+          <DateInput aria-label="Filter attendance by date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} onClear={() => setHistoryDate("")} />
         </div>
       </div>
-      <AttendanceTable
+      <AttendanceCards
         records={history}
         leaves={leaves}
         requests={regularizationRequests}

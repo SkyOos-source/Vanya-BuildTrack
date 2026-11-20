@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, MaterialRequest, OwnerAuditLog, Project, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
+import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, MaterialRequest, OwnerAuditLog, Project, ProjectContact, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
 import { apiFetch } from "./api";
 import { formatCurrency, initials, isLoggedExpense } from "./utils";
 import { DateInput, ExpenseRows, ProjectCards, StatusBadge } from "./components";
@@ -9,15 +9,16 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview";
 import { SiteVisitsPage, type SiteVisitAction } from "./site-visits-page";
 import { PalettePicker } from "./palette";
 
-export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onCreatePerson: (role: "Site Engineer" | "Client") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
+export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onEditProject?: (project: Project) => void; onCreatePerson: (role: "Site Engineer" | "Client") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onUnassignEngineerProject: (project: Project) => Promise<void>; onUnassignClientProject: (client: Person, project: Project) => Promise<void>; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
 
 const RECORDS_PER_PAGE = 10;
+const AUDIT_LOGS_PER_PAGE = 20;
 
-function RecordPagination({ page, totalItems, onPageChange }: { page: number; totalItems: number; onPageChange: (page: number) => void }) {
-  const totalPages = Math.ceil(totalItems / RECORDS_PER_PAGE);
+function RecordPagination({ page, totalItems, pageSize = RECORDS_PER_PAGE, onPageChange }: { page: number; totalItems: number; pageSize?: number; onPageChange: (page: number) => void }) {
+  const totalPages = Math.ceil(totalItems / pageSize);
   if (totalPages <= 1) return null;
-  const firstItem = (page - 1) * RECORDS_PER_PAGE + 1;
-  const lastItem = Math.min(page * RECORDS_PER_PAGE, totalItems);
+  const firstItem = (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, totalItems);
   return <div className="attendance-request-pagination">
     <span>Showing {firstItem}–{lastItem} of {totalItems}</span>
     <div>
@@ -41,7 +42,12 @@ function isAssignedToEngineer(project: Project, engineer: Person) {
     assignment === engineer.email.trim().toLocaleLowerCase();
 }
 
-export function FeaturePage({ page, role, currentUser, currentUserEmail, data, projects, search, setSearch, filter, setFilter, onCreate, onCreatePerson, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onAttendanceLeaveReview, onExpenseStatus, onVisitStatus, onVisitCheckIn, onUpdatePerson, onRemovePerson, onToast, onFeedback, onBackup }: FeaturePageProps) {
+function isAssignedToClient(project: Project, client: Person) {
+  return project.client.trim().toLocaleLowerCase() === client.name.trim().toLocaleLowerCase() ||
+    project.name.trim().toLocaleLowerCase() === client.project.trim().toLocaleLowerCase();
+}
+
+export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerContacts, ownerContactsError, data, projects, search, setSearch, filter, setFilter, onCreate, onCreatePerson, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onAttendanceLeaveReview, onExpenseStatus, onVisitStatus, onVisitCheckIn, onUpdatePerson, onRemovePerson, onUnassignEngineerProject, onUnassignClientProject, onToast, onFeedback, onBackup }: FeaturePageProps) {
   const [rating, setRating] = useState(5);
   const [workProgressDate, setWorkProgressDate] = useState("");
   const [workProgressProject, setWorkProgressProject] = useState("All");
@@ -49,10 +55,12 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const [selectedWorkProgress, setSelectedWorkProgress] = useState<Activity | null>(null);
   const [workProgressPhotoIndex, setWorkProgressPhotoIndex] = useState(0);
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [engineerPage, setEngineerPage] = useState(1);
   const [clientPage, setClientPage] = useState(1);
   const [allocationPage, setAllocationPage] = useState(1);
   const [expensePage, setExpensePage] = useState(1);
+  const [auditLogsPage, setAuditLogsPage] = useState(1);
   const [allocationEngineerFilter, setAllocationEngineerFilter] = useState("All");
   const [expenseProjectFilter, setExpenseProjectFilter] = useState("All");
   const [expenseDateFilter, setExpenseDateFilter] = useState("");
@@ -60,6 +68,8 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [personPendingDeletion, setPersonPendingDeletion] = useState<Person | null>(null);
   const [personBeingEdited, setPersonBeingEdited] = useState<Person | null>(null);
+  const [unassigningProjectId, setUnassigningProjectId] = useState<string | null>(null);
+  const [projectPendingUnassignment, setProjectPendingUnassignment] = useState<Project | null>(null);
   const [materialProjectFilter, setMaterialProjectFilter] = useState("All");
   const [materialLogProjectFilter, setMaterialLogProjectFilter] = useState("All");
   const [materialActivityStatusFilter, setMaterialActivityStatusFilter] = useState("All");
@@ -102,8 +112,13 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   const [ownerAuditLogs, setOwnerAuditLogs] = useState<OwnerAuditLog[]>([]);
   const [auditLogsError, setAuditLogsError] = useState("");
   const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const currentAuditLogsPage = Math.min(auditLogsPage, Math.max(1, Math.ceil(ownerAuditLogs.length / AUDIT_LOGS_PER_PAGE)));
+  const visibleAuditLogs = ownerAuditLogs.slice(
+    (currentAuditLogsPage - 1) * AUDIT_LOGS_PER_PAGE,
+    currentAuditLogsPage * AUDIT_LOGS_PER_PAGE
+  );
   const loadOwnerAuditLogs = async () => {
-    if (role !== "Owner" || page !== "Settings & Backup") return;
+    if (role !== "Owner" || page !== "Logs") return;
     setAuditLogsLoading(true);
     try {
       const response = await apiFetch("/api/audit-logs");
@@ -139,6 +154,10 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   }
   const selectedEngineer = data.people.find((person) => person.id === selectedEngineerId && person.role === "Site Engineer");
   const engineerProjects = selectedEngineer ? data.projects.filter((project) => isAssignedToEngineer(project, selectedEngineer)) : [];
+  const selectedClient = data.people.find((person) => person.id === selectedClientId && person.role === "Client");
+  const clientProjects = selectedClient ? data.projects.filter((project) => isAssignedToClient(project, selectedClient)) : [];
+  const selectedTeamMember = selectedEngineer ?? selectedClient;
+  const selectedTeamProjects = selectedEngineer ? engineerProjects : clientProjects;
   const visibleExpenses = role === "Client"
     ? data.expenses.filter((expense) => expense.status === "Approved" && data.projects.some((project) => (project.client === currentUser || project.name === clientProjectName) && project.name === expense.project))
     : role === "Employee"
@@ -229,7 +248,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
           <tbody>{visiblePeople.map((person) => <tr key={person.id}>
             <td>{person.name}</td><td>{person.email}</td><td>{person.phone || "—"}</td>
             <td>{engineers ? data.projects.filter((project) => isAssignedToEngineer(project, person)).length : person.project}</td>
-            <td><div className="person-card-actions">{engineers && <button className="button button-outline person-details-button" type="button" onClick={() => setSelectedEngineerId(person.id)}>View details</button>}<button className="button button-outline" type="button" onClick={() => setPersonBeingEdited(person)}>Edit</button><button className="icon-button person-delete-button" type="button" aria-label={`Delete ${person.name}`} title={`Delete ${person.name}`} onClick={() => setPersonPendingDeletion(person)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" /></svg></button></div></td>
+            <td><div className="person-card-actions"><button className="button button-outline person-details-button" type="button" onClick={() => engineers ? setSelectedEngineerId(person.id) : setSelectedClientId(person.id)}>View details</button></div></td>
           </tr>)}</tbody>
         </table></div>
         : <p className="people-empty">No people in this section yet.</p>}
@@ -272,8 +291,8 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
   };
   return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""} ${role === "Employee" && page === "Materials" ? "engineer-materials-feature-page" : ""}`}>
     {projectView && (selectedProject
-      ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} onBack={() => setSelectedProjectId(null)} />
-      : <section className="panel feature-panel"><div className="list-toolbar"><div className="search-box"><span>⌕</span><input aria-label="Search projects" placeholder="Search projects, sites, clients..." value={search} onChange={(event) => setSearch(event.target.value)} /></div><div className="toolbar-actions"><select className="select-button project-filter-select" aria-label="Filter projects" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>In progress</option><option>On track</option><option>At risk</option></select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("project")}>＋ New project</button>}</div></div><ProjectCards projects={scopedProjects} onOpen={(project) => setSelectedProjectId(project.id)} /></section>)}
+      ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} ownerContacts={ownerContacts} ownerContactsError={ownerContactsError} onBack={() => setSelectedProjectId(null)} />
+      : <section className="panel feature-panel"><div className="list-toolbar"><div className="search-box"><span>⌕</span><input aria-label="Search projects" placeholder="Search projects, sites, clients..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>{role === "Owner" && <div className="toolbar-actions"><button className="button button-primary" onClick={() => onCreate("project")}>＋ New project</button></div>}</div><ProjectCards projects={scopedProjects} onOpen={(project) => setSelectedProjectId(project.id)} /></section>)}
     {page === "Quotations" && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">PROJECT PROPOSALS</span><h2 className="list-title">{role === "Client" ? "Quotations for you" : "Quotations & add-on work"}</h2></div><div className="toolbar-actions"><select className="select-button" aria-label="Filter quotations" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>Awaiting review</option><option>Sent to client</option><option>Approved</option><option>Changes requested</option></select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("quote")}>＋ New quotation</button>}</div></div>{role === "Client" ? <div className="quotation-project-list">{Array.from(quotationGroups, ([projectName, projectQuotes]) => {
       const filteredQuotes = projectQuotes.filter((quote) => filter === "All" || quote.status === filter);
       if (filteredQuotes.length === 0) return null;
@@ -364,38 +383,50 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
       </section>
       {page === "Settings & Backup" && role === "Owner" && <>
         <section className="backup-layout"><article className="panel backup-card"><span className="report-icon">↧</span><span className="panel-kicker">ACCOUNT DATA</span><h2>Back up your workspace</h2><p>Download a JSON export of your project, site, quotation, and expense records.</p><ul><li>Project and site summaries</li><li>Quotations and expense records</li><li>Activity and attendance history</li></ul><button className="button button-primary" onClick={onBackup}>＋ Request account backup</button><small>Backups are generated from current workspace data.</small></article><section className="panel backup-history"><div className="panel-heading compact"><div><span className="panel-kicker">RECENT REQUESTS</span><h2>Backup history</h2></div><span className="backup-count">{data.backups.length} requests</span></div><div className="backup-list">{data.backups.map((backup) => <article className="backup-row" key={backup.id}><span className="backup-file">↧</span><div><strong>{backup.id} · Workspace data export</strong><small>Requested by {backup.requestedBy} · {backup.requestedAt}</small></div><button className="button button-outline" onClick={() => void downloadBackup(backup.id)}>Download</button><StatusBadge status={backup.status} /></article>)}</div></section></section>
-        <section className="panel backup-history owner-audit-history">
-          <div className="panel-heading compact"><div><span className="panel-kicker">OWNER ACTIVITY</span><h2>Audit log</h2></div><button className="button button-outline" disabled={auditLogsLoading} onClick={() => void loadOwnerAuditLogs()}>{auditLogsLoading ? "Refreshing…" : "Refresh"}</button></div>
-          {auditLogsError
-              ? <p className="palette-settings-copy" role="alert">{auditLogsError}</p>
-              : ownerAuditLogs.length > 0
-                ? <div className="backup-list">{ownerAuditLogs.map((entry) => <article className="backup-row" key={entry.id}><span className="backup-file">↻</span><div><strong>{entry.action} {entry.resource}{entry.target ? ` · ${entry.target}` : ""}</strong><small>{entry.ownerName} ({entry.ownerEmail}) · {new Date(entry.createdAt).toLocaleString()}</small></div></article>)}</div>
-                : <p className="palette-settings-copy">{auditLogsLoading ? "Loading owner activity…" : "No owner actions have been recorded yet."}</p>}
-        </section>
       </>}
     </>}
+    {page === "Logs" && role === "Owner" && <section className="panel backup-history owner-audit-history">
+      <div className="panel-heading compact"><div><span className="panel-kicker">OWNER ACTIVITY</span><h2>Audit log</h2></div><button className="button button-outline" disabled={auditLogsLoading} onClick={() => void loadOwnerAuditLogs()}>{auditLogsLoading ? "Refreshing…" : "Refresh"}</button></div>
+      {auditLogsError
+        ? <p className="palette-settings-copy" role="alert">{auditLogsError}</p>
+        : ownerAuditLogs.length > 0
+          ? <><div className="backup-list">{visibleAuditLogs.map((entry) => <article className="backup-row" key={entry.id}><span className="backup-file">↻</span><div><strong>{entry.action} {entry.resource}{entry.target ? ` · ${entry.target}` : ""}</strong><small>{entry.ownerName} ({entry.ownerEmail}) · {new Date(entry.createdAt).toLocaleString()}</small></div></article>)}</div><RecordPagination page={currentAuditLogsPage} totalItems={ownerAuditLogs.length} pageSize={AUDIT_LOGS_PER_PAGE} onPageChange={setAuditLogsPage} /></>
+          : <p className="palette-settings-copy">{auditLogsLoading ? "Loading owner activity…" : "No owner actions have been recorded yet."}</p>}
+    </section>}
     {page === "People" && role === "Owner" && <section className="panel feature-panel">
-      {selectedEngineer ? <>
-        <div className="list-toolbar"><div><span className="panel-kicker">SITE ENGINEER DETAILS</span><h2 className="list-title">{selectedEngineer.name}</h2></div><button className="button button-outline" onClick={() => setSelectedEngineerId(null)}>← Back to people</button></div>
-        <div className="engineer-summary"><span>{selectedEngineer.email}</span><strong>{engineerProjects.length} assigned {engineerProjects.length === 1 ? "site" : "sites"}</strong></div>
-        {engineerProjects.length > 0
-          ? <div className="engineer-site-list">{engineerProjects.map((project) => {
+      {selectedTeamMember ? <>
+        <div className="list-toolbar engineer-details-header"><div><span className="panel-kicker">{selectedEngineer ? "SITE ENGINEER DETAILS" : "CLIENT DETAILS"}</span><h2 className="list-title">{selectedTeamMember.name}</h2></div><button className="button button-outline" onClick={() => { setSelectedEngineerId(null); setSelectedClientId(null); }}>← Back to people</button></div>
+        <div className="engineer-details-actions"><button className="button button-outline" onClick={() => setPersonBeingEdited(selectedTeamMember)}>Edit {selectedEngineer ? "engineer" : "client"}</button><button className="button button-danger" onClick={() => setPersonPendingDeletion(selectedTeamMember)}>Delete {selectedEngineer ? "engineer" : "client"}</button></div>
+        <div className="engineer-profile-grid">
+          <article><span>Full name</span><strong>{selectedTeamMember.name}</strong></article>
+          <article><span>Email</span><strong>{selectedTeamMember.email}</strong></article>
+          <article><span>Phone number</span><strong>{selectedTeamMember.phone || "Not provided"}</strong></article>
+          <article><span>Assigned {selectedEngineer ? "sites" : "projects"}</span><strong>{selectedTeamProjects.length}</strong></article>
+        </div>
+        {selectedTeamProjects.length > 0
+          ? <div className="engineer-site-list">{selectedTeamProjects.map((project) => {
             const expanded = expandedSiteId === project.id;
             const siteMaterials = data.materials.filter((material) => material.project === project.name);
             return <article className={`engineer-site-card ${expanded ? "engineer-site-expanded" : ""}`} key={project.id}>
               <div className="engineer-site-row">
                 <div><strong>{project.name}</strong><span>{project.site} · {project.status}</span></div>
-                <button className="icon-button engineer-site-toggle" type="button" aria-label={`${expanded ? "Hide" : "Show"} details for ${project.name}`} aria-expanded={expanded} aria-controls={`site-details-${project.id}`} onClick={() => setExpandedSiteId(expanded ? null : project.id)}>{expanded ? "⌃" : "⌄"}</button>
+                <div className="engineer-site-actions">
+                  <button className="icon-button engineer-site-toggle" type="button" aria-label={`${expanded ? "Hide" : "Show"} details for ${project.name}`} aria-expanded={expanded} aria-controls={`site-details-${project.id}`} onClick={() => setExpandedSiteId(expanded ? null : project.id)}>{expanded ? "⌃" : "⌄"}</button>
+                </div>
               </div>
               {expanded && <div className="engineer-site-details" id={`site-details-${project.id}`}>
                 <div><span>Assigned engineer</span><strong>{project.engineer}</strong></div>
-                <div className="engineer-site-materials"><span>Materials</span>{siteMaterials.length > 0
+                <div><span>Client</span><strong>{project.client}</strong></div>
+                <div><span>Progress</span><strong>{project.progress}%</strong></div>
+                <div><span>Status</span><strong>{project.status}</strong></div>
+                {selectedEngineer && <div className="engineer-site-materials"><span>Materials</span>{siteMaterials.length > 0
                   ? <ul>{siteMaterials.map((material) => <li key={material.id}><strong>{material.material}</strong><span>Received {material.received} · Used {material.used} · In stock {material.stock}</span></li>)}</ul>
-                  : <p>No materials recorded for this site.</p>}</div>
+                  : <p>No materials recorded for this site.</p>}</div>}
+                <button className="button button-danger engineer-site-unassign" type="button" disabled={unassigningProjectId === project.id} onClick={() => setProjectPendingUnassignment(project)}>{unassigningProjectId === project.id ? "Unassigning…" : `Unassign ${selectedEngineer ? "site" : "project"}`}</button>
               </div>}
             </article>;
           })}</div>
-          : <p className="people-empty">No sites are currently assigned to this engineer.</p>}
+          : <p className="people-empty">No {selectedEngineer ? "sites are currently assigned to this engineer." : "projects are currently assigned to this client."}</p>}
       </> : <>
         <div className="list-toolbar"><div><span className="panel-kicker">YOUR TEAM</span><h2 className="list-title">People</h2></div></div>
         <section className="people-section"><div className="people-section-heading"><h3 className="people-section-title">Site Engineers</h3><button className="button button-primary" type="button" onClick={() => onCreatePerson("Site Engineer")}>＋ Add engineer</button></div>{renderPeople(data.people.filter((person) => person.role === "Site Engineer"), true)}</section>
@@ -435,11 +466,26 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, data, p
         </form>
       </section>
     </div>}
+    {projectPendingUnassignment && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProjectPendingUnassignment(null); }}>
+      <section className="modal-card delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="unassign-confirm-title" aria-describedby="unassign-confirm-description">
+        <div className="modal-heading"><div><span className="panel-kicker">CONFIRM SITE CHANGE</span><h2 id="unassign-confirm-title">Unassign {projectPendingUnassignment.name}?</h2></div><button className="icon-button modal-close" aria-label="Cancel unassign" onClick={() => setProjectPendingUnassignment(null)}>×</button></div>
+        <p id="unassign-confirm-description">This {selectedEngineer ? "site" : "project"} will no longer be assigned to {selectedTeamMember?.name}.</p>
+        <div className="modal-actions"><button className="button button-outline" onClick={() => setProjectPendingUnassignment(null)}>Cancel</button><button className="button button-danger" onClick={() => {
+          const project = projectPendingUnassignment;
+          setProjectPendingUnassignment(null);
+          setUnassigningProjectId(project.id);
+          const unassign = selectedClient
+            ? onUnassignClientProject(selectedClient, project)
+            : onUnassignEngineerProject(project);
+          void unassign.finally(() => setUnassigningProjectId(null));
+        }}>Unassign {selectedEngineer ? "site" : "project"}</button></div>
+      </section>
+    </div>}
     {personPendingDeletion && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPersonPendingDeletion(null); }}>
       <section className="modal-card delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-description">
         <div className="modal-heading"><div><span className="panel-kicker">CONFIRM DELETE</span><h2 id="delete-confirm-title">Remove {personPendingDeletion.name}?</h2></div><button className="icon-button modal-close" aria-label="Cancel delete" onClick={() => setPersonPendingDeletion(null)}>×</button></div>
-        <p id="delete-confirm-description">This will remove this person from your team list. This action cannot be undone.</p>
-        <div className="modal-actions"><button className="button button-outline" onClick={() => setPersonPendingDeletion(null)}>Cancel</button><button className="button button-danger" onClick={() => { const person = personPendingDeletion; setPersonPendingDeletion(null); if (selectedEngineerId === person.id) setSelectedEngineerId(null); onRemovePerson(person); }}>Delete person</button></div>
+        <p id="delete-confirm-description">{personPendingDeletion.role === "Site Engineer" ? "This will remove the engineer from your team list and revoke their sign-in access. This action cannot be undone." : "This will remove the client from your team list and revoke their sign-in access. This action cannot be undone."}</p>
+        <div className="modal-actions"><button className="button button-outline" onClick={() => setPersonPendingDeletion(null)}>Cancel</button><button className="button button-danger" onClick={() => { const person = personPendingDeletion; setPersonPendingDeletion(null); if (selectedEngineerId === person.id) setSelectedEngineerId(null); if (selectedClientId === person.id) setSelectedClientId(null); onRemovePerson(person); }}>{personPendingDeletion.role === "Site Engineer" ? "Delete engineer" : "Delete client"}</button></div>
       </section>
     </div>}
   </div>;

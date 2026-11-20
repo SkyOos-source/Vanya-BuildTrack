@@ -25,6 +25,12 @@ export function createQuotation(body: any) {
     ...(attachment ? { attachment } : {})
   };
   quotations.unshift(quote);
+  const projectRecord = projects.find((item) => item.name === project);
+  if (projectRecord) {
+    projectRecord.quotationAmount = quotations
+      .filter((item) => item.project === project)
+      .reduce((total, item) => total + item.amount, 0);
+  }
   publishWorkspaceUpdate({
     resource: "quotations",
     project: quote.project,

@@ -2,24 +2,25 @@ import type { DashboardData, Role, RoleId, SessionUser } from "./types";
 
 export const navigation: Record<Role, { label: string; icon: string }[]> = {
   Owner: [
-    { label: "Dashboard", icon: "◫" }, { label: "Projects & Sites", icon: "▦" },
-    { label: "Work Progress", icon: "▥" },
-    { label: "Materials", icon: "◈" }, { label: "Expenses", icon: "＄" },
-    { label: "Quotations", icon: "▤" }, { label: "People", icon: "♙" },
-    { label: "Attendance", icon: "◷" }, { label: "Reports", icon: "▥" },
-    { label: "Site Visits", icon: "⌖" }, { label: "Feedback", icon: "☆" }
+    { label: "Dashboard", icon: "dashboard" }, { label: "Projects & Sites", icon: "projects" },
+    { label: "Work Progress", icon: "progress" },
+    { label: "Materials", icon: "materials" }, { label: "Expenses", icon: "expenses" },
+    { label: "Quotations", icon: "quotations" }, { label: "People", icon: "people" },
+    { label: "Attendance", icon: "attendance" }, { label: "Reports", icon: "reports" },
+    { label: "Site Visits", icon: "site-visits" }, { label: "Feedback", icon: "feedback" },
+    { label: "Logs", icon: "logs" }
   ],
   Employee: [
-    { label: "Dashboard", icon: "◫" }, { label: "My Sites", icon: "▦" },
-    { label: "Progress Updates", icon: "▥" }, { label: "Materials", icon: "◈" },
-    { label: "Expenses", icon: "＄" }, { label: "Attendance", icon: "◷" },
-    { label: "Site Visits", icon: "⌖" }
+    { label: "Dashboard", icon: "dashboard" }, { label: "My Sites", icon: "projects" },
+    { label: "Progress Updates", icon: "progress" }, { label: "Materials", icon: "materials" },
+    { label: "Expenses", icon: "expenses" }, { label: "Attendance", icon: "attendance" },
+    { label: "Site Visits", icon: "site-visits" }
   ],
   Client: [
-    { label: "Dashboard", icon: "◫" }, { label: "My Projects", icon: "▦" },
-    { label: "Work Progress", icon: "▥" }, { label: "Quotations", icon: "▤" },
-    { label: "Timeline", icon: "◷" },
-    { label: "Feedback", icon: "☆" }
+    { label: "Dashboard", icon: "dashboard" }, { label: "My Projects", icon: "projects" },
+    { label: "Work Progress", icon: "progress" }, { label: "Quotations", icon: "quotations" },
+    { label: "Timeline", icon: "timeline" },
+    { label: "Feedback", icon: "feedback" }
   ]
 };
 

@@ -121,6 +121,7 @@ export function getPublicProfile(id: string) {
       qrCode: null
     });
   }
+
   const person = people.find((item) => item.id === id && item.role === "Site Engineer");
   if (!person) return failure(404, "This public profile is not available.");
   return result({
@@ -133,5 +134,18 @@ export function getPublicProfile(id: string) {
       image: person.image ?? null
     },
     qrCode: null
+  });
+}
+
+export function getWorkspaceOwnerContacts() {
+  return result({
+    owners: ownerAccounts.map((ownerAccount) => {
+      const ownerProfile = ownerProfiles[ownerAccount.email.toLowerCase()] ??= { phone: "", image: "" };
+      return {
+        id: `owner-${ownerAccount.email}`,
+        name: ownerAccount.name,
+        phone: ownerProfile.phone
+      };
+    })
   });
 }

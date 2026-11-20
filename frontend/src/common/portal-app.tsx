@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Person, Project, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
 import { compressImageFile, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
@@ -17,6 +17,57 @@ import { AccountProfilePage } from "./profile-page";
 import type { SiteVisitAction } from "./site-visits-page";
 
 type PushStatus = "checking" | "ready" | "enabled" | "unsupported" | "unconfigured" | "denied" | "error";
+
+function NavigationIcon({ name }: { name: string }) {
+  let content: ReactNode;
+  switch (name) {
+    case "dashboard":
+      content = <><rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="5" rx="1.5" /><rect x="13" y="10" width="8" height="11" rx="1.5" /><rect x="3" y="13" width="8" height="8" rx="1.5" /></>;
+      break;
+    case "projects":
+      content = <><path d="M3 7.5h7l2 2h9v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M3 7.5v-2a2 2 0 0 1 2-2h4l2 2h6" /></>;
+      break;
+    case "progress":
+      content = <><path d="M3 20V4m0 16h18" /><path d="m6 15 4-4 3 2 6-7" /><path d="M15 6h4v4" /></>;
+      break;
+    case "materials":
+      content = <><path d="m12 3 9 5-9 5-9-5z" /><path d="m3 8 9 5v8l-9-5z" /><path d="m21 8-9 5v8l9-5z" /></>;
+      break;
+    case "expenses":
+      content = <><path d="M5 3h14v18l-3-2-4 2-4-2-3 2z" /><path d="M9 8h6m-6 4h6" /><path d="M12 6v10m2-8.5c-.5-.8-3.5-.9-3.5.6 0 1.8 3.5.8 3.5 2.6s-3 1.7-4 .5" /></>;
+      break;
+    case "quotations":
+      content = <><path d="M6 3h8l5 5v13H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M14 3v5h5M8 12h8m-8 4h8" /></>;
+      break;
+    case "people":
+      content = <><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M16 5.5a3 3 0 0 1 0 5.8m1 3.2a5.3 5.3 0 0 1 3.5 5" /></>;
+      break;
+    case "attendance":
+      content = <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>;
+      break;
+    case "reports":
+      content = <><path d="M4 20V4m0 16h17" /><rect x="7" y="11" width="3" height="6" rx=".5" /><rect x="13" y="7" width="3" height="10" rx=".5" /><rect x="19" y="4" width="2" height="13" rx=".5" /></>;
+      break;
+    case "site-visits":
+      content = <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0z" /><circle cx="12" cy="10" r="2.5" /></>;
+      break;
+    case "feedback":
+      content = <><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></>;
+      break;
+    case "logs":
+      content = <><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>;
+      break;
+    case "timeline":
+      content = <><path d="M7 4v16" /><circle cx="7" cy="6" r="2" /><circle cx="7" cy="12" r="2" /><circle cx="7" cy="18" r="2" /><path d="M13 6h7m-7 6h7m-7 6h7" /></>;
+      break;
+    case "settings":
+      content = <><path d="M4 6h10m4 0h2M4 12h2m4 0h10M4 18h10m4 0h2" /><circle cx="16" cy="6" r="2" /><circle cx="8" cy="12" r="2" /><circle cx="16" cy="18" r="2" /></>;
+      break;
+    default:
+      content = <circle cx="12" cy="12" r="8" />;
+  }
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{content}</svg>;
+}
 
 function localDateKey(date: Date) {
   const year = date.getFullYear();
@@ -57,11 +108,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [projectsLoadError, setProjectsLoadError] = useState("");
   const [peopleLoading, setPeopleLoading] = useState(role === "Owner");
   const [peopleLoadError, setPeopleLoadError] = useState("");
+  const [workspaceOwnerContacts, setWorkspaceOwnerContacts] = useState<ProjectContact[] | null>(null);
+  const [workspaceOwnerContactsError, setWorkspaceOwnerContactsError] = useState("");
   const page = pageFromPath(location.pathname, role);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<RecordModalType | null>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [personCreationRole, setPersonCreationRole] = useState<"Site Engineer" | "Client">("Site Engineer");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -74,6 +128,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const createPerson = (personRole: "Site Engineer" | "Client") => {
     setPersonCreationRole(personRole);
     setModal("person");
+  };
+  const openProjectCreate = (nextModal: RecordModalType | null) => {
+    setEditingProject(null);
+    setModal(nextModal);
+  };
+  const editProject = (project: Project) => {
+    setEditingProject(project);
+    setModal("project");
   };
 
   useEffect(() => {
@@ -100,7 +162,24 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, []);
 
   useEffect(() => {
-    if (role !== "Owner") return;
+    if (page !== "Projects & Sites" && page !== "My Projects" && page !== "My Sites") return;
+    let active = true;
+    const loadProjectQuotations = async () => {
+      try {
+        const response = await apiFetch("/api/quotations");
+        if (!response.ok) throw new Error(`Project quotations request failed (${response.status}).`);
+        const records: unknown = await response.json();
+        if (!Array.isArray(records)) throw new Error("Project quotations request returned invalid data.");
+        if (active) setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
+      } catch (error) {
+        console.error("Unable to load quotations for project details:", error);
+      }
+    };
+    void loadProjectQuotations();
+    return () => { active = false; };
+  }, [page, role]);
+
+  useEffect(() => {
     let active = true;
     const loadPeople = async () => {
       try {
@@ -120,6 +199,39 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       }
     };
     void loadPeople();
+    return () => { active = false; };
+  }, [role]);
+
+  useEffect(() => {
+    if (role !== "Client") return;
+    let active = true;
+    const loadWorkspaceOwnerContacts = async () => {
+      try {
+        const response = await apiFetch("/api/profiles/owners");
+        const result = await response.json() as { owners?: unknown; error?: string };
+        if (!response.ok || !Array.isArray(result.owners)) {
+          throw new Error(result.error || `Workspace owner contacts request failed (${response.status}).`);
+        }
+        const contacts = result.owners.map((owner): ProjectContact => {
+          if (!owner || typeof owner !== "object") throw new Error("Workspace owner contacts response contained invalid data.");
+          const record = owner as { id?: unknown; name?: unknown; phone?: unknown };
+          if (typeof record.name !== "string") throw new Error("Workspace owner contacts response contained an invalid name.");
+          return {
+            ...(typeof record.id === "string" ? { id: record.id } : {}),
+            name: record.name,
+            phone: typeof record.phone === "string" ? record.phone : ""
+          };
+        });
+        if (active) {
+          setWorkspaceOwnerContacts(contacts);
+          setWorkspaceOwnerContactsError("");
+        }
+      } catch (error) {
+        console.error("Unable to load workspace owner contacts:", error);
+        if (active) setWorkspaceOwnerContactsError(error instanceof Error ? error.message : "Could not load workspace owner contacts.");
+      }
+    };
+    void loadWorkspaceOwnerContacts();
     return () => { active = false; };
   }, [role]);
 
@@ -770,7 +882,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       ? data.materialAllocations.find((item) => item.id === form.get("allocationId"))
       : undefined;
     try {
-      const endpoint = `/api/${modal === "project" ? "projects" : modal === "quote" ? "quotations" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
+      const projectEndpoint = modal === "project" && editingProject
+        ? `/api/projects/${editingProject.id}`
+        : "/api/projects";
+      const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
       const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
       const attachment = modal === "expense" || modal === "expense-log" ? await readFileDataUrl(form.get("attachment")) : progressAttachments?.[0];
       const quotationFile = form.get("quotationFile");
@@ -780,6 +895,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }
       }
       const quotationAttachment = modal === "quote" ? await readFileDataUrl(quotationFile) : undefined;
+      const coverImage = modal === "project" ? await readFileDataUrl(form.get("coverImage")) : undefined;
       const body = {
         name,
         title: name,
@@ -792,8 +908,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         date: form.get("date"),
         site: form.get("site"),
         client: modal === "person" && form.get("role") === "Client" ? name : form.get("client"),
-        quotationAmount: Number(form.get("quotationAmount") || 0),
         dueDate: form.get("dueDate"),
+        image: coverImage,
         material: form.get("material"),
         quantity: form.get("quantity"),
         note: form.get("note"),
@@ -817,7 +933,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         progress: modal === "progress" ? form.get("progress") : undefined
       };
       const response = await apiFetch(endpoint, {
-        method: "POST",
+        method: modal === "project" && editingProject ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
@@ -827,7 +943,12 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       if (!record) throw new Error("The API returned no saved record.");
       const updatedProject = result.project;
       if (modal === "project") {
-        setData((current) => ({ ...current, projects: [record as Project, ...current.projects] }));
+        setData((current) => ({
+          ...current,
+          projects: editingProject
+            ? current.projects.map((project) => project.id === editingProject.id ? record as Project : project)
+            : [record as Project, ...current.projects]
+        }));
       } else if (modal === "quote") {
         setData((current) => ({ ...current, quotes: [record as Quote, ...current.quotes] }));
       } else if (modal === "expense") {
@@ -889,6 +1010,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           }));
         }
       }
+      setEditingProject(null);
       setModal(null);
       showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
@@ -1032,6 +1154,56 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to remove person:", error);
       showToast(error instanceof Error ? error.message : "Could not remove this person.");
+    }
+  };
+
+  const unassignEngineerProject = async (project: Project) => {
+    try {
+      const response = await apiFetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engineer: "Unassigned" })
+      });
+      const result = await response.json() as { record?: Project; error?: string };
+      if (!response.ok || !result.record) {
+        throw new Error(result.error || `Could not unassign ${project.name} (${response.status})`);
+      }
+      setData((current) => ({
+        ...current,
+        projects: current.projects.map((item) => item.id === project.id ? result.record as Project : item)
+      }));
+      showToast(`${project.name} unassigned from the engineer.`);
+    } catch (error) {
+      console.error("Unable to unassign project from engineer:", error);
+      showToast(error instanceof Error ? error.message : "Could not unassign this site.");
+    }
+  };
+
+  const unassignClientProject = async (client: Person, project: Project) => {
+    try {
+      const response = await apiFetch(`/api/people/${client.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: client.name,
+          email: client.email,
+          phone: client.phone ?? "",
+          project: "No assigned sites"
+        })
+      });
+      const result = await response.json() as { record?: Person; error?: string };
+      if (!response.ok || !result.record) {
+        throw new Error(result.error || `Could not unassign ${project.name} (${response.status})`);
+      }
+      setData((current) => ({
+        ...current,
+        people: current.people.map((item) => item.id === client.id ? result.record as Person : item),
+        projects: current.projects.map((item) => item.id === project.id ? { ...item, client: "Unassigned" } : item)
+      }));
+      showToast(`${project.name} unassigned from ${client.name}.`);
+    } catch (error) {
+      console.error("Unable to unassign project from client:", error);
+      showToast(error instanceof Error ? error.message : "Could not unassign this project.");
     }
   };
 
@@ -1253,6 +1425,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     "Financial Overview": "Review revenue, expenses, quotations, and profit across your projects.",
     "Site Visits": "View and filter engineer site check-ins and check-outs.",
     "Settings & Backup": "Manage your profile and request an account data backup.",
+    Logs: "Review recent owner actions across the workspace.",
     Settings: "Choose your personal color palette and workspace appearance.",
     Profile: "Manage your BuildTrack contact details and profile photo.",
     People: "Manage clients and engineers across your projects.",
@@ -1263,13 +1436,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const featurePageProps = {
     currentUser,
     currentUserEmail: userEmail,
+    ownerContacts: workspaceOwnerContacts,
+    ownerContactsError: workspaceOwnerContactsError,
     data,
     projects: visibleProjects,
     search,
     setSearch,
     filter,
     setFilter,
-    onCreate: setModal,
+    onCreate: openProjectCreate,
+    onEditProject: editProject,
     onCreatePerson: createPerson,
     onQuote: updateQuote,
     onExpenseStatus: updateExpense,
@@ -1278,6 +1454,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     onVisitCheckIn: checkInVisit,
     onUpdatePerson: updatePerson,
     onRemovePerson: removePerson,
+    onUnassignEngineerProject: unassignEngineerProject,
+    onUnassignClientProject: unassignClientProject,
     onAttendanceSubmit: submitAttendance,
     onAttendanceRegularize: regularizeAttendance,
     onAttendanceRequestReview: reviewAttendanceRequest,
@@ -1305,15 +1483,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         <nav className="side-nav" aria-label={`${role} navigation`}>
           {navigation[role].map((item) => (
             <button key={item.label} className={`nav-item ${page === item.label ? "nav-active" : ""}`} onClick={() => { navigateToPage(item.label); setMobileNavOpen(false); }}>
-              <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
+              <span className="nav-icon"><NavigationIcon name={item.icon} /></span><span>{item.label}</span>
               {item.label === "Quotations" && role === "Owner" && data.quotes.filter((quote) => quote.status.toLowerCase().includes("review")).length > 0 && <span className="nav-count">{data.quotes.filter((quote) => quote.status.toLowerCase().includes("review")).length}</span>}
             </button>
           ))}
         </nav>
         <div className="sidebar-bottom">
           {role === "Owner"
-            ? <button className={`nav-item ${page === "Settings & Backup" ? "nav-active" : ""}`} onClick={() => { navigateToPage("Settings & Backup"); setMobileNavOpen(false); }}><span className="nav-icon">⚙</span><span>Settings & Backup</span></button>
-            : <button className={`nav-item ${page === "Settings" ? "nav-active" : ""}`} onClick={() => { navigateToPage("Settings"); setMobileNavOpen(false); }}><span className="nav-icon">⚙</span><span>Settings</span></button>}
+            ? <button className={`nav-item ${page === "Settings & Backup" ? "nav-active" : ""}`} onClick={() => { navigateToPage("Settings & Backup"); setMobileNavOpen(false); }}><span className="nav-icon"><NavigationIcon name="settings" /></span><span>Settings & Backup</span></button>
+            : <button className={`nav-item ${page === "Settings" ? "nav-active" : ""}`} onClick={() => { navigateToPage("Settings"); setMobileNavOpen(false); }}><span className="nav-icon"><NavigationIcon name="settings" /></span><span>Settings</span></button>}
           <div className="sidebar-divider" />
           <button className="logout-button" onClick={() => void signOut()}><span>↪</span> Sign out</button>
         </div>
@@ -1372,7 +1550,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => setModal(null)} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} initialProject={editingProject ?? undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModal(null); }} onSubmit={createRecord} />}
     </div>
   );
 }

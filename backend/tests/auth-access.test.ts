@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request } from "express";
-import { expenseAllocations, materialAllocations, people, projects, quotations, type Project, type Quote } from "../src/data/store";
+import { expenseAllocations, materialAllocations, ownerAccounts, ownerProfiles, people, projects, quotations, type Project, type Quote } from "../src/data/store";
 import { authorizeApiRequest, scopeApiResponse } from "../src/features/auth/access";
 import type { AuthenticatedSession } from "../src/features/auth/session";
 import { createProject } from "../src/features/projects/service";
-import { createPerson } from "../src/features/people/service";
+import { createPerson, updatePerson } from "../src/features/people/service";
+import { getWorkspaceOwnerContacts } from "../src/features/profiles/service";
 
 const employee: AuthenticatedSession = { name: "Engineer One", email: "engineer@example.com", role: "employee" };
 const client: AuthenticatedSession = { name: "Client One", email: "client@example.com", role: "client" };
@@ -68,6 +69,28 @@ test("unauthenticated requests are denied and project access is role-scoped", ()
   }
 });
 
+test("workspace owner contacts include every owner account", () => {
+  const ownerAccountsBefore = [...ownerAccounts];
+  const ownerProfilesBefore = { ...ownerProfiles };
+  try {
+    ownerAccounts.splice(0, ownerAccounts.length,
+      { email: "first@example.com", name: "First Owner", salt: "", passwordHash: "" },
+      { email: "second@example.com", name: "Second Owner", salt: "", passwordHash: "" }
+    );
+    ownerProfiles["first@example.com"] = { phone: "+14155550111", image: "" };
+    ownerProfiles["second@example.com"] = { phone: "+14155550112", image: "" };
+
+    assert.deepEqual(getWorkspaceOwnerContacts().body.owners, [
+      { id: "owner-first@example.com", name: "First Owner", phone: "+14155550111" },
+      { id: "owner-second@example.com", name: "Second Owner", phone: "+14155550112" }
+    ]);
+  } finally {
+    ownerAccounts.splice(0, ownerAccounts.length, ...ownerAccountsBefore);
+    for (const email of Object.keys(ownerProfiles)) delete ownerProfiles[email];
+    Object.assign(ownerProfiles, ownerProfilesBefore);
+  }
+});
+
 test("engineers can only create project records for assigned projects and identity is session-derived", () => {
   const projectsBefore = [...projects];
   const peopleBefore = [...people];
@@ -98,6 +121,40 @@ test("engineers can only create project records for assigned projects and identi
     projects.splice(0, projects.length, ...projectsBefore);
     people.splice(0, people.length, ...peopleBefore);
     expenseAllocations.splice(0, expenseAllocations.length, ...allocationsBefore);
+  }
+});
+
+test("engineers can read quotations only for their assigned projects", () => {
+  const projectsBefore = [...projects];
+  const peopleBefore = [...people];
+  const quotationsBefore = [...quotations];
+  try {
+    projects.splice(0, projects.length,
+      project("p1", "Alpha", employee.name, client.name),
+      project("p2", "Beta", "Another Engineer", "Another Client")
+    );
+    people.splice(0, people.length,
+      {
+        id: "e1",
+        name: employee.name,
+        email: employee.email,
+        role: "Site Engineer",
+        project: "Alpha"
+      },
+      { id: "c1", name: client.name, email: client.email, role: "Client", project: "Alpha", phone: "+14155550123" },
+      { id: "c2", name: "Client Two", email: "client2@example.com", role: "Client", project: "Beta", phone: "+14155550124" }
+    );
+    quotations.splice(0, quotations.length, quote("q1", "Alpha", client.name), quote("q2", "Beta", "Another Client"));
+
+    assert.equal(authorizeApiRequest(request("GET", "/api/quotations"), employee).allowed, true);
+    assert.deepEqual(scopeApiResponse("/api/quotations", quotations, employee), [quotations[0]]);
+    const scopedPeople = scopeApiResponse("/api/people", people, employee) as typeof people;
+    assert.deepEqual(scopedPeople.map((person) => person.name), [employee.name, client.name]);
+    assert.equal(scopedPeople.find((person) => person.role === "Client")?.phone, "+14155550123");
+  } finally {
+    projects.splice(0, projects.length, ...projectsBefore);
+    people.splice(0, people.length, ...peopleBefore);
+    quotations.splice(0, quotations.length, ...quotationsBefore);
   }
 });
 
@@ -189,13 +246,11 @@ test("clients can review only quotations for their assigned project", () => {
       project("p1", "Alpha", employee.name, client.name),
       project("p2", "Beta", "Another Engineer", "Another Client")
     );
-    people.splice(0, people.length, {
-      id: "c1",
-      name: client.name,
-      email: client.email,
-      role: "Client",
-      project: "Alpha"
-    });
+    people.splice(0, people.length,
+      { id: "c1", name: client.name, email: client.email, role: "Client", project: "Alpha" },
+      { id: "e1", name: employee.name, email: employee.email, role: "Site Engineer", project: "Alpha", phone: "+14155550123" },
+      { id: "e2", name: "Engineer Two", email: "engineer2@example.com", role: "Site Engineer", project: "Beta", phone: "+14155550124" }
+    );
     quotations.splice(0, quotations.length,
       quote("q1", "Alpha", client.name),
       quote("q2", "Beta", "Another Client")
@@ -204,6 +259,10 @@ test("clients can review only quotations for their assigned project", () => {
     assert.equal(authorizeApiRequest(request("PATCH", "/api/quotations/q2"), client).allowed, false);
     assert.equal(authorizeApiRequest(request("PATCH", "/api/quotations/q1"), client).allowed, true);
     assert.equal(authorizeApiRequest(request("POST", "/api/projects"), client).allowed, false);
+    assert.equal(authorizeApiRequest(request("GET", "/api/people"), client).allowed, true);
+    const scopedPeople = scopeApiResponse("/api/people", people, client) as typeof people;
+    assert.deepEqual(scopedPeople.map((person) => person.name), [client.name, employee.name]);
+    assert.equal(scopedPeople.find((person) => person.role === "Site Engineer")?.phone, "+14155550123");
   } finally {
     projects.splice(0, projects.length, ...projectsBefore);
     people.splice(0, people.length, ...peopleBefore);
@@ -263,6 +322,14 @@ test("duplicate project and person names are rejected at creation", () => {
     });
 
     assert.equal(createProject({ name: "alpha" }).status, 409);
+    const projectWithoutQuotationAmount = createProject({
+      name: "Beta",
+      site: "Beta site",
+      engineer: employee.name,
+      quotationAmount: 250000
+    });
+    assert.equal(projectWithoutQuotationAmount.status, 201);
+    assert.equal(projectWithoutQuotationAmount.body.record?.quotationAmount, 0);
     assert.equal(createPerson({
       name: "engineer one",
       email: "new@example.com",
@@ -270,6 +337,35 @@ test("duplicate project and person names are rejected at creation", () => {
       password: "password123",
       phone: "+14155550123"
     }).status, 409);
+  } finally {
+    projects.splice(0, projects.length, ...projectsBefore);
+    people.splice(0, people.length, ...peopleBefore);
+  }
+});
+
+test("unassigning a client removes the project from both client and project records", () => {
+  const projectsBefore = [...projects];
+  const peopleBefore = [...people];
+  try {
+    projects.splice(0, projects.length, project("p1", "Alpha", "Engineer One", "Client One"));
+    people.splice(0, people.length, {
+      id: "c1",
+      name: "Client One",
+      email: "client@example.com",
+      role: "Client",
+      project: "Alpha",
+      phone: "+14155550123"
+    });
+
+    const response = updatePerson("c1", {
+      name: "Client One",
+      email: "client@example.com",
+      project: "No assigned sites"
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.record?.project, "No assigned sites");
+    assert.equal(projects[0].client, "Unassigned");
   } finally {
     projects.splice(0, projects.length, ...projectsBefore);
     people.splice(0, people.length, ...peopleBefore);

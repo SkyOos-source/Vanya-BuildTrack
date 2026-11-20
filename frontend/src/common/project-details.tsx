@@ -1,21 +1,21 @@
 import { useState } from "react";
-import type { DashboardData, Project, Role } from "./types";
-import { formatCurrency, googleReviewUrl, siteVisitDateParts } from "./utils";
+import type { DashboardData, Project, ProjectContact, Role } from "./types";
+import { formatCurrency, googleReviewUrl } from "./utils";
 import { StatusBadge } from "./components";
 import { QuotationPdfPreview } from "./quotation-pdf-preview";
 
-export function ProjectDetails({ project, data, role, currentUser, onBack }: { project: Project; data: DashboardData; role: Role; currentUser: string; onBack: () => void }) {
+export function ProjectDetails({ project, data, role, currentUser, ownerContacts, ownerContactsError, onBack, onEdit }: { project: Project; data: DashboardData; role: Role; currentUser: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; onBack: () => void; onEdit?: (project: Project) => void }) {
   const [showCompletionReport, setShowCompletionReport] = useState(false);
-  const materials = data.materials.filter((item) => item.project === project.name);
-  const materialAllocations = data.materialAllocations.filter((item) => item.project === project.name);
-  const materialUsageLogs = data.materialUsageLogs.filter((item) => item.project === project.name);
   const quotations = data.quotes.filter((item) => item.project === project.name);
   const displayedQuotationAmount = quotations.length > 0
     ? quotations.reduce((total, quotation) => total + quotation.amount, 0)
     : project.quotationAmount ?? 0;
-  const expenses = data.expenses.filter((item) => item.project === project.name);
   const assignedEngineer = data.people.find((person) => person.role === "Site Engineer" && person.name === project.engineer);
-  const assignedClient = data.people.find((person) => person.role === "Client" && person.name === project.client);
+  const assignedClient = data.people.find((person) =>
+    person.role === "Client"
+    && (person.project === project.name || person.name === project.client)
+  );
+  const assignedClientName = assignedClient?.name || (project.client !== "Unassigned" ? project.client : "No client assigned");
   const activities = data.activities.filter((item) => item.project === project.name && item.kind === "progress");
   const sitePhotos = activities
     .flatMap((item) => (item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : [])
@@ -68,50 +68,53 @@ export function ProjectDetails({ project, data, role, currentUser, onBack }: { p
       </section>
     </section>;
   }
-  const visits = data.siteVisits.filter((item) => item.project === project.name);
+  const coverImageUrl = project.image
+    ? project.image.startsWith("data:")
+      ? project.image
+      : `https://images.unsplash.com/${project.image}?auto=format&fit=crop&w=1200&q=80`
+    : undefined;
 
   return <section className="panel project-details">
     <div className="list-toolbar">
       <div><span className="panel-kicker">PROJECT DETAILS</span><h2 className="list-title">{project.name}</h2></div>
       <div className="toolbar-actions">
         {role === "Client" && project.progress >= 100 && <button className="button button-primary" onClick={() => setShowCompletionReport(true)}>Get the project report</button>}
+        {role === "Owner" && onEdit && <button className="button button-outline" onClick={() => onEdit(project)}>Edit details</button>}
         <button className="button button-outline" onClick={onBack}>← Back to projects</button>
       </div>
     </div>
+    {coverImageUrl
+      ? <div className="project-details-cover" style={{ backgroundImage: `linear-gradient(0deg, rgba(33,30,28,.78), transparent 72%), url("${coverImageUrl}")` }}>
+          <div><h3>{project.name}</h3><span>⌖ {project.site}</span></div>
+        </div>
+      : <div className="project-details-cover project-details-cover-placeholder">
+          <div><h3>{project.name}</h3><span>⌖ {project.site}</span></div>
+        </div>}
     <div className="project-details-overview">
       <div><span>Project location</span><strong>{project.site}</strong></div>
-      <div>
-        <span>{role === "Client" ? "Assigned engineer" : "Client"}</span>
-        <strong>{role === "Client" ? project.engineer : project.client}</strong>
-        {role === "Client" && assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}
-        {role === "Employee" && assignedClient?.phone && <a href={`tel:${assignedClient.phone}`}>{assignedClient.phone}</a>}
-      </div>
-      <div><span>Status</span><StatusBadge status={project.status} /></div>
-      <div><span>Progress</span><strong>{project.progress}%</strong></div>
+      {role === "Client"
+        ? ownerContacts?.length
+          ? ownerContacts.map((owner, index) => <div key={owner.id || `${owner.name}-${index}`}><span>Owner contact</span><strong>{owner.name}</strong>{owner.phone && <a href={`tel:${owner.phone}`}>{owner.phone}</a>}</div>)
+          : <div><span>Owner contact</span><strong>{ownerContactsError ? "Unable to load owner contacts" : ownerContacts === null ? "Loading owner contacts…" : "No owner contacts available"}</strong>{ownerContactsError && <small role="alert">{ownerContactsError}</small>}</div>
+        : <div><span>Client</span><strong>{assignedClientName}</strong>{assignedClient?.phone && <a href={`tel:${assignedClient.phone}`}>{assignedClient.phone}</a>}</div>}
+      {role === "Owner" && <div>
+        <span>Assigned engineer</span>
+        <strong>{project.engineer !== "Unassigned" ? project.engineer : "No engineer assigned"}</strong>
+        {assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}
+      </div>}
+      {role === "Client" && <div>
+        <span>Engineer contact</span>
+        <strong>{project.engineer !== "Unassigned" ? assignedEngineer?.name ?? project.engineer : "No engineer assigned"}</strong>
+        {assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}
+      </div>}
+      {role === "Client" && <div><span>Progress</span><strong>{project.progress}%</strong></div>}
       <div><span>Quotation</span><strong>{formatCurrency(role === "Owner" ? project.quotationAmount ?? 0 : displayedQuotationAmount)}</strong></div>
-      <div><span>Due date</span><strong>{project.dueDate}</strong></div>
     </div>
 
     <div className="project-details-sections">
-      {role !== "Client" && <section><h3>Materials</h3>{materials.length > 0 && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Received</th><th>Used</th><th>In stock</th></tr></thead><tbody>{materials.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.received}</td><td>{item.used}</td><td>{item.stock}</td></tr>)}</tbody></table></div>}
-        {materialAllocations.length > 0 && <><h4>Engineer assignments</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Engineer</th><th>Assigned</th><th>Used</th><th>Remaining</th></tr></thead><tbody>{materialAllocations.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.engineer}</td><td>{item.quantity} {item.unit}</td><td>{item.usedQuantity} {item.unit}</td><td>{item.remainingQuantity} {item.unit}</td></tr>)}</tbody></table></div></>}
-        {materialUsageLogs.length > 0 && <><h4>Material usage logs</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Used</th><th>Engineer</th><th>Logged</th><th>Note</th></tr></thead><tbody>{materialUsageLogs.map((item) => <tr key={item.id}><td>{item.material}</td><td>{item.quantity} {item.unit}</td><td>{item.engineer}</td><td>{item.loggedAt}</td><td>{item.note || "—"}</td></tr>)}</tbody></table></div></>}
-        {!materials.length && !materialAllocations.length && <p className="project-details-empty">No materials assigned or recorded for this project.</p>}</section>}
       <section><h3>Quotations</h3>{quotations.length > 0
         ? <div className="project-details-list">{quotations.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.id} · {item.date}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} />{item.attachment && <QuotationPdfPreview attachment={item.attachment} title={item.title} />}</article>)}</div>
         : <p className="project-details-empty">No additional quotations recorded.</p>}</section>
-      {role === "Owner" && <section><h3>Expenses</h3>{expenses.length > 0
-        ? <div className="project-details-list">{expenses.map((item) => <article key={item.id}><div><strong>{item.description}</strong><span>{item.date} · {item.submittedBy}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} /></article>)}</div>
-        : <p className="project-details-empty">No expenses recorded for this project.</p>}</section>}
-      {role === "Owner" && <section><h3>Progress updates</h3>{activities.length > 0
-        ? <div className="project-details-list">{activities.map((item) => {
-          const photos = item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : [];
-          return <article key={item.id}><div><strong>{item.description || item.action}</strong><span>{item.actor} · {item.time}</span>{photos.map((attachment, index) => <a key={`${item.id}-photo-${index}`} href={attachment} target="_blank" rel="noreferrer"><img className="client-work-progress-thumbnail" src={attachment} alt={`Progress photo ${index + 1} for ${item.project}`} /></a>)}</div></article>;
-        })}</div>
-        : <p className="project-details-empty">No progress updates recorded.</p>}</section>}
-      {role !== "Employee" && <section><h3>Site visits</h3>{visits.length > 0
-        ? <div className="project-details-list">{visits.map((item) => <article key={item.id}><div><strong>{siteVisitDateParts(item.date).label}</strong><span>{item.site} · {item.engineer}</span></div><StatusBadge status={item.status} /></article>)}</div>
-        : <p className="project-details-empty">No site visits scheduled.</p>}</section>}
     </div>
   </section>;
 }

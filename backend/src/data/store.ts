@@ -174,7 +174,7 @@ export function readProject(value: unknown, id: string): Project | null {
     budget,
     spent,
     dueDate: readText(input.dueDate) ?? "To be confirmed",
-    image: readText(input.image) ?? "photo-1600585154340-be6161a56a0c"
+    image: readText(input.image) ?? ""
   };
 }
 

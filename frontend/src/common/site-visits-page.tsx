@@ -5,13 +5,14 @@ import { captureCameraPhoto, compressImageFile, reverseGeocode, siteVisitDatePar
 
 export type SiteVisitAction = "check-in" | "check-out";
 
-function VisitProof({ proof, label, fallbackLocation }: { proof?: SiteVisitProof; label: string; fallbackLocation: string }) {
+function VisitProof({ proof, label, fallbackLocation, onPreview }: { proof?: SiteVisitProof; label: string; fallbackLocation: string; onPreview: (proof: SiteVisitProof, label: string, fallbackLocation: string) => void }) {
   if (!proof) return null;
+  const location = proof.locationName || fallbackLocation || "Location name unavailable";
   return <div className="visit-proof">
-    <a href={proof.image} target="_blank" rel="noreferrer" aria-label={`Open ${label} photo`}>
-      <img src={proof.image} alt={`${label} photo`} />
-    </a>
-    <span>{label}<small>{new Date(proof.capturedAt).toLocaleString()}</small><a href={`https://www.google.com/maps?q=${proof.latitude},${proof.longitude}`} target="_blank" rel="noreferrer">⌖ {proof.locationName || fallbackLocation || "Location name unavailable"} · ±{Math.round(proof.accuracy)} m</a></span>
+    <button className="attendance-photo" type="button" onClick={() => onPreview(proof, label, fallbackLocation)} aria-label={`View ${label} photo`}>
+      <img src={proof.image} alt={`${label} photo`} /><span>View photo</span>
+    </button>
+    <span>{label}<small>{new Date(proof.capturedAt).toLocaleString()}</small><a href={`https://www.google.com/maps?q=${proof.latitude},${proof.longitude}`} target="_blank" rel="noreferrer">⌖ {location} · ±{Math.round(proof.accuracy)} m</a></span>
   </div>;
 }
 
@@ -53,8 +54,8 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
   const [saving, setSaving] = useState(false);
   const [engineerFilter, setEngineerFilter] = useState("All");
   const [projectFilter, setProjectFilter] = useState("All");
-  const [siteFilter, setSiteFilter] = useState("All");
   const [visitDateFilter, setVisitDateFilter] = useState("");
+  const [photoPreview, setPhotoPreview] = useState<{ proof: SiteVisitProof; label: string; fallbackLocation: string } | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraRequestRef = useRef(0);
   useEffect(() => {
@@ -111,13 +112,12 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
   const availableEngineers = [...new Set(visits.map((visit) => visit.engineer))].sort((left, right) => left.localeCompare(right));
   const availableProjects = [...new Set(visits
     .filter((visit) => role !== "Employee" || visit.engineer === currentUser)
-    .map((visit) => visit.project))].sort((left, right) => left.localeCompare(right));
-  const availableSites = [...new Set(visits.map((visit) => visit.site))].sort((left, right) => left.localeCompare(right));
+    .flatMap((visit) => role === "Owner" ? [visit.project, visit.site] : [visit.project]))]
+    .sort((left, right) => left.localeCompare(right));
   const visibleVisits = visits
     .filter((visit) => role !== "Employee" || visit.engineer === currentUser)
     .filter((visit) => role !== "Owner" || engineerFilter === "All" || visit.engineer === engineerFilter)
-    .filter((visit) => role !== "Owner" || siteFilter === "All" || visit.site === siteFilter)
-    .filter((visit) => role !== "Owner" || projectFilter === "All" || visit.project === projectFilter)
+    .filter((visit) => role !== "Owner" || projectFilter === "All" || visit.project === projectFilter || visit.site === projectFilter)
     .filter((visit) => role !== "Employee" || projectFilter === "All" || visit.project === projectFilter)
     .filter((visit) => !visitDateFilter || visitDateKey(visit.date) === visitDateFilter)
     .slice()
@@ -176,12 +176,8 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
               <option value="All">All engineers</option>
               {availableEngineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
             </select>
-            <select className="select-button" aria-label="Filter site visits by site" value={siteFilter} onChange={(event) => setSiteFilter(event.target.value)}>
-              <option value="All">All sites</option>
-              {availableSites.map((site) => <option key={site} value={site}>{site}</option>)}
-            </select>
-            <select className="select-button" aria-label="Filter site visits by project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-              <option value="All">All projects</option>
+            <select className="select-button" aria-label="Filter site visits by project or site" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+              <option value="All">All projects and sites</option>
               {availableProjects.map((project) => <option key={project} value={project}>{project}</option>)}
             </select>
           </>}
@@ -207,23 +203,23 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
         ? <div className="visit-cards">{visibleVisits.map((visit) => {
           const date = siteVisitDateParts(visit.date);
           return <article className="visit-card" key={visit.id}>
+          <div className="visit-card-status"><StatusBadge status={visit.status} /></div>
           <div className="visit-card-date"><span>{date.month}</span><strong>{date.day}</strong><small>{date.label}</small></div>
           <div className="visit-card-content">
             <h3>{visit.project}</h3>
             <p>⌖ {visit.site} · {role === "Owner" ? `Assigned engineer: ${visit.engineer}` : "Assigned to you"}</p>
             {visit.purpose && <div className="visit-purpose">{visit.purpose}</div>}
-            {(visit.checkIn || visit.checkOut) && <div className="visit-proofs"><VisitProof proof={visit.checkIn} label="Check-in photo" fallbackLocation={visit.site} /><VisitProof proof={visit.checkOut} label="Check-out photo" fallbackLocation={visit.site} /></div>}
+            {(visit.checkIn || visit.checkOut) && <div className="visit-proofs"><VisitProof proof={visit.checkIn} label="Check-in photo" fallbackLocation={visit.site} onPreview={(proof, label, fallbackLocation) => setPhotoPreview({ proof, label, fallbackLocation })} /><VisitProof proof={visit.checkOut} label="Check-out photo" fallbackLocation={visit.site} onPreview={(proof, label, fallbackLocation) => setPhotoPreview({ proof, label, fallbackLocation })} /></div>}
           </div>
-          <div className="visit-card-end">
-            <StatusBadge status={visit.status} />
-            {role === "Employee" && visit.status === "Scheduled" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-in" }); void openCamera("user"); }}>Check in with photo</button>}
-            {role === "Employee" && visit.status === "Checked in" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-out" }); void openCamera("user"); }}>Check out with photo</button>}
-          </div>
+          {role === "Employee" && (visit.status === "Scheduled" || visit.status === "Checked in") && <div className="visit-card-end">
+            {visit.status === "Scheduled" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-in" }); void openCamera("user"); }}>Check in with photo</button>}
+            {visit.status === "Checked in" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-out" }); void openCamera("user"); }}>Check out with photo</button>}
+          </div>}
         </article>;
         })}</div>
         : <div className="inline-empty">{role === "Employee"
           ? projectFilter !== "All" || visitDateFilter ? "No site visits match these filters." : "No site visits are in progress or completed yet."
-          : engineerFilter !== "All" || siteFilter !== "All" || projectFilter !== "All" || visitDateFilter
+          : engineerFilter !== "All" || projectFilter !== "All" || visitDateFilter
             ? "No engineer site visits match these filters."
             : "No engineer site visits have been recorded yet."}</div>}
     </section>
@@ -260,6 +256,16 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
         {error && <p className="attendance-error" role="alert">{error}</p>}
         <div className="attendance-dialog-actions"><button className="button button-outline" type="button" disabled={saving} onClick={closeCapture}>Cancel</button><button className="button button-primary" type="submit" disabled={saving || !cameraReady}>{saving ? "Capturing & saving…" : capture.action === "check-in" ? "Confirm check-in" : "Confirm check-out"}</button></div>
       </form>
+    </div>}
+    {photoPreview && <div className="attendance-preview-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPhotoPreview(null); }}>
+      <section className="attendance-preview-dialog" role="dialog" aria-modal="true" aria-label={`${photoPreview.label} evidence`}>
+        <div className="attendance-preview-heading"><strong>{photoPreview.label}</strong><button type="button" aria-label="Close photo preview" onClick={() => setPhotoPreview(null)}>×</button></div>
+        <img src={photoPreview.proof.image} alt={`${photoPreview.label} site evidence`} />
+        <p>{new Date(photoPreview.proof.capturedAt).toLocaleString()}</p>
+        <a href={`https://www.google.com/maps?q=${photoPreview.proof.latitude},${photoPreview.proof.longitude}`} target="_blank" rel="noreferrer">
+          ⌖ {photoPreview.proof.locationName || photoPreview.fallbackLocation || `${photoPreview.proof.latitude.toFixed(6)}, ${photoPreview.proof.longitude.toFixed(6)}`} · ±{Math.round(photoPreview.proof.accuracy)} m · View map ↗
+        </a>
+      </section>
     </div>}
   </>;
 }

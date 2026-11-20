@@ -48,8 +48,14 @@ export function updatePerson(id: string, body: any) {
   const email = readText(body?.email);
   const phoneInput = typeof body?.phone === "string" ? body.phone.trim() : "";
   const phone = phoneInput ? normalizePhone(phoneInput) : person.phone;
+  const projectProvided = typeof body?.project === "string";
+  const nextProject = projectProvided ? readText(body.project) : person.project;
   if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return failure(400, "Enter a valid name and email address.");
+  }
+  if (person.role === "Client" && projectProvided && nextProject !== "No assigned sites" &&
+    (!nextProject || !projects.some((item) => item.name === nextProject))) {
+    return failure(400, "Select an existing project or clear the client's project assignment.");
   }
   if (phoneInput && !phone) {
     return failure(400, "Enter a valid international phone number (+country code).");
@@ -62,6 +68,7 @@ export function updatePerson(id: string, body: any) {
   }
 
   const previousName = person.name;
+  const previousProject = person.project;
   const previousEmail = person.email.toLowerCase();
   const normalizedEmail = email.toLowerCase();
   person.name = name;
@@ -76,6 +83,18 @@ export function updatePerson(id: string, body: any) {
     projects.forEach((project) => { if (project.client === previousName) project.client = name; });
     quotations.forEach((quotation) => { if (quotation.client === previousName) quotation.client = name; });
     feedback.forEach((item) => { if (item.client === previousName) item.client = name; });
+    if (projectProvided && nextProject) {
+      if (previousProject !== nextProject) {
+        projects.forEach((project) => {
+          if (project.name === previousProject && project.client === name) project.client = "Unassigned";
+        });
+      }
+      person.project = nextProject;
+      if (nextProject !== "No assigned sites") {
+        const assignedProject = projects.find((project) => project.name === nextProject);
+        if (assignedProject) assignedProject.client = name;
+      }
+    }
   } else {
     projects.forEach((project) => { if (project.engineer === previousName) project.engineer = name; });
     siteVisits.forEach((visit) => { if (visit.engineer === previousName) visit.engineer = name; });

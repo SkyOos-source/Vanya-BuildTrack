@@ -1,15 +1,30 @@
-import { nextId, readProject } from "../../data/store";
+import { nextId, readProject, readText } from "../../data/store";
 import { projects } from "./data";
 import { failure, result } from "../shared";
 
 export const listProjects = () => projects;
 
 export function createProject(body: any) {
-  const project = readProject(body, "");
-  if (!project) return failure(400, "Project name and valid budget, spending, and progress values are required.");
-  if (projects.some((item) => item.name.toLowerCase() === project.name.toLowerCase())) {
+  const name = readText(body?.name);
+  const site = readText(body?.site);
+  const engineer = readText(body?.engineer);
+  if (name && projects.some((item) => item.name.toLowerCase() === name.toLowerCase())) {
     return failure(409, "A project with this name already exists.");
   }
+  if (!name || !site || !engineer) {
+    return failure(400, "Project name, location, and engineer are required.");
+  }
+  const project = readProject({
+    ...body,
+    name,
+    site,
+    engineer,
+    quotationAmount: 0,
+    budget: 0,
+    spent: 0,
+    progress: 0
+  }, "");
+  if (!project) return failure(400, "Project fields are invalid.");
   project.id = nextId("project");
   projects.unshift(project);
   return result({ record: project }, 201);

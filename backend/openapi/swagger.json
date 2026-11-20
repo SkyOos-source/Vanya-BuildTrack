@@ -1135,6 +1135,23 @@
 				}
 			}
 		},
+		"/api/profiles/owners": {
+			"get": {
+				"operationId": "Owners",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			}
+		},
 		"/api/profiles/{id}": {
 			"get": {
 				"operationId": "Profile",

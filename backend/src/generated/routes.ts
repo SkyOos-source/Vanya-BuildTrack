@@ -601,6 +601,35 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsProfilesController_owners: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        app.get('/api/profiles/owners',
+            ...(fetchMiddlewares<RequestHandler>(ProfilesController)),
+            ...(fetchMiddlewares<RequestHandler>(ProfilesController.prototype.owners)),
+
+            async function ProfilesController_owners(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsProfilesController_owners, request, response });
+
+                const controller = new ProfilesController();
+
+              await templateService.apiHandler({
+                methodName: 'owners',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsProfilesController_profile: Record<string, TsoaRoute.ParameterSchema> = {
                 id: {"in":"path","name":"id","required":true,"dataType":"string"},
         };

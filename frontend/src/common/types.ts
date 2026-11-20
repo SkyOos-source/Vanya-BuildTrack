@@ -35,5 +35,6 @@ export type Feedback = { id: string; project: string; client: string; rating: nu
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string };
+export type ProjectContact = { id?: string; name: string; phone?: string };
 export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialAllocations: MaterialAllocation[]; materialUsageLogs: MaterialUsageLog[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
 export type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };
