@@ -21,7 +21,7 @@ function escapeVCard(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 }
 
-function saveContact(profile: UserProfile) {
+async function saveContact(profile: UserProfile) {
   const formattedName = escapeVCard(profile.name);
   const contact = [
     "BEGIN:VCARD",
@@ -34,11 +34,12 @@ function saveContact(profile: UserProfile) {
     "END:VCARD",
     ""
   ].join("\r\n");
-  const url = URL.createObjectURL(new Blob([contact], { type: "text/vcard;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const filename = `${profile.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.vcf`;
+  const file = new File([contact], filename, { type: "text/vcard;charset=utf-8" });
+  if (!navigator.share || !navigator.canShare?.({ files: [file] })) {
+    throw new Error("This browser can’t open the contact import flow. Try opening this profile in Safari or Chrome on your phone.");
+  }
+  await navigator.share({ files: [file], title: profile.name });
 }
 
 async function prepareProfilePhoto(file: File): Promise<string> {
@@ -167,9 +168,19 @@ function ProfileLoadResult({ state, editable, onProfileImageChange }: {
 }
 
 function PublicProfileLoadResult({ state }: { state: LoadState }) {
+  const [saveError, setSaveError] = useState("");
   if (!state) return <p className="profile-load-message" role="status">Loading profile…</p>;
   if ("error" in state) return <p className="profile-load-error" role="alert">{state.error}</p>;
   const { profile } = state;
+  const handleSaveContact = async () => {
+    setSaveError("");
+    try {
+      await saveContact(profile);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setSaveError(error instanceof Error ? error.message : "Unable to open the contact import flow.");
+    }
+  };
   return <section className="public-contact-card">
     <div className="public-contact-identity">
       <span className="public-contact-avatar">{profile.image ? <img src={profile.image} alt={`${profile.name} profile`} /> : initials(profile.name)}</span>
@@ -179,7 +190,8 @@ function PublicProfileLoadResult({ state }: { state: LoadState }) {
       <a href={`mailto:${profile.email}`}><span>Email</span><strong>{profile.email}</strong></a>
       {profile.phone && <a href={`tel:${profile.phone}`}><span>Phone</span><strong>{profile.phone}</strong></a>}
     </div>
-    <button className="button button-primary public-contact-save" type="button" onClick={() => saveContact(profile)}>Save to contacts</button>
+    <button className="button button-primary public-contact-save" type="button" onClick={() => void handleSaveContact()}>Save to contacts</button>
+    {saveError && <p className="profile-load-error" role="alert">{saveError}</p>}
   </section>;
 }
 
