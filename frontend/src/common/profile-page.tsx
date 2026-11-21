@@ -21,7 +21,7 @@ function escapeVCard(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 }
 
-async function saveContact(profile: UserProfile) {
+function saveContact(profile: UserProfile): Promise<void> {
   const formattedName = escapeVCard(profile.name);
   const contact = [
     "BEGIN:VCARD",
@@ -35,11 +35,11 @@ async function saveContact(profile: UserProfile) {
     ""
   ].join("\r\n");
   const filename = `${profile.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.vcf`;
-  const file = new File([contact], filename, { type: "text/vcard;charset=utf-8" });
-  if (!navigator.share || !navigator.canShare?.({ files: [file] })) {
-    throw new Error("This browser can’t open the contact import flow. Try opening this profile in Safari or Chrome on your phone.");
+  const file = new File([contact], filename, { type: "text/vcard" });
+  if (!navigator.share || (navigator.canShare && !navigator.canShare({ files: [file] }))) {
+    throw new Error("This browser can’t share contact files. Open this profile in the latest Safari or Chrome.");
   }
-  await navigator.share({ files: [file], title: profile.name });
+  return navigator.share({ files: [file], title: profile.name });
 }
 
 async function prepareProfilePhoto(file: File): Promise<string> {
@@ -172,13 +172,20 @@ function PublicProfileLoadResult({ state }: { state: LoadState }) {
   if (!state) return <p className="profile-load-message" role="status">Loading profile…</p>;
   if ("error" in state) return <p className="profile-load-error" role="alert">{state.error}</p>;
   const { profile } = state;
-  const handleSaveContact = async () => {
+  const handleSaveContact = () => {
     setSaveError("");
-    try {
-      await saveContact(profile);
-    } catch (error) {
+    const showSaveError = (error: unknown) => {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        setSaveError("Your device blocked contact sharing. Make sure the app is up to date and open over HTTPS, then try again. You can also open the profile in Safari or Chrome.");
+        return;
+      }
       setSaveError(error instanceof Error ? error.message : "Unable to open the contact import flow.");
+    };
+    try {
+      void saveContact(profile).catch(showSaveError);
+    } catch (error) {
+      showSaveError(error);
     }
   };
   return <section className="public-contact-card">
@@ -190,7 +197,7 @@ function PublicProfileLoadResult({ state }: { state: LoadState }) {
       <a href={`mailto:${profile.email}`}><span>Email</span><strong>{profile.email}</strong></a>
       {profile.phone && <a href={`tel:${profile.phone}`}><span>Phone</span><strong>{profile.phone}</strong></a>}
     </div>
-    <button className="button button-primary public-contact-save" type="button" onClick={() => void handleSaveContact()}>Save to contacts</button>
+    <button className="button button-primary public-contact-save" type="button" onClick={handleSaveContact}>Save to contacts</button>
     {saveError && <p className="profile-load-error" role="alert">{saveError}</p>}
   </section>;
 }
