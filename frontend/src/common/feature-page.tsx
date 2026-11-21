@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, MaterialRequest, OwnerAuditLog, Project, ProjectContact, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
+import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, MaterialRequest, OwnerAuditLog, Payment, Project, ProjectContact, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
 import { apiFetch } from "./api";
 import { formatCurrency, initials, isLoggedExpense } from "./utils";
 import { DateInput, ExpenseRows, ProjectCards, StatusBadge } from "./components";
@@ -9,7 +9,7 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview";
 import { SiteVisitsPage, type SiteVisitAction } from "./site-visits-page";
 import { PalettePicker } from "./palette";
 
-export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null) => void; onEditProject?: (project: Project) => void; onCreatePerson: (role: "Site Engineer" | "Client") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onUnassignEngineerProject: (project: Project) => Promise<void>; onUnassignClientProject: (client: Person, project: Project) => Promise<void>; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
+export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null, project?: Project) => void; onEditProject?: (project: Project) => void; onCreatePerson: (role: "Site Engineer" | "Client") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onUnassignEngineerProject: (project: Project) => Promise<void>; onUnassignClientProject: (client: Person, project: Project) => Promise<void>; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void };
 
 const RECORDS_PER_PAGE = 10;
 const AUDIT_LOGS_PER_PAGE = 20;
@@ -64,6 +64,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   const [allocationEngineerFilter, setAllocationEngineerFilter] = useState("All");
   const [expenseProjectFilter, setExpenseProjectFilter] = useState("All");
   const [expenseDateFilter, setExpenseDateFilter] = useState("");
+  const [paymentProjectFilter, setPaymentProjectFilter] = useState("All");
   const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [personPendingDeletion, setPersonPendingDeletion] = useState<Person | null>(null);
@@ -166,6 +167,34 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   const visibleExpenseAllocations = role === "Employee"
     ? data.expenseAllocations.filter((allocation) => allocation.engineer === currentUser)
     : data.expenseAllocations;
+  const projectPayments = data.payments.filter((payment) =>
+    data.projects.some((project) => project.name === payment.project)
+  );
+  const filteredPayments = projectPayments.filter((payment) =>
+    paymentProjectFilter === "All" || payment.project === paymentProjectFilter
+  );
+  const recordedPaymentTotal = filteredPayments.reduce((total, payment) => total + payment.amount, 0);
+  const cashPaymentTotal = filteredPayments.filter((payment) => payment.method === "Cash")
+    .reduce((total, payment) => total + payment.amount, 0);
+  const onlinePaymentTotal = filteredPayments.filter((payment) => payment.method === "Online")
+    .reduce((total, payment) => total + payment.amount, 0);
+  const paymentProgressProjects = data.projects
+    .filter((project) => paymentProjectFilter === "All" || project.name === paymentProjectFilter)
+    .map((project) => {
+      const quoteTotal = data.quotes.filter((quote) => quote.project === project.name)
+        .reduce((total, quote) => total + quote.amount, 0);
+      const quotationAmount = quoteTotal || project.quotationAmount || 0;
+      const paidAmount = projectPayments
+        .filter((payment) => payment.project === project.name)
+        .reduce((total, payment) => total + payment.amount, 0);
+      const quotationCents = Math.round(quotationAmount * 100);
+      return {
+        project,
+        quotationAmount,
+        paidAmount,
+        percentage: quotationCents > 0 ? Math.min(100, Math.floor(Math.round(paidAmount * 100) / quotationCents * 100)) : 0
+      };
+    });
   const allocationEngineers = [...new Set(visibleExpenseAllocations.map((allocation) => allocation.engineer))]
     .sort((left, right) => left.localeCompare(right));
   const filteredExpenseAllocations = visibleExpenseAllocations.filter((allocation) =>
@@ -289,9 +318,9 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
       onToast(error instanceof Error ? error.message : "Could not download this backup.");
     }
   };
-  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""} ${role === "Employee" && page === "Materials" ? "engineer-materials-feature-page" : ""}`}>
+  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${page === "Payments" ? "payment-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""} ${role === "Employee" && page === "Materials" ? "engineer-materials-feature-page" : ""}`}>
     {projectView && (selectedProject
-      ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} ownerContacts={ownerContacts} ownerContactsError={ownerContactsError} onBack={() => setSelectedProjectId(null)} />
+      ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} ownerContacts={ownerContacts} ownerContactsError={ownerContactsError} onBack={() => setSelectedProjectId(null)} onCreate={onCreate} />
       : <section className="panel feature-panel"><div className="list-toolbar"><div className="search-box"><span>⌕</span><input aria-label="Search projects" placeholder="Search projects, sites, clients..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>{role === "Owner" && <div className="toolbar-actions"><button className="button button-primary" onClick={() => onCreate("project")}>＋ New project</button></div>}</div><ProjectCards projects={scopedProjects} onOpen={(project) => setSelectedProjectId(project.id)} /></section>)}
     {page === "Quotations" && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">PROJECT PROPOSALS</span><h2 className="list-title">{role === "Client" ? "Quotations for you" : "Quotations & add-on work"}</h2></div><div className="toolbar-actions"><select className="select-button" aria-label="Filter quotations" value={filter} onChange={(event) => setFilter(event.target.value)}><option>All</option><option>Awaiting review</option><option>Sent to client</option><option>Approved</option><option>Changes requested</option></select>{role === "Owner" && <button className="button button-primary" onClick={() => onCreate("quote")}>＋ New quotation</button>}</div></div>{role === "Client" ? <div className="quotation-project-list">{Array.from(quotationGroups, ([projectName, projectQuotes]) => {
       const filteredQuotes = projectQuotes.filter((quote) => filter === "All" || quote.status === filter);
@@ -299,6 +328,40 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
       const projectTotal = projectQuotes.reduce((total, quote) => total + quote.amount, 0);
       return <section className="quotation-project-group" key={projectName}><header><div><span className="panel-kicker">PROJECT QUOTATIONS</span><h3>{projectName}</h3></div><div><small>COMBINED TOTAL</small><strong>{formatCurrency(projectTotal)}</strong></div></header><div className="quote-list">{filteredQuotes.map((quote) => <article className="quote-row" key={quote.id}><span className="quote-file-icon">▤</span><div className="quote-row-main"><strong>{quote.title}</strong><span>{quote.id} · {quote.date}</span></div><strong className="quote-row-amount">{formatCurrency(quote.amount)}</strong><StatusBadge status={quote.status} />{quote.status !== "Approved" && quote.status !== "Declined" ? <div className="inline-actions"><button onClick={() => onQuote(quote, "Approved")}>Approve</button><button onClick={() => onQuote(quote, "Declined")}>Decline</button>{quote.attachment && <QuotationPdfPreview attachment={quote.attachment} title={quote.title} />}</div> : quote.attachment ? <QuotationPdfPreview attachment={quote.attachment} title={quote.title} /> : <button className="icon-button" onClick={() => onToast(`Opening ${quote.id} preview.`)} aria-label={`Open quotation ${quote.id}`}>↗</button>}</article>)}</div></section>;
     })}</div> : <div className="quote-list">{visibleQuotes.filter((item) => filter === "All" || item.status === filter).map((quote) => <article className="quote-row" key={quote.id}><span className="quote-file-icon">▤</span><div className="quote-row-main"><strong>{quote.title}</strong><span>{quote.id} · {quote.project} · {quote.date}</span></div><div className="quote-row-client"><small>CLIENT</small><strong>{quote.client}</strong></div><strong className="quote-row-amount">{formatCurrency(quote.amount)}</strong><StatusBadge status={quote.status} />{quote.attachment ? <QuotationPdfPreview attachment={quote.attachment} title={quote.title} /> : <button className="icon-button" onClick={() => onToast(`Opening ${quote.id} preview.`)} aria-label={`Open quotation ${quote.id}`}>↗</button>}</article>)}</div>}</section>}
+    {page === "Payments" && <>
+      <section className="payment-summary-grid" aria-label="Payment totals">
+        <article className="payment-summary-stat"><span>Recorded total</span><strong>{formatCurrency(recordedPaymentTotal)}</strong><small>{filteredPayments.length} {filteredPayments.length === 1 ? "payment" : "payments"}</small></article>
+        <article className="payment-summary-stat"><span>Cash payments</span><strong>{formatCurrency(cashPaymentTotal)}</strong><small>{filteredPayments.filter((payment) => payment.method === "Cash").length} records</small></article>
+        <article className="payment-summary-stat"><span>Online payments</span><strong>{formatCurrency(onlinePaymentTotal)}</strong><small>{filteredPayments.filter((payment) => payment.method === "Online").length} records</small></article>
+      </section>
+      {paymentProgressProjects.length > 0 && <section className="payment-progress-grid" aria-label="Payment progress by project">
+        {paymentProgressProjects.map(({ project, quotationAmount, paidAmount, percentage }) => <article className="payment-progress-card" key={project.id}>
+          <div><strong>{project.name}</strong><b>{percentage}% paid</b></div>
+          <div className="payment-progress-track" role="progressbar" aria-label={`${project.name} quotation payment progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}><span style={{ width: `${percentage}%` }} /></div>
+          <small>{formatCurrency(paidAmount)} paid · {quotationAmount > 0 ? `${formatCurrency(quotationAmount)} quotation` : "No quotation amount recorded"}</small>
+        </article>)}
+      </section>}
+      <section className="panel feature-panel">
+        <div className="list-toolbar">
+          <div><span className="panel-kicker">{role === "Owner" ? "OWNER & CLIENT ACTIVITY" : "YOUR PROJECT ACTIVITY"}</span><h2 className="list-title">{role === "Owner" ? "Payment history" : "My project payments"}</h2></div>
+          <div className="toolbar-actions">
+            <select className="select-button" aria-label="Filter payments by project" value={paymentProjectFilter} onChange={(event) => setPaymentProjectFilter(event.target.value)}>
+              <option value="All">All projects</option>
+              {data.projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}
+            </select>
+            <button className="button button-primary" type="button" onClick={() => onCreate("payment")} disabled={scopedProjects.length === 0}>＋ Add payment</button>
+          </div>
+        </div>
+        {filteredPayments.length
+          ? <div className="payment-history-list">{filteredPayments.map((payment: Payment) => <article className="payment-history-row" key={payment.id}>
+            <div className="payment-history-amount"><strong>{formatCurrency(payment.amount)}</strong><span>{payment.method}</span></div>
+            <div className="payment-history-project"><strong>{payment.project}</strong><span>{payment.date}{payment.note ? ` · ${payment.note}` : ""}</span></div>
+            <div className="payment-history-recorder"><strong>{payment.recordedBy}</strong><span>Recorded by {payment.recordedByRole.toLowerCase()}</span></div>
+            {payment.proofImage && <a className="project-payment-proof" href={payment.proofImage} target="_blank" rel="noreferrer"><img src={payment.proofImage} alt={`Online payment proof uploaded by ${payment.recordedBy}`} />View proof</a>}
+          </article>)}</div>
+          : <p className="project-details-empty">{data.projects.length ? "No payments match this project filter yet." : "No assigned projects are available for payment tracking."}</p>}
+      </section>
+    </>}
     {role === "Employee" && page === "Expenses" && <section className="financial-summary-card engineer-expense-summary" aria-label="Your expense summary">
       <div className="financial-summary-top">
         <div><span>Total funds</span><strong>{formatCurrency(totalAssignedFunds)}</strong></div>

@@ -25,6 +25,12 @@ Owners manage their organization, projects, people, finances, and overall constr
   - Log project expenses with descriptions and receipt or photo attachments; only logged expenses count toward project expenditure and profit.
   - Review engineers' requests for additional funds separately from logged spending.
   - View project-wise expense reports.
+- **Project payments**
+  - Record cash or online payments against a project and review the total and payment history.
+  - Require an image of the payment confirmation for online payments.
+  - See whether each payment was recorded by the owner or client.
+  - Provide dedicated Payments pages in the owner and client portals, with project filters and cash/online totals.
+  - Show payment progress as a percentage of the project quotation, capped at 100%.
 - **Attendance and progress**
   - Review worker and engineer attendance.
   - Monitor construction progress updates and photos submitted from sites.
@@ -62,6 +68,7 @@ Clients follow the work on their assigned projects and respond to quotations.
 - View assigned construction projects.
 - Track construction progress, photos, timelines, and project updates.
 - View and download quotations assigned to them.
+- Use the Payments page to review and record payments for their assigned project.
 - Accept or reject quotations, including quotations for add-on work.
 - View approved expense reports.
 - Receive notifications about quotations and project updates.
@@ -114,6 +121,7 @@ Clients follow the work on their assigned projects and respond to quotations.
 - Owners can manage the projects and sites in their account and review related submissions.
 - Site engineers can access only the projects, sites, and instructions assigned to them.
 - Clients can access only their assigned projects, quotations, approved expense reports, and project updates.
+- Owners and clients can record and view payments only for projects they are authorized to access.
 - Users must be authenticated before viewing protected project information or files.
 
 ## Product considerations

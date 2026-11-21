@@ -5,7 +5,7 @@ import express from "express";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { RegisterRoutes } from "./generated/routes";
-import { findOwnerAccount, initializeStore, ownerAuditLogs, people, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type ExpenseAllocation, type MaterialAllocation, type SiteVisit } from "./data/store";
+import { findOwnerAccount, initializeStore, ownerAuditLogs, people, projects, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type ExpenseAllocation, type MaterialAllocation, type Payment, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 import { authenticateBearerHeader } from "./features/auth/session";
@@ -205,6 +205,31 @@ app.use((request, response, next) => {
       if (request.method === "POST" && request.path === "/api/material-usage") {
         const log = (body as { record?: { engineer?: string } } | null)?.record;
         if (log?.engineer) publishWorkspaceUpdate({ resource: "materialUsage", engineer: log.engineer });
+      }
+      if (request.method === "POST" && request.path === "/api/payments") {
+        const payment = (body as { record?: Payment } | null)?.record;
+        if (payment) {
+          const project = projects.find((item) => item.name === payment.project);
+          const client = project && people.find((person) => person.role === "Client" &&
+            (person.name === project.client || person.project === project.name));
+          publishWorkspaceUpdate({
+            resource: "payments",
+            project: payment.project,
+            push: payment.recordedByRole === "Client"
+              ? {
+                  title: "Payment recorded by client",
+                  body: `${payment.recordedBy} recorded an ${payment.method.toLowerCase()} payment for ${payment.project}.`,
+                  targets: [{ role: "owner", url: "/admin/projects-sites" }]
+                }
+              : client
+                ? {
+                    title: "Payment recorded by owner",
+                    body: `A ${payment.method.toLowerCase()} payment was recorded for ${payment.project}.`,
+                    targets: [{ role: "client", userName: client.name, userEmail: client.email, url: "/client/my-projects" }]
+                  }
+                : undefined
+          });
+        }
       }
       if (request.method === "PATCH" && /^\/api\/material-requests\/[^/]+$/.test(request.path)) {
         const payload = body as { record?: { project: string; requestedBy: string; status: string; material: string; quantity: string }; allocation?: MaterialAllocation; engineerEmail?: string } | null;

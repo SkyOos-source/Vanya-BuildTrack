@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Payment, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
 import { compressImageFile, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
@@ -35,6 +35,9 @@ function NavigationIcon({ name }: { name: string }) {
       break;
     case "expenses":
       content = <><path d="M5 3h14v18l-3-2-4 2-4-2-3 2z" /><path d="M9 8h6m-6 4h6" /><path d="M12 6v10m2-8.5c-.5-.8-3.5-.9-3.5.6 0 1.8 3.5.8 3.5 2.6s-3 1.7-4 .5" /></>;
+      break;
+    case "payments":
+      content = <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18m-12 5h4" /><circle cx="17" cy="14" r="1" /></>;
       break;
     case "quotations":
       content = <><path d="M6 3h8l5 5v13H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /><path d="M14 3v5h5M8 12h8m-8 4h8" /></>;
@@ -116,6 +119,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<RecordModalType | null>(null);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [modalProject, setModalProject] = useState<Project | null>(null);
   const [personCreationRole, setPersonCreationRole] = useState<"Site Engineer" | "Client">("Site Engineer");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -129,8 +133,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     setPersonCreationRole(personRole);
     setModal("person");
   };
-  const openProjectCreate = (nextModal: RecordModalType | null) => {
+  const openProjectCreate = (nextModal: RecordModalType | null, project?: Project) => {
     setEditingProject(null);
+    setModalProject(project ?? null);
     setModal(nextModal);
   };
   const editProject = (project: Project) => {
@@ -529,11 +534,11 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         return;
       }
       const resource = update.resource;
-      if (resource !== "materials" && resource !== "materialRequests" && resource !== "materialAllocations" && resource !== "materialUsage" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "attendance") {
+      if (resource !== "materials" && resource !== "materialRequests" && resource !== "materialAllocations" && resource !== "materialUsage" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "payments" && resource !== "attendance") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
-      if (role === "Client" && resource !== "progress" && resource !== "quotations") return;
+      if (role === "Client" && resource !== "progress" && resource !== "quotations" && resource !== "payments") return;
       void (async () => {
         try {
           if (resource === "progress") {
@@ -592,6 +597,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
           } else if (resource === "attendance") {
             setData((current) => ({ ...current, attendance: records as DashboardData["attendance"] }));
+          } else if (resource === "payments") {
+            setData((current) => ({ ...current, payments: records as DashboardData["payments"] }));
           } else if (resource === "expenseAllocations") {
             setData((current) => ({ ...current, expenseAllocations: records as DashboardData["expenseAllocations"] }));
           } else {
@@ -668,6 +675,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       "My Projects": "/api/projects",
       Materials: "/api/materials",
       Expenses: "/api/expenses",
+      Payments: "/api/payments",
       Quotations: "/api/quotations",
       Attendance: "/api/attendance",
       "Progress Updates": "/api/progress",
@@ -687,6 +695,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
         const result: unknown = await response.json();
         if (!active || !Array.isArray(result)) return;
+        const quotationsResponse = page === "Payments" ? await apiFetch("/api/quotations") : undefined;
+        if (quotationsResponse && !quotationsResponse.ok) throw new Error(`Quotation amounts request failed (${quotationsResponse.status})`);
+        const paymentQuotations: unknown = quotationsResponse ? await quotationsResponse.json() : undefined;
+        if (paymentQuotations !== undefined && !Array.isArray(paymentQuotations)) throw new Error("Quotation amounts request returned invalid data.");
         const allocationsResponse = page === "Expenses" ? await apiFetch("/api/expenses/allocations") : undefined;
         if (allocationsResponse && !allocationsResponse.ok) throw new Error(`Expense allocations request failed (${allocationsResponse.status})`);
         const allocations = allocationsResponse ? await allocationsResponse.json() as DashboardData["expenseAllocations"] : undefined;
@@ -710,6 +722,12 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
               return { ...current, materials: result as DashboardData["materials"] };
             case "Expenses":
               return { ...current, expenses: result as DashboardData["expenses"], expenseAllocations: allocations ?? current.expenseAllocations };
+            case "Payments":
+              return {
+                ...current,
+                payments: result as DashboardData["payments"],
+                quotes: paymentQuotations === undefined ? current.quotes : paymentQuotations as DashboardData["quotes"]
+              };
             case "Quotations":
               return { ...current, quotes: result as DashboardData["quotes"] };
             case "Attendance":
@@ -885,9 +903,13 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       const projectEndpoint = modal === "project" && editingProject
         ? `/api/projects/${editingProject.id}`
         : "/api/projects";
-      const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
+      const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "payment" ? "payments" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
       const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
       const attachment = modal === "expense" || modal === "expense-log" ? await readFileDataUrl(form.get("attachment")) : progressAttachments?.[0];
+      const proofImage = modal === "payment" && form.get("method") === "Online" ? await readFileDataUrl(form.get("proofImage")) : undefined;
+      if (modal === "payment" && form.get("method") === "Online" && !proofImage) {
+        throw new Error("Choose an image showing the online payment confirmation.");
+      }
       const quotationFile = form.get("quotationFile");
       if (modal === "quote" && quotationFile instanceof File && quotationFile.size > 0) {
         if (!/\.pdf$/i.test(quotationFile.name) || (quotationFile.type && quotationFile.type !== "application/pdf")) {
@@ -925,6 +947,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         submittedBy: currentUser,
         loggedBy: currentUser,
         entryType: modal === "expense-log" ? "log" : "request",
+        method: form.get("method"),
+        proofImage,
         allocationId: form.get("allocationId"),
         attachment,
         attachments: progressAttachments,
@@ -937,7 +961,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const result = await response.json() as { record?: Project | Quote | Expense | ExpenseAllocation | SiteVisit | Activity | Material | MaterialAllocation | MaterialUsageLog | DashboardData["materialRequests"][number] | Person; allocation?: MaterialAllocation; project?: Project; error?: string };
+      const result = await response.json() as { record?: Project | Quote | Expense | Payment | ExpenseAllocation | SiteVisit | Activity | Material | MaterialAllocation | MaterialUsageLog | DashboardData["materialRequests"][number] | Person; allocation?: MaterialAllocation; project?: Project; error?: string };
       if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
       if (!record) throw new Error("The API returned no saved record.");
@@ -951,6 +975,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }));
       } else if (modal === "quote") {
         setData((current) => ({ ...current, quotes: [record as Quote, ...current.quotes] }));
+      } else if (modal === "payment") {
+        setData((current) => ({ ...current, payments: [record as Payment, ...current.payments] }));
       } else if (modal === "expense") {
         const expense = record as Expense;
         setData((current) => ({
@@ -1011,8 +1037,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }
       }
       setEditingProject(null);
+      setModalProject(null);
       setModal(null);
-      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
+      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "payment" ? "Payment" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save record:", error);
       showToast(error instanceof Error ? error.message : "Could not save this record.");
@@ -1417,6 +1444,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     "My Projects": "Your construction projects, progress, and project payments.",
     Materials: "Track materials received, used, and remaining across your sites.",
     Expenses: "Keep project spending and receipt reviews in view.",
+    Payments: role === "Owner" ? "Track payments recorded by you and your clients across projects." : "Review and record payments for your project.",
     Quotations: "Manage project quotations and additional work approvals.",
     "Progress Updates": "Share the latest site progress with your project team.",
     "Work Progress": role === "Owner" ? "Review site updates and photos shared by engineers." : "Follow construction updates and photos from your project.",
@@ -1550,7 +1578,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} initialProject={editingProject ?? undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModal(null); }} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
     </div>
   );
 }

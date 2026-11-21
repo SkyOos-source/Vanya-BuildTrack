@@ -5,6 +5,7 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
     { label: "Dashboard", icon: "dashboard" }, { label: "Projects & Sites", icon: "projects" },
     { label: "Work Progress", icon: "progress" },
     { label: "Materials", icon: "materials" }, { label: "Expenses", icon: "expenses" },
+    { label: "Payments", icon: "payments" },
     { label: "Quotations", icon: "quotations" }, { label: "People", icon: "people" },
     { label: "Attendance", icon: "attendance" }, { label: "Reports", icon: "reports" },
     { label: "Site Visits", icon: "site-visits" }, { label: "Feedback", icon: "feedback" },
@@ -19,6 +20,7 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
   Client: [
     { label: "Dashboard", icon: "dashboard" }, { label: "My Projects", icon: "projects" },
     { label: "Work Progress", icon: "progress" }, { label: "Quotations", icon: "quotations" },
+    { label: "Payments", icon: "payments" },
     { label: "Timeline", icon: "timeline" },
     { label: "Feedback", icon: "feedback" }
   ]
@@ -28,6 +30,7 @@ export const emptyDashboardData: DashboardData = {
   projects: [],
   quotes: [],
   expenses: [],
+  payments: [],
   expenseAllocations: [],
   siteVisits: [],
   activities: [],

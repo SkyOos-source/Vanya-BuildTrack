@@ -361,6 +361,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .engineer-materials-feature-page, .owner-materials-page { display: grid; align-content: start; gap: 14px; }
 .material-request-history { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 .expenses-feature-page { display: grid; align-content: start; gap: 14px; }
+.payment-feature-page { display: grid; align-content: start; gap: 14px; }
 .engineer-expenses-feature-page { grid-template-columns: minmax(0, 1fr); }
 .engineer-expenses-feature-page > .feature-panel { grid-column: 1 / -1; }
 .feature-panel { padding: 19px; }
@@ -390,6 +391,28 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .project-details-list article > div { display: grid; flex: 1; min-width: 0; gap: 4px; }
 .project-details-list article > div strong, .project-details-list article > strong { color: #49433e; font-size: 10px; }
 .project-details-list article > div span { color: #89827b; font-size: 9px; }
+.project-payment-total { display: block; margin-top: 5px; color: #89827b; font-size: 9px; }
+.project-payment-row { justify-content: space-between; }
+.project-payment-proof { display: inline-flex; align-items: center; gap: 7px; color: var(--orange); font-size: 9px; font-weight: 700; }
+.project-payment-proof img { width: 38px; height: 38px; border: 1px solid #f0eeeb; border-radius: 5px; object-fit: cover; }
+.payment-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.payment-summary-stat { display: grid; min-height: 100px; align-content: center; gap: 7px; padding: 15px 17px; border: 1px solid #f0eeeb; border-radius: 7px; background: #fff; }
+.payment-summary-stat span, .payment-summary-stat small { color: #89827b; font-size: 9px; }
+.payment-summary-stat strong { color: #39342f; font: 700 20px "Manrope", sans-serif; }
+.payment-progress-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.payment-progress-card { display: grid; align-content: center; gap: 9px; padding: 14px 16px; border: 1px solid #f0eeeb; border-radius: 7px; background: #fff; }
+.payment-progress-card > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
+.payment-progress-card strong, .payment-progress-card b { overflow: hidden; color: #49433e; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.payment-progress-card b { color: var(--orange-dark); }
+.payment-progress-card small { color: #89827b; font-size: 9px; }
+.payment-progress-track { width: min(240px, 100%); height: 6px; overflow: hidden; border-radius: 6px; background: #eeeae5; }
+.payment-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--orange); transition: width .2s ease; }
+.payment-history-list { display: grid; }
+.payment-history-row { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(180px, 1.3fr) minmax(120px, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #f0eeeb; }
+.payment-history-row > div { display: grid; min-width: 0; gap: 4px; }
+.payment-history-row > div strong { overflow: hidden; color: #49433e; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.payment-history-row > div span { overflow: hidden; color: #89827b; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.payment-history-amount strong { font-size: 12px !important; }
 .project-details-empty { margin: 0; color: #89827b; font-size: 10px; }
 .completion-report { display: grid; gap: 16px; padding: 19px; }
 .completion-report-toolbar { align-items: center; }
@@ -1022,6 +1045,16 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .project-details-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .project-details-list article { flex-wrap: wrap; gap: 7px; }
   .project-details-list article > .status-badge { margin-left: auto; }
+  .payment-summary-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .payment-progress-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .payment-summary-stat { min-height: 75px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 8px; padding: 11px 12px; }
+  .payment-summary-stat span { grid-column: 1; }
+  .payment-summary-stat strong { grid-column: 2; grid-row: 1 / span 2; font-size: 17px; }
+  .payment-summary-stat small { grid-column: 1; }
+  .payment-history-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .payment-history-project { grid-column: 1 / -1; }
+  .payment-history-recorder { grid-column: 1; }
+  .payment-history-row > .project-payment-proof { grid-column: 2; }
   .feature-panel > .project-cards { margin-top: 14px; }
   .quote-row { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 8px; padding: 8px 0; }
   .quote-row-amount { grid-column: 2; }

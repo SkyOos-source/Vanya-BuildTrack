@@ -41,7 +41,7 @@ export function DataUsagePage() {
     <ul>
       <li><strong>Projects:</strong> project names, locations, assigned engineers, status, and progress.</li>
       <li><strong>People:</strong> names, email addresses, roles, and project assignments.</li>
-      <li><strong>Project activity:</strong> quotations and uploaded quotation PDFs, expenses, materials, progress updates, site visits, and feedback.</li>
+      <li><strong>Project activity:</strong> quotations and uploaded quotation PDFs, expenses, project payments and online payment proof images, materials, progress updates, site visits, and feedback.</li>
       <li><strong>Attendance:</strong> check-in and check-out timestamps, photos, and location coordinates when attendance is submitted.</li>
     </ul>
     <h2>What happens to the data</h2>

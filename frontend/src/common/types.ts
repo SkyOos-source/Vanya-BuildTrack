@@ -1,7 +1,7 @@
 export type Role = "Owner" | "Employee" | "Client";
 export type RoleId = "owner" | "employee" | "client";
 export type PaletteId = "current" | "previous" | "reference";
-export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "visit" | "material" | "material-allocation" | "material-log" | "material-request" | "person";
+export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "payment" | "visit" | "material" | "material-allocation" | "material-log" | "material-request" | "person";
 export type SessionUser = { name: string; email: string; role: RoleId };
 export type Project = {
   id: string;
@@ -17,6 +17,7 @@ export type Project = {
 };
 export type Quote = { id: string; project: string; title: string; client: string; clientEmail?: string; amount: number; date: string; status: string; attachment?: string };
 export type Expense = { id: string; project: string; category: string; description: string; amount: number; date: string; submittedBy: string; status: string; attachment?: string; entryType?: "request" | "log"; allocationId?: string };
+export type Payment = { id: string; project: string; amount: number; method: "Cash" | "Online"; recordedBy: string; recordedByRole: "Owner" | "Client"; date: string; note?: string; proofImage?: string };
 export type ExpenseAllocation = { id: string; engineer: string; amount: number; assignedAt: string; assignedBy: string; spentAmount: number; remainingAmount: number };
 export type SiteVisitProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number; locationName?: string };
 export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; status: string; purpose?: string; checkIn?: SiteVisitProof; checkOut?: SiteVisitProof };
@@ -36,5 +37,5 @@ export type Backup = { id: string; status: string; requestedAt: string; requeste
 export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string };
 export type ProjectContact = { id?: string; name: string; phone?: string };
-export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialAllocations: MaterialAllocation[]; materialUsageLogs: MaterialUsageLog[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
+export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; payments: Payment[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialAllocations: MaterialAllocation[]; materialUsageLogs: MaterialUsageLog[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
 export type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };

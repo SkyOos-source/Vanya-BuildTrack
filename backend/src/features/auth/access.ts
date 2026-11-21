@@ -53,7 +53,8 @@ const clientReadRoutes = new Set([
   "/api/quotations",
   "/api/feedback",
   "/api/events",
-  "/api/profiles/me"
+  "/api/profiles/me",
+  "/api/payments"
 ]);
 
 function isPublicEndpoint(method: string, pathname: string) {
@@ -129,6 +130,10 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
     if (method === "POST" && path === "/api/expenses/allocations") body.assignedBy = session.name;
     if (method === "POST" && path === "/api/material-allocations") body.assignedBy = session.name;
     if (method === "POST" && path === "/api/material-usage") body.loggedBy = session.name;
+    if (method === "POST" && path === "/api/payments") {
+      body.recordedBy = session.name;
+      body.recordedByRole = "Owner";
+    }
     if (method === "PATCH" && /^\/api\/material-requests\/[^/]+$/.test(path)) {
       body.reviewedBy = session.name;
       if (body.status === "Approved") body.assignedBy = session.name;
@@ -213,6 +218,14 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   }
 
   if (session.role === "client") {
+    if (method === "POST" && path === "/api/payments") {
+      if (!belongsToAssignedProject(session, body.project)) {
+        return { allowed: false, status: 403, error: "You can only add payments to your assigned project." };
+      }
+      body.recordedBy = session.name;
+      body.recordedByRole = "Client";
+      return { allowed: true };
+    }
     if (method === "POST" && path === "/api/feedback") {
       if (!belongsToAssignedProject(session, body.project)) {
         return { allowed: false, status: 403, error: "You can only submit feedback for your assigned project." };
@@ -306,6 +319,7 @@ function scopeDashboard(data: Record<string, unknown>, session: AuthenticatedSes
     projects: projects.filter((project) => projectNames.has(project.name)),
     quotes: isEmployee ? [] : filterProjects(data.quotes),
     expenses: isEmployee ? filterProjects(data.expenses) : [],
+    payments: isEmployee ? [] : filterProjects(data.payments),
     expenseAllocations: isEmployee
       ? (Array.isArray(data.expenseAllocations) ? data.expenseAllocations as ExpenseAllocation[] : [])
         .filter((allocation) => sameName(allocation.engineer, session.name))
@@ -399,7 +413,7 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
       ? body.filter((item) => item && typeof item === "object" && sameName((item as { engineer?: unknown }).engineer, session.name) && projectNames.has((item as { project?: string }).project ?? ""))
       : body;
   }
-  if (["/api/quotations", "/api/expenses", "/api/materials", "/api/material-requests", "/api/progress", "/api/feedback"].includes(pathname)) {
+  if (["/api/quotations", "/api/expenses", "/api/payments", "/api/materials", "/api/material-requests", "/api/progress", "/api/feedback"].includes(pathname)) {
     return body.filter((item) => item && typeof item === "object" &&
       matchesProject(item as { project?: unknown }, projectNames) &&
       (pathname !== "/api/material-requests" || session.role !== "employee" ||
@@ -430,7 +444,7 @@ export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: Authentic
     }
     return undefined;
   }
-  if ((update.resource !== "progress" && update.resource !== "quotations") ||
+  if ((update.resource !== "progress" && update.resource !== "quotations" && update.resource !== "payments") ||
     !update.project || !belongsToAssignedProject(session, update.project)) return undefined;
   return {
     ...update,

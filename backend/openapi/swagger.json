@@ -232,6 +232,56 @@
 				],
 				"type": "object"
 			},
+			"Payment": {
+				"properties": {
+					"proofImage": {
+						"type": "string"
+					},
+					"note": {
+						"type": "string"
+					},
+					"date": {
+						"type": "string"
+					},
+					"recordedByRole": {
+						"type": "string",
+						"enum": [
+							"Owner",
+							"Client"
+						]
+					},
+					"recordedBy": {
+						"type": "string"
+					},
+					"method": {
+						"type": "string",
+						"enum": [
+							"Cash",
+							"Online"
+						]
+					},
+					"amount": {
+						"type": "number",
+						"format": "double"
+					},
+					"project": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"date",
+					"recordedByRole",
+					"recordedBy",
+					"method",
+					"amount",
+					"project",
+					"id"
+				],
+				"type": "object"
+			},
 			"Material": {
 				"properties": {
 					"submittedBy": {
@@ -1281,6 +1331,51 @@
 				]
 			}
 		},
+		"/api/payments": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/Payment"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/materials": {
 			"get": {
 				"operationId": "List",
@@ -1945,6 +2040,12 @@
 											},
 											"type": "array"
 										},
+										"payments": {
+											"items": {
+												"$ref": "#/components/schemas/Payment"
+											},
+											"type": "array"
+										},
 										"expenses": {
 											"items": {
 												"$ref": "#/components/schemas/Expense"
@@ -2015,6 +2116,7 @@
 										"activities",
 										"siteVisits",
 										"expenseAllocations",
+										"payments",
 										"expenses",
 										"quotes",
 										"projects"
