@@ -37,9 +37,8 @@ function saveContact(profile: UserProfile) {
   const url = URL.createObjectURL(new Blob([contact], { type: "text/vcard;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${profile.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.vcf`;
   link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 async function prepareProfilePhoto(file: File): Promise<string> {
