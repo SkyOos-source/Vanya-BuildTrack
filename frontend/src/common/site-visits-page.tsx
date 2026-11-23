@@ -111,14 +111,14 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
   };
   const availableEngineers = [...new Set(visits.map((visit) => visit.engineer))].sort((left, right) => left.localeCompare(right));
   const availableProjects = [...new Set(visits
-    .filter((visit) => role !== "Employee" || visit.engineer === currentUser)
+    .filter((visit) => (role !== "Employee" && role !== "ProjectManager") || visit.engineer === currentUser)
     .flatMap((visit) => role === "Owner" ? [visit.project, visit.site] : [visit.project]))]
     .sort((left, right) => left.localeCompare(right));
   const visibleVisits = visits
-    .filter((visit) => role !== "Employee" || visit.engineer === currentUser)
+    .filter((visit) => (role !== "Employee" && role !== "ProjectManager") || visit.engineer === currentUser)
     .filter((visit) => role !== "Owner" || engineerFilter === "All" || visit.engineer === engineerFilter)
     .filter((visit) => role !== "Owner" || projectFilter === "All" || visit.project === projectFilter || visit.site === projectFilter)
-    .filter((visit) => role !== "Employee" || projectFilter === "All" || visit.project === projectFilter)
+    .filter((visit) => (role !== "Employee" && role !== "ProjectManager") || projectFilter === "All" || visit.project === projectFilter)
     .filter((visit) => !visitDateFilter || visitDateKey(visit.date) === visitDateFilter)
     .slice()
     .sort((left, right) => visitDateKey(left.date).localeCompare(visitDateKey(right.date)));
@@ -170,7 +170,7 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
     <section className="panel feature-panel">
       <div className="list-toolbar">
         <div><span className="panel-kicker">{role === "Owner" ? "FIELD ACTIVITY" : "MY FIELD WORK"}</span><h2 className="list-title">{role === "Employee" ? "My site visits" : "Engineer site visits"}</h2></div>
-        {(role === "Owner" || role === "Employee") && <div className="toolbar-actions">
+        {(role === "Owner" || role === "Employee" || role === "ProjectManager") && <div className="toolbar-actions">
           {role === "Owner" && <>
             <select className="select-button" aria-label="Filter site visits by engineer" value={engineerFilter} onChange={(event) => setEngineerFilter(event.target.value)}>
               <option value="All">All engineers</option>
@@ -181,12 +181,12 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
               {availableProjects.map((project) => <option key={project} value={project}>{project}</option>)}
             </select>
           </>}
-          {role === "Employee" && <select className="select-button" aria-label="Filter site visits by project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+          {(role === "Employee" || role === "ProjectManager") && <select className="select-button" aria-label="Filter site visits by project" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
               <option value="All">All projects</option>
               {availableProjects.map((project) => <option key={project} value={project}>{project}</option>)}
             </select>}
           <label className="work-progress-date-filter"><DateInput aria-label="Filter site visits by date" value={visitDateFilter} onChange={(event) => setVisitDateFilter(event.target.value)} onClear={() => setVisitDateFilter("")} /></label>
-          {role === "Employee" && <button className="button button-primary" onClick={() => {
+          {(role === "Employee" || role === "ProjectManager") && <button className="button button-primary" onClick={() => {
             setError("");
             setCreateProject(projects.length === 0);
             setSelectedProject(projects[0]?.name ?? "");
@@ -211,7 +211,7 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
             {visit.purpose && <div className="visit-purpose">{visit.purpose}</div>}
             {(visit.checkIn || visit.checkOut) && <div className="visit-proofs"><VisitProof proof={visit.checkIn} label="Check-in photo" fallbackLocation={visit.site} onPreview={(proof, label, fallbackLocation) => setPhotoPreview({ proof, label, fallbackLocation })} /><VisitProof proof={visit.checkOut} label="Check-out photo" fallbackLocation={visit.site} onPreview={(proof, label, fallbackLocation) => setPhotoPreview({ proof, label, fallbackLocation })} /></div>}
           </div>
-          {role === "Employee" && (visit.status === "Scheduled" || visit.status === "Checked in") && <div className="visit-card-end">
+          {(role === "Employee" || role === "ProjectManager") && (visit.status === "Scheduled" || visit.status === "Checked in") && <div className="visit-card-end">
             {visit.status === "Scheduled" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-in" }); void openCamera("user"); }}>Check in with photo</button>}
             {visit.status === "Checked in" && <button className="button button-primary" onClick={() => { setError(""); setCameraOpen(false); setCameraStream(null); setCapture({ visit, action: "check-out" }); void openCamera("user"); }}>Check out with photo</button>}
           </div>}

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { RoleId, SessionUser } from "../common/types";
+import type { SessionUser } from "../common/types";
 import { readSession, rolePath, saveAuthTokens } from "../common/data";
 import { BuildingIcon, PasswordInput } from "../common/components";
 import { apiFetch } from "../common/api";
@@ -14,7 +14,6 @@ const emptySetupOwners: SetupOwner[] = [
 export function SignInPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [role, setRole] = useState<RoleId>("owner");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -53,11 +52,6 @@ export function SignInPage() {
     return () => { active = false; };
   }, [setupAttempt]);
 
-  const selectRole = (nextRole: RoleId) => {
-    setRole(nextRole);
-    setError("");
-  };
-
   const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -66,7 +60,7 @@ export function SignInPage() {
       const response = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, role })
+        body: JSON.stringify({ email, password })
       });
       const result = await response.json() as { user?: SessionUser; accessToken?: string; refreshToken?: string; challengeId?: string; phoneRequired?: boolean; phoneHint?: string; error?: string };
       if (!response.ok) throw new Error(result.error || `Sign-in failed (${response.status})`);
@@ -80,7 +74,7 @@ export function SignInPage() {
       localStorage.setItem("buildtrack-session", JSON.stringify(result.user));
       saveAuthTokens(result.accessToken, result.refreshToken);
       const destination = (location.state as { from?: string } | null)?.from;
-      navigate(destination?.startsWith(rolePath(role)) ? destination : rolePath(role), { replace: true });
+      navigate(destination?.startsWith(rolePath(result.user.role)) ? destination : rolePath(result.user.role), { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to sign in. Please try again.");
     } finally {
@@ -129,7 +123,7 @@ export function SignInPage() {
       localStorage.setItem("buildtrack-session", JSON.stringify(result.user));
       saveAuthTokens(result.accessToken, result.refreshToken);
       const destination = (location.state as { from?: string } | null)?.from;
-      navigate(destination?.startsWith(rolePath(role)) ? destination : rolePath(role), { replace: true });
+      navigate(destination?.startsWith(rolePath(result.user.role)) ? destination : rolePath(result.user.role), { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to verify this code. Please try again.");
     } finally {
@@ -186,7 +180,6 @@ export function SignInPage() {
       setSetupState("complete");
       setSetupSuccess("Owner accounts are ready. Sign in with the first owner account.");
       setEmail(setupOwners[0].email);
-      setRole("owner");
       setPassword("");
       setSetupCode("");
       setSetupOwners(emptySetupOwners);
@@ -203,7 +196,7 @@ export function SignInPage() {
       <legend>Owner {index + 1}</legend>
       <label>Full name<input autoComplete="name" value={owner.name} onChange={(event) => updateSetupOwner(index, "name", event.target.value)} required maxLength={100} /></label>
       <label>Email address<input type="email" autoComplete="username" value={owner.email} onChange={(event) => updateSetupOwner(index, "email", event.target.value)} required maxLength={254} /></label>
-      <label>Phone number (include country code)<input type="tel" autoComplete="tel" inputMode="tel" value={owner.phone} onChange={(event) => updateSetupOwner(index, "phone", event.target.value)} placeholder="+91 98765 43210" required /></label>
+      <label>Phone number<div className="phone-input-prefix"><span>+91</span><input type="tel" autoComplete="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} value={owner.phone} onChange={(event) => updateSetupOwner(index, "phone", event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="98765 43210" required /></div></label>
       <label>Password (at least 12 characters)<PasswordInput autoComplete="new-password" value={owner.password} onChange={(event) => updateSetupOwner(index, "password", event.target.value)} required minLength={12} maxLength={256} /></label>
       <label>Confirm password<PasswordInput autoComplete="new-password" value={owner.confirmation} onChange={(event) => updateSetupOwner(index, "confirmation", event.target.value)} required minLength={12} maxLength={256} /></label>
     </fieldset>)}
@@ -227,17 +220,17 @@ export function SignInPage() {
           <span className="panel-kicker">WORKSPACE</span><h2>Unable to check setup</h2><p className="signin-error" role="alert">{setupError}</p>
           <button className="button button-primary signin-submit" type="button" onClick={() => { setSetupError(""); setSetupAttempt((attempt) => attempt + 1); }}>Try again <span>→</span></button>
         </> : <>
-          <span className="panel-kicker">WELCOME BACK</span><h2>Sign in to BuildTrack</h2><p className="signin-description">Choose your workspace role and enter your details.</p>
+          <span className="panel-kicker">WELCOME BACK</span><h2>Sign in to BuildTrack</h2><p className="signin-description">Enter your email and password to open your workspace.</p>
           {setupSuccess && <div className="setup-success" role="status">{setupSuccess}</div>}
           {authChallenge ? <>
             <span className="panel-kicker">TWO-STEP VERIFICATION</span>
             <h2>{authChallenge.phoneRequired ? "Add your phone number" : "Check your phone"}</h2>
             <p className="signin-description">{authChallenge.phoneRequired
-              ? "A phone number is required to secure your account. Include your country code."
+              ? "A 10-digit India mobile number is required to secure your account."
               : `Enter the verification code sent to ${authChallenge.phoneHint}.`}</p>
             {authChallenge.phoneRequired
               ? <form onSubmit={sendVerificationCode}>
-                <label>Phone number<input type="tel" autoComplete="tel" inputMode="tel" value={enrollmentPhone} onChange={(event) => setEnrollmentPhone(event.target.value)} placeholder="+91 98765 43210" required /></label>
+                <label>Phone number<div className="phone-input-prefix"><span>+91</span><input type="tel" autoComplete="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} value={enrollmentPhone} onChange={(event) => setEnrollmentPhone(event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="98765 43210" required /></div></label>
                 {error && <div className="signin-error" role="alert">{error}</div>}
                 <button className="button button-primary signin-submit" type="submit" disabled={submitting}>{submitting ? "Sending code..." : "Send verification code"} <span>→</span></button>
               </form>
@@ -250,7 +243,6 @@ export function SignInPage() {
               </form>}
           </> : <>
             <form onSubmit={signIn}>
-              <label>Sign in as<select value={role} onChange={(event) => selectRole(event.target.value as RoleId)}><option value="owner">Owner</option><option value="employee">Employee</option><option value="client">Client</option></select></label>
               <label>Email address<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" required /></label>
               <label>Password<PasswordInput autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required /></label>
               {error && <div className="signin-error" role="alert">{error}</div>}

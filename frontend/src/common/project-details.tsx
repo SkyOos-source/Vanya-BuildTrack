@@ -85,7 +85,7 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
       <div><span className="panel-kicker">PROJECT DETAILS</span><h2 className="list-title">{project.name}</h2></div>
       <div className="toolbar-actions">
         {role === "Client" && project.progress >= 100 && <button className="button button-primary" onClick={() => setShowCompletionReport(true)}>Get the project report</button>}
-        {role === "Owner" && onEdit && <button className="button button-outline" onClick={() => onEdit(project)}>Edit details</button>}
+        {(role === "Owner" || role === "ProjectManager") && onEdit && <button className="button button-outline" onClick={() => onEdit(project)}>Edit details</button>}
         <button className="button button-outline" onClick={onBack}>← Back to projects</button>
       </div>
     </div>
@@ -103,7 +103,7 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
           ? ownerContacts.map((owner, index) => <div key={owner.id || `${owner.name}-${index}`}><span>Owner contact</span><strong>{owner.name}</strong>{owner.phone && <a href={`tel:${owner.phone}`}>{owner.phone}</a>}</div>)
           : <div><span>Owner contact</span><strong>{ownerContactsError ? "Unable to load owner contacts" : ownerContacts === null ? "Loading owner contacts…" : "No owner contacts available"}</strong>{ownerContactsError && <small role="alert">{ownerContactsError}</small>}</div>
         : <div><span>Client</span><strong>{assignedClientName}</strong>{assignedClient?.phone && <a href={`tel:${assignedClient.phone}`}>{assignedClient.phone}</a>}</div>}
-      {role === "Owner" && <div>
+      {(role === "Owner" || role === "ProjectManager") && <div>
         <span>Assigned engineer</span>
         <strong>{project.engineer !== "Unassigned" ? project.engineer : "No engineer assigned"}</strong>
         {assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}

@@ -17,6 +17,14 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
     { label: "Expenses", icon: "expenses" }, { label: "Attendance", icon: "attendance" },
     { label: "Site Visits", icon: "site-visits" }
   ],
+  ProjectManager: [
+    { label: "Dashboard", icon: "dashboard" }, { label: "Projects & Sites", icon: "projects" },
+    { label: "Work Progress", icon: "progress" }, { label: "Materials", icon: "materials" },
+    { label: "Expenses", icon: "expenses" }, { label: "Payments", icon: "payments" },
+    { label: "Quotations", icon: "quotations" }, { label: "People", icon: "people" },
+    { label: "Attendance", icon: "attendance" }, { label: "Reports", icon: "reports" },
+    { label: "Site Visits", icon: "site-visits" }, { label: "Feedback", icon: "feedback" }
+  ],
   Client: [
     { label: "Dashboard", icon: "dashboard" }, { label: "My Projects", icon: "projects" },
     { label: "Work Progress", icon: "progress" }, { label: "Quotations", icon: "quotations" },
@@ -71,7 +79,7 @@ export function readSession(): SessionUser | null {
   try {
     const user = JSON.parse(session) as SessionUser;
     if (!user || typeof user.name !== "string" || typeof user.email !== "string" ||
-      (user.role !== "owner" && user.role !== "employee" && user.role !== "client")) {
+      (user.role !== "owner" && user.role !== "employee" && user.role !== "project_manager" && user.role !== "client")) {
       localStorage.removeItem("buildtrack-session");
       return null;
     }
@@ -87,11 +95,11 @@ export function readSession(): SessionUser | null {
 }
 
 export function roleName(role: RoleId): Role {
-  return role === "owner" ? "Owner" : role === "employee" ? "Employee" : "Client";
+  return role === "owner" ? "Owner" : role === "employee" ? "Employee" : role === "project_manager" ? "ProjectManager" : "Client";
 }
 
 export function roleId(role: Role): RoleId {
-  return role === "Owner" ? "owner" : role === "Employee" ? "employee" : "client";
+  return role === "Owner" ? "owner" : role === "Employee" ? "employee" : role === "ProjectManager" ? "project_manager" : "client";
 }
 
 export function rolePath(role: RoleId): string {

@@ -18,6 +18,7 @@ export default function App() {
         <Route path="/profile/:id" element={<PublicProfilePage />} />
         <Route path="/admin/*" element={<PortalRoute role="owner" />} />
         <Route path="/employee/*" element={<PortalRoute role="employee" />} />
+        <Route path="/project_manager/*" element={<PortalRoute role="project_manager" />} />
         <Route path="/client/*" element={<PortalRoute role="client" />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

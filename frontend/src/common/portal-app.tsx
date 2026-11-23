@@ -120,7 +120,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [modal, setModal] = useState<RecordModalType | null>(null);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [modalProject, setModalProject] = useState<Project | null>(null);
-  const [personCreationRole, setPersonCreationRole] = useState<"Site Engineer" | "Client">("Site Engineer");
+  const [personCreationRole, setPersonCreationRole] = useState<"Site Engineer" | "Client" | "Project Manager">("Site Engineer");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [attendanceReviewNotifications, setAttendanceReviewNotifications] = useState<NotificationItem[]>([]);
@@ -129,7 +129,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
-  const createPerson = (personRole: "Site Engineer" | "Client") => {
+  const createPerson = (personRole: "Site Engineer" | "Client" | "Project Manager") => {
     setPersonCreationRole(personRole);
     setModal("person");
   };
@@ -904,7 +904,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         ? `/api/projects/${editingProject.id}`
         : "/api/projects";
       const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "payment" ? "payments" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
-      const progressAttachments = modal === "progress" ? await readFileDataUrls(form.getAll("attachments")) : undefined;
+      const progressFiles = modal === "progress"
+        ? [...form.getAll("attachments"), ...form.getAll("cameraAttachments")].filter((file): file is File => file instanceof File && file.size > 0)
+        : [];
+      const progressAttachments = modal === "progress" ? await readFileDataUrls(progressFiles) : undefined;
       const attachment = modal === "expense" || modal === "expense-log" ? await readFileDataUrl(form.get("attachment")) : progressAttachments?.[0];
       const proofImage = modal === "payment" && form.get("method") === "Online" ? await readFileDataUrl(form.get("proofImage")) : undefined;
       if (modal === "payment" && form.get("method") === "Online" && !proofImage) {
@@ -1460,7 +1463,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     Timeline: "Follow project milestones and site updates.",
     Feedback: "Rate your experience on Google."
   };
-  const pageTitle = page === "Dashboard" ? `${role} Dashboard` : page;
+  const roleDisplayName = role === "ProjectManager" ? "Project Manager" : role;
+  const pageTitle = page === "Dashboard" ? `${roleDisplayName} Dashboard` : page;
   const featurePageProps = {
     currentUser,
     currentUserEmail: userEmail,
@@ -1494,7 +1498,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   };
 
   return (
-    <div className="app-frame">
+    <div className={`app-frame app-frame-${roleId(role)}`}>
       <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
         <Link className="brand" to={rolePath(roleId(role))} aria-label="Vanya BuildTrack home">
           <span className="brand-mark"><BuildingIcon /></span>
@@ -1537,16 +1541,17 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
         <div className={`content-area ${page === "Settings" || page === "Settings & Backup" ? "content-area-settings" : ""}`}>
           <section className="page-heading">
-            <div><div className="eyebrow"><span className="eyebrow-dot" /> BUILDTRACK / {role.toUpperCase()}</div><h1>{pageTitle}</h1><p>{pageDescription[page] || "Your construction workspace at a glance."}</p></div>
+            <div><div className="eyebrow"><span className="eyebrow-dot" /> BUILDTRACK / {roleDisplayName.toUpperCase()}</div><h1>{pageTitle}</h1><p>{pageDescription[page] || "Your construction workspace at a glance."}</p></div>
             <div className="heading-actions">
               {role === "Owner" && page === "Dashboard" && <button className="button button-primary" onClick={() => setModal("project")}><span>＋</span> New project</button>}
-              {role === "Employee" && page === "Dashboard" && <button className="button button-primary" onClick={() => setModal("progress")}><span>＋</span> Add update</button>}
+              {(role === "Employee" || role === "ProjectManager") && page === "Dashboard" && <button className="button button-primary" onClick={() => setModal("progress")}><span>＋</span> Add update</button>}
               {role === "Client" && page === "Dashboard" && <button className="button button-secondary" onClick={() => navigateToPage("Quotations")}>View quotations <span>↗</span></button>}
             </div>
           </section>
 
           {page === "Profile" && role !== "Client" && <AccountProfilePage role={role} email={userEmail} onProfileImageChange={setProfileImage} />}
           {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
+          {page === "Dashboard" && role === "ProjectManager" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
           {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} />}
           {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} currentUserEmail={userEmail} onNavigate={navigateToPage} onQuote={updateQuote} />}
           {page === "Financial Overview" && role === "Owner" && <OwnerFinancialReport data={data} onBack={() => navigateToPage("Dashboard")} />}

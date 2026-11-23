@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
 import type { Expense, ExpenseAllocation, MaterialAllocation, Person, Project, RecordModalType, Role } from "./types";
-import { formatCurrency } from "./utils";
+import { captureCameraPhoto, formatCurrency } from "./utils";
 
 export function ProjectCards({ projects, onOpen }: { projects: Project[]; onOpen: (project: Project) => void }) {
   if (!projects.length) return <div className="inline-empty">No projects match this search. Try another name or status.</div>;
@@ -113,9 +113,10 @@ export function DateInput({ value, defaultValue, onChange, onClear, ...props }: 
   </span>;
 }
 
-export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", initialProject, projects, projectsLoading, projectsLoadError, people, peopleLoading, peopleLoadError, expenseAllocations, materialAllocations, onClose, onSubmit }: { modal: RecordModalType; role: Role; initialPersonRole?: "Site Engineer" | "Client"; initialProject?: Project; projects: Project[]; projectsLoading: boolean; projectsLoadError: string; people: Person[]; peopleLoading: boolean; peopleLoadError: string; expenseAllocations: ExpenseAllocation[]; materialAllocations: MaterialAllocation[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", initialProject, projects, projectsLoading, projectsLoadError, people, peopleLoading, peopleLoadError, expenseAllocations, materialAllocations, onClose, onSubmit }: { modal: RecordModalType; role: Role; initialPersonRole?: "Site Engineer" | "Client" | "Project Manager"; initialProject?: Project; projects: Project[]; projectsLoading: boolean; projectsLoadError: string; people: Person[]; peopleLoading: boolean; peopleLoadError: string; expenseAllocations: ExpenseAllocation[]; materialAllocations: MaterialAllocation[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const personRole = initialPersonRole;
   const visitEngineers = people.filter((person) => person.role === "Site Engineer");
+  const projectManagers = people.filter((person) => person.role === "Project Manager");
   const selectableAllocations = expenseAllocations;
   const selectableMaterialAllocations = materialAllocations.filter((allocation) => allocation.remainingQuantity > 0);
   const defaultVisitEngineer = visitEngineers.find((person) => person.name === projects[0]?.engineer)?.name ?? visitEngineers[0]?.name ?? projects[0]?.engineer ?? "";
@@ -126,6 +127,13 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
   const [clientProject, setClientProject] = useState("");
   const [selectedAllocation, setSelectedAllocation] = useState(selectableAllocations[0]?.id ?? "");
   const [selectedMaterialAllocation, setSelectedMaterialAllocation] = useState(selectableMaterialAllocations[0]?.id ?? "");
+  const [progressCameraOpen, setProgressCameraOpen] = useState(false);
+  const [progressCameraReady, setProgressCameraReady] = useState(false);
+  const [progressCameraStream, setProgressCameraStream] = useState<MediaStream | null>(null);
+  const [progressCameraError, setProgressCameraError] = useState("");
+  const [progressCameraFiles, setProgressCameraFiles] = useState<File[]>([]);
+  const progressCameraVideoRef = useRef<HTMLVideoElement>(null);
+  const progressCameraInputRef = useRef<HTMLInputElement>(null);
   const projectSelectorRequired = ["material", "material-allocation", "material-request", "quote", "expense", "expense-log", "payment", "progress", "visit"].includes(modal);
   const projectSelectionUnavailable = projectSelectorRequired && (projectsLoading || projects.length === 0);
   const engineerSelectionUnavailable = (modal === "project" || modal === "expense-allocation") && (peopleLoading || visitEngineers.length === 0);
@@ -145,6 +153,77 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
       setSelectedMaterialAllocation(selectableMaterialAllocations[0]?.id ?? "");
     }
   }, [selectableMaterialAllocations, selectedMaterialAllocation]);
+  useEffect(() => {
+    const video = progressCameraVideoRef.current;
+    if (progressCameraOpen && progressCameraStream && video) {
+      video.srcObject = progressCameraStream;
+      void video.play().then(() => setProgressCameraReady(true)).catch(() => setProgressCameraError("Could not start the camera preview."));
+    }
+  }, [progressCameraOpen, progressCameraStream]);
+  useEffect(() => () => {
+    progressCameraStream?.getTracks().forEach((track) => track.stop());
+  }, [progressCameraStream]);
+
+  const openProgressCamera = async () => {
+    setProgressCameraError("");
+    setProgressCameraReady(false);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setProgressCameraError("Camera access is unavailable. Open this page over HTTPS and allow camera access.");
+      return;
+    }
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } },
+          audio: false
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
+      }
+      setProgressCameraStream(stream);
+      setProgressCameraOpen(true);
+    } catch (error) {
+      setProgressCameraError(error instanceof DOMException && error.name === "NotAllowedError"
+        ? "Camera permission was denied. Allow camera access in your browser settings."
+        : "Could not open the camera. Check that it is available and not used by another app.");
+    }
+  };
+
+  const closeProgressCamera = () => {
+    progressCameraStream?.getTracks().forEach((track) => track.stop());
+    setProgressCameraStream(null);
+    setProgressCameraOpen(false);
+    setProgressCameraReady(false);
+  };
+
+  const takeProgressPhoto = async () => {
+    const video = progressCameraVideoRef.current;
+    if (!progressCameraReady || !video) {
+      setProgressCameraError("Camera is not ready yet. Please wait a moment.");
+      return;
+    }
+    if (progressCameraFiles.length >= 5) {
+      setProgressCameraError("You can add up to 5 progress photos.");
+      return;
+    }
+    try {
+      const captured = await captureCameraPhoto(video, "progress");
+      const nextFiles = [...progressCameraFiles, captured.file];
+      setProgressCameraFiles(nextFiles);
+      if (progressCameraInputRef.current) {
+        const transfer = new DataTransfer();
+        nextFiles.forEach((file) => transfer.items.add(file));
+        progressCameraInputRef.current.files = transfer.files;
+      }
+      setProgressCameraError("");
+    } catch (error) {
+      setProgressCameraError(error instanceof Error ? error.message : "Could not take a photo.");
+    }
+  };
   const title = modal === "project" ? (initialProject ? "Edit project" : "Create a project") : modal === "quote" ? "New quotation" : modal === "progress" ? "Daily progress update" : modal === "payment" ? "Record a project payment" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log an expense" : modal === "expense-allocation" ? "Assign funds to an engineer" : modal === "visit" ? "Schedule a site visit" : modal === "material" ? "Record site stock" : modal === "material-allocation" ? "Assign materials to a site" : modal === "material-log" ? "Log material use" : modal === "material-request" ? "Request materials" : personRole === "Client" ? "Invite client" : "Invite engineer";
   const label = modal === "project" ? "Project name" : modal === "quote" ? "Quotation title" : modal === "progress" ? "What did you complete today?" : modal === "expense" || modal === "expense-log" ? "Expense description" : modal === "visit" ? "Visit purpose" : modal === "material" || modal === "material-request" ? "Material" : "Full name";
   return <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-heading"><div><span className="panel-kicker">BUILDTRACK WORKSPACE</span><h2 id="modal-title">{title}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" onClick={onClose}>×</button></div><form onSubmit={onSubmit}>
@@ -161,10 +240,10 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
     }}>{projects.length === 0 && <option value="" disabled>{projectOptionMessage}</option>}{projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>{modal === "material-allocation" && <small>Assigned to the selected project's site engineer.</small>}{projectsLoadError && !projectsLoading && <small role="alert">{projectsLoadError}</small>}</label>}
     {modal === "progress" && <label>Site photo stage<select name="stage" defaultValue="Progress"><option value="Start">Project start</option><option value="Progress">Progress update</option><option value="Completion">Project completion</option></select></label>}
     {modal === "progress" && <label>Overall project completion (%)<input name="progress" type="number" min="0" max="100" step="1" placeholder="Optional, from 0 to 100" /></label>}
-    {modal === "project" && <><label>Project location<input name="site" defaultValue={initialProject?.site} required placeholder="e.g. Whitefield, Bengaluru" /></label><label>Assign engineer<select name="engineer" required disabled={peopleLoading || visitEngineers.length === 0} defaultValue={initialProject?.engineer ?? ""}><option value="" disabled>{peopleLoading ? "Loading engineers…" : peopleLoadError ? "Could not load engineers" : "Select a site engineer"}</option>{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select>{peopleLoadError && !peopleLoading && <small role="alert">{peopleLoadError}</small>}</label><label>Cover image (optional)<input name="coverImage" type="file" accept="image/*" /></label></>}
+    {modal === "project" && <><label>Project location<input name="site" defaultValue={initialProject?.site} required placeholder="e.g. Whitefield, Bengaluru" /></label><label>Assign engineer<select name="engineer" required disabled={peopleLoading || visitEngineers.length === 0} defaultValue={initialProject?.engineer ?? ""}><option value="" disabled>{peopleLoading ? "Loading engineers…" : peopleLoadError ? "Could not load engineers" : "Select a site engineer"}</option>{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select>{peopleLoadError && !peopleLoading && <small role="alert">{peopleLoadError}</small>}</label><label>Assign project manager (optional)<select name="projectManager" defaultValue={initialProject?.projectManager ?? ""}><option value="">No project manager</option>{projectManagers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Cover image (optional)<input name="coverImage" type="file" accept="image/*" /></label></>}
     {modal === "expense-allocation" && <><label>Site engineer<select name="engineer" required disabled={peopleLoading || visitEngineers.length === 0} defaultValue=""><option value="" disabled>{peopleLoading ? "Loading engineers…" : peopleLoadError ? "Could not load engineers" : "Select an engineer"}</option>{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select>{peopleLoadError && !peopleLoading && <small role="alert">{peopleLoadError}</small>}</label><label>Amount (INR)<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" /></label></>}
     {modal === "quote" && <label>Upload quotation<input name="quotationFile" type="file" accept="application/pdf,.pdf" /></label>}
-    {modal === "person" && <><input type="hidden" name="role" value={personRole} /><label>Full name<input name="name" required /></label><label>Email<input name="email" type="email" required /></label><label>Phone number<input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210" required /><small>Include the country code. This number will receive sign-in verification codes.</small></label><label>{personRole === "Client" ? "Client password" : "Temporary password"}<PasswordInput name="password" autoComplete="new-password" minLength={8} required /><small>At least 8 characters. Share it securely with the {personRole === "Client" ? "client" : "employee"}.</small></label>{personRole === "Client" && <label>Assign project<select name="project" required disabled={projectsLoading || projects.length === 0} value={clientProject} onChange={(event) => setClientProject(event.currentTarget.value)}><option value="" disabled>{projects.length === 0 ? projectOptionMessage : "Select a project"}</option>{projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>{projectsLoadError && !projectsLoading && <small role="alert">{projectsLoadError}</small>}</label>}</>}
+    {modal === "person" && <><input type="hidden" name="role" value={personRole} /><label>Full name<input name="name" required /></label><label>Email<input name="email" type="email" required /></label><label>Phone number<div className="phone-input-prefix"><span>+91</span><input name="phone" type="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} placeholder="98765 43210" required /></div></label><label>{personRole === "Client" ? "Client password" : "Temporary password"}<PasswordInput name="password" autoComplete="new-password" minLength={8} required /><small>At least 8 characters. Share it securely with the account holder.</small></label>{personRole === "Client" && <label>Assign project<select name="project" required disabled={projectsLoading || projects.length === 0} value={clientProject} onChange={(event) => setClientProject(event.currentTarget.value)}><option value="" disabled>{projects.length === 0 ? projectOptionMessage : "Select a project"}</option>{projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>{projectsLoadError && !projectsLoading && <small role="alert">{projectsLoadError}</small>}</label>}</>}
     {modal === "material" && <><label>Material name<input name="material" required placeholder="e.g. M25 ready-mix concrete" /></label><label>Received quantity<input name="received" required placeholder="e.g. 12 m³" /></label><label>Used quantity<input name="used" defaultValue="0" /></label><label>Remaining stock<input name="stock" placeholder="Defaults to received quantity" /></label></>}
     {modal === "material-allocation" && <><label>Material name<input name="material" required placeholder="e.g. M25 ready-mix concrete" /></label><label>Quantity<input name="quantity" type="number" min="0.001" step="0.001" required placeholder="e.g. 12" /></label><label>Unit<input name="unit" placeholder="e.g. bags, m³, kg" /></label></>}
     {modal === "material-request" && <><label>Requested quantity<input name="quantity" required placeholder="e.g. 12 m³" /></label><label>Reason or site need<textarea name="note" rows={3} placeholder="Optional details for the owner" /></label></>}
@@ -173,7 +252,7 @@ export function RecordModal({ modal, role, initialPersonRole = "Site Engineer", 
     {modal === "payment" && <><label>Payment method<select name="method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.currentTarget.value === "Online" ? "Online" : "Cash")}><option value="Cash">Cash</option><option value="Online">Online</option></select></label>{paymentMethod === "Online" && <label>Payment proof image<input name="proofImage" type="file" accept="image/*" required /><small>Upload a screenshot or photo of the online payment confirmation.</small></label>}<label>Note (optional)<input name="note" maxLength={500} placeholder="e.g. First instalment" /></label></>}
     {modal === "expense-log" && role === "Employee" && <input type="hidden" name="allocationId" value={selectedAllocation} />}
     {modal === "visit" && <><label>Engineer<select name="engineer" required value={visitEngineer} onChange={(event) => setVisitEngineer(event.currentTarget.value)}>{visitEngineer && !visitEngineers.some((person) => person.name === visitEngineer) && <option value={visitEngineer}>{visitEngineer}</option>}{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Visit date<DateInput name="date" required /></label></>}
-    {modal === "progress" && <label>Progress photos (up to 5)<input name="attachments" type="file" accept="image/*" multiple /></label>}
+    {modal === "progress" && <div className="progress-photo-options"><div className="progress-camera-option"><span>Take photos with camera</span><button className="button button-outline" type="button" onClick={() => void openProgressCamera()}>Open camera</button>{progressCameraOpen && <div className="progress-camera-preview"><video ref={progressCameraVideoRef} muted playsInline /><div className="progress-camera-actions"><button className="button button-primary" type="button" disabled={!progressCameraReady} onClick={() => void takeProgressPhoto()}>Take photo</button><button className="button button-outline" type="button" onClick={closeProgressCamera}>Close camera</button></div>{progressCameraFiles.length > 0 && <small>{progressCameraFiles.length} photo(s) captured</small>}</div>}{progressCameraError && <small role="alert">{progressCameraError}</small>}<input ref={progressCameraInputRef} name="cameraAttachments" type="file" accept="image/*" multiple hidden /></div><label>Upload photos (up to 5)<input name="attachments" type="file" accept="image/*" multiple /></label></div>}
     {(modal === "expense" || modal === "expense-log") && <label>Expense description<input name="description" required placeholder="e.g. Concrete delivery · 8 m³" /></label>}
     <div className="modal-actions"><button className="button button-outline" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={projectSelectionUnavailable || engineerSelectionUnavailable || allocationSelectionUnavailable || modal === "person" && personRole === "Client" && (projectsLoading || projects.length === 0)}>{modal === "progress" ? "Submit update" : modal === "payment" ? "Save payment" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log expense" : modal === "expense-allocation" ? "Assign funds" : modal === "material-request" ? "Send material request" : modal === "material-allocation" ? "Assign materials" : modal === "material-log" ? "Log material use" : modal === "visit" ? "Schedule visit" : modal === "quote" ? "Save quotation" : modal === "material" ? "Save material" : modal === "person" ? personRole === "Client" ? "Invite client" : "Invite engineer" : modal === "project" && initialProject ? "Save changes" : "Create project"}</button></div></form></section></div>;
 }

@@ -107,6 +107,9 @@
 					"status": {
 						"type": "string"
 					},
+					"projectManager": {
+						"type": "string"
+					},
 					"engineer": {
 						"type": "string"
 					},
@@ -213,7 +216,8 @@
 						"type": "string",
 						"enum": [
 							"Client",
-							"Site Engineer"
+							"Site Engineer",
+							"Project Manager"
 						]
 					},
 					"name": {

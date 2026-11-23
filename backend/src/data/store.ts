@@ -8,6 +8,7 @@ export type Project = {
   site: string;
   client: string;
   engineer: string;
+  projectManager?: string;
   status: string;
   progress: number;
   quotationAmount?: number;
@@ -103,13 +104,13 @@ export type AttendanceLeaveRequest = { id: string; engineer: string; date: strin
 export type AttendanceRegularizationRequest = { id: string; attendanceId: string; engineer: string; date: string; capturedAt: string; reason: string; requestedAt: string; status: "Pending review" | "Approved" | "Declined"; reviewedBy?: string; reviewedAt?: string };
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
-export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string; phoneVerified?: boolean; image?: string };
+export type Person = { id: string; name: string; role: "Client" | "Site Engineer" | "Project Manager"; project: string; email: string; phone?: string; phoneVerified?: boolean; image?: string };
 export type OwnerProfile = { phone: string; phoneVerified?: boolean; image: string };
 export const ownerProfiles: Record<string, OwnerProfile> = {};
 export type OwnerAccount = { email: string; name: string; salt: string; passwordHash: string };
 export type PushSubscriptionRecord = { endpoint: string; keys: { p256dh: string; auth: string }; role: AccountRole; userName: string; userEmail?: string };
 export type EmployeeCredential = { email: string; salt: string; passwordHash: string };
-export type AccountRole = "owner" | "employee" | "client";
+export type AccountRole = "owner" | "employee" | "project_manager" | "client";
 
 export const projects: Project[] = [];
 
@@ -183,6 +184,7 @@ export function readProject(value: unknown, id: string): Project | null {
     site: readText(input.site) ?? "New project site",
     client: readText(input.client) ?? "Unassigned",
     engineer: readText(input.engineer) ?? "Unassigned",
+    projectManager: readText(input.projectManager) ?? "Unassigned",
     status: readText(input.status) ?? "Planning",
     progress,
     quotationAmount,
@@ -247,7 +249,7 @@ export function readAttendanceProof(value: unknown): AttendanceProof | null {
 }
 
 export function isAccountRole(value: unknown): value is AccountRole {
-  return value === "owner" || value === "employee" || value === "client";
+  return value === "owner" || value === "employee" || value === "project_manager" || value === "client";
 }
 
 function hashOwnerAccounts(accounts: Array<{ email: string; name: string; password: string }>): OwnerAccount[] {
@@ -521,8 +523,8 @@ export function deleteEmployeeCredential(email: string) {
   if (index >= 0) employeeCredentials.splice(index, 1);
 }
 
-export function updatePersonCredentialEmail(role: "Client" | "Site Engineer", currentEmail: string, nextEmail: string) {
-  const credentials = role === "Site Engineer" ? employeeCredentials : clientCredentials;
+export function updatePersonCredentialEmail(role: "Client" | "Site Engineer" | "Project Manager", currentEmail: string, nextEmail: string) {
+  const credentials = role === "Client" ? clientCredentials : employeeCredentials;
   const credential = credentials.find((item) => item.email === currentEmail);
   if (credential) credential.email = nextEmail;
 }

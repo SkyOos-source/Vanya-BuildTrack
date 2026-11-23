@@ -104,7 +104,8 @@ button { color: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 
-.app-frame { min-height: 100vh; }
+.app-frame { min-height: 100vh; font-family: "DM Sans", sans-serif; }
+.app-frame h1, .app-frame h2, .app-frame h3, .app-frame strong { font-family: "Manrope", "DM Sans", sans-serif; }
 .sidebar { position: fixed; z-index: 20; inset: 0 auto 0 0; display: flex; width: 248px; flex-direction: column; border-right: 1px solid var(--border); background: #fff; }
 .brand { display: flex; height: 76px; align-items: center; gap: 11px; padding: 0 22px; border-bottom: 1px solid var(--border); color: var(--charcoal); text-decoration: none; }
 .brand-mark { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; background: transparent; }
@@ -616,6 +617,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .feedback-form label, .modal-card label { display: grid; gap: 6px; color: #514b45; font-size: 9px; font-weight: 600; }
 .feedback-form select, .feedback-form textarea, .modal-card input, .modal-card select { width: 100%; padding: 9px 10px; border: 1px solid #e9e4de; border-radius: 5px; background: #fff; color: #48423c; font-size: 10px; }
 .feedback-form textarea { resize: vertical; }
+.progress-photo-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.progress-camera-option { display: grid; align-content: start; gap: 6px; color: #514b45; font-size: 9px; font-weight: 600; }
+.progress-camera-option > .button { justify-self: start; }
+.progress-camera-preview { display: grid; gap: 8px; margin-top: 4px; }
+.progress-camera-preview video { width: 100%; max-height: 220px; border-radius: 6px; background: #211e1c; object-fit: cover; }
+.progress-camera-actions { display: flex; gap: 8px; }
+.phone-input-prefix { display: flex; align-items: center; }
+.phone-input-prefix > span { display: flex; align-self: stretch; align-items: center; padding: 0 10px; border: 1px solid #e9e4de; border-right: 0; border-radius: 5px 0 0 5px; background: #f7f4ef; color: #514b45; font-size: 10px; font-weight: 700; }
+.phone-input-prefix > input { border-radius: 0 5px 5px 0 !important; }
 .rating-stars { display: flex; gap: 3px; }
 .rating-stars button { padding: 0 3px; border: 0; background: transparent; color: #d6c9b7; cursor: pointer; font-size: 23px; }
 .rating-stars button.star-selected { color: #e9952c; }

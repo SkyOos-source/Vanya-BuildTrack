@@ -6,7 +6,7 @@ type PublicProfile = {
   id: string;
   name: string;
   email: string;
-  role: "Owner" | "Site Engineer" | "Client";
+  role: "Owner" | "Site Engineer" | "Project Manager" | "Client";
   phone: string;
   image: string | null;
 };
@@ -26,7 +26,7 @@ function findProfile(role: string, email: string): PublicProfile | undefined {
     };
   }
 
-  const personRole = role === "employee" ? "Site Engineer" : role === "client" ? "Client" : null;
+  const personRole = role === "employee" ? "Site Engineer" : role === "project_manager" ? "Project Manager" : role === "client" ? "Client" : null;
   if (!personRole) return undefined;
   const person = people.find((item) => item.email.toLowerCase() === normalizedEmail && item.role === personRole);
   if (!person) return undefined;

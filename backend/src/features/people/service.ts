@@ -4,9 +4,10 @@ import { failure, result } from "../shared";
 export const listPeople = () => people;
 
 function normalizePhone(value: unknown) {
-  if (typeof value !== "string" || !/^\+?[\d\s().-]+$/.test(value.trim())) return null;
-  const phone = value.trim().replace(/[\s().-]/g, "");
-  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : null;
+  if (typeof value !== "string") return null;
+  const digits = value.trim().replace(/[\s().-]/g, "").replace(/\D/g, "");
+  if (!/^\d{10}$/.test(digits)) return null;
+  return `+91${digits}`;
 }
 
 export function createPerson(body: any) {
@@ -17,12 +18,13 @@ export function createPerson(body: any) {
   const phone = normalizePhone(body?.phone);
   const role = body?.role;
   if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-    (role !== "Client" && role !== "Site Engineer") || (role === "Client" && !project) ||
+    (role !== "Client" && role !== "Site Engineer" && role !== "Project Manager") ||
+    (role === "Client" && !project) ||
     !password || password.length < 8 || !phone) {
-    return failure(400, "Enter valid name, email, and international phone number (+country code), assign clients to a project, and provide a password of at least 8 characters.");
+    return failure(400, "Enter valid name, email, and a 10-digit India mobile number, assign clients to a project, and provide a password of at least 8 characters.");
   }
   if (role === "Client" && !projects.some((item) => item.name === project)) {
-    return failure(400, "Select an existing project to assign to this client.");
+    return failure(400, "Select an existing project to assign to this account.");
   }
   if (people.some((person) => person.role === role && person.name.toLowerCase() === name.toLowerCase())) {
     return failure(409, "A person with this name already exists for this role.");
@@ -36,7 +38,7 @@ export function createPerson(body: any) {
     if (assignedProject) assignedProject.client = name;
   }
   people.unshift(person);
-  if (role === "Site Engineer") createEmployeeCredential(email.toLowerCase(), password);
+  if (role === "Site Engineer" || role === "Project Manager") createEmployeeCredential(email.toLowerCase(), password);
   else createClientCredential(email.toLowerCase(), password);
   return result({ record: person }, 201);
 }
@@ -58,7 +60,7 @@ export function updatePerson(id: string, body: any) {
     return failure(400, "Select an existing project or clear the client's project assignment.");
   }
   if (phoneInput && !phone) {
-    return failure(400, "Enter a valid international phone number (+country code).");
+    return failure(400, "Enter a valid 10-digit India mobile number.");
   }
   if (people.some((item) => item.id !== id && item.email.toLowerCase() === email.toLowerCase())) {
     return failure(409, "A person with this email already exists.");
@@ -95,6 +97,18 @@ export function updatePerson(id: string, body: any) {
         if (assignedProject) assignedProject.client = name;
       }
     }
+  } else if (person.role === "Project Manager") {
+    projects.forEach((project) => { if (project.projectManager === previousName) project.projectManager = name; });
+    if (projectProvided && nextProject) {
+        if (previousProject !== nextProject) {
+          projects.forEach((project) => {
+            if (project.name === previousProject && project.projectManager === name) project.projectManager = "Unassigned";
+          });
+        }
+        person.project = nextProject;
+        const assignedProject = projects.find((project) => project.name === nextProject);
+        if (assignedProject) assignedProject.projectManager = name;
+    }
   } else {
     projects.forEach((project) => { if (project.engineer === previousName) project.engineer = name; });
     siteVisits.forEach((visit) => { if (visit.engineer === previousName) visit.engineer = name; });
@@ -113,7 +127,8 @@ export function deletePerson(id: string) {
   const index = people.findIndex((person) => person.id === id);
   if (index < 0) return failure(404, "Person not found.");
   const [record] = people.splice(index, 1);
-  if (record.role === "Site Engineer") deleteEmployeeCredential(record.email.toLowerCase());
-  else deleteClientCredential(record.email.toLowerCase());
+  if (record.role === "Site Engineer" || record.role === "Project Manager") {
+    deleteEmployeeCredential(record.email.toLowerCase());
+  } else deleteClientCredential(record.email.toLowerCase());
   return result({ record });
 }

@@ -199,7 +199,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
 
   useEffect(() => {
     let active = true;
-    const query = role === "Employee" ? `?engineer=${encodeURIComponent(currentUser)}` : "";
+    const query = role === "Employee" || role === "ProjectManager" ? `?engineer=${encodeURIComponent(currentUser)}` : "";
     const loadRequests = async () => {
       try {
         const response = await apiFetch(`/api/attendance/regularization-requests${query}`);
@@ -219,7 +219,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
 
   useEffect(() => {
     let active = true;
-    const query = role === "Employee" ? `?engineer=${encodeURIComponent(currentUser)}` : "";
+    const query = role === "Employee" || role === "ProjectManager" ? `?engineer=${encodeURIComponent(currentUser)}` : "";
     const loadLeaveRequests = async () => {
       try {
         const response = await apiFetch(`/api/attendance/leave-requests${query}`);
@@ -482,11 +482,11 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   );
   const engineers = [...new Set(data.attendance.map((record) => record.engineer))].sort((left, right) => left.localeCompare(right));
   const history = data.attendance
-    .filter((record) => role === "Owner" || record.engineer === currentUser)
+    .filter((record) => role === "Owner" || role === "ProjectManager" || record.engineer === currentUser)
     .filter((record) => !historyDate || record.date === historyDate);
 
   return <div className="feature-page">
-    {role === "Employee" && <section className="panel feature-panel attendance-capture-panel">
+    {(role === "Employee" || role === "ProjectManager") && <section className="panel feature-panel attendance-capture-panel">
       <div className="attendance-today-card">
         <div><strong>Today: {new Date().toLocaleDateString()}</strong>
           <span>{todayIsOff && !currentRecord?.checkIn
@@ -530,7 +530,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
 
     {role !== "Client" && <section className="panel feature-panel attendance-leave-requests-panel">
       <div className="list-toolbar"><div><span className="panel-kicker">{role === "Owner" ? "ENGINEER REQUESTS" : "TIME OFF"}</span><h2 className="list-title">{role === "Owner" ? "Engineer leave requests" : "Request a day off"}</h2></div></div>
-      {role === "Employee" && <form className="attendance-leave-request-form" onSubmit={(event) => void submitLeaveRequest(event)}>
+      {(role === "Employee" || role === "ProjectManager") && <form className="attendance-leave-request-form" onSubmit={(event) => void submitLeaveRequest(event)}>
         <label>Day off<DateInput name="date" min={today} defaultValue={today} required /></label>
         <label>Reason<textarea name="reason" maxLength={500} rows={2} placeholder="Why do you need this day off?" required /></label>
         <button className="button button-primary" type="submit" disabled={leaveRequestBusy}>{leaveRequestBusy ? "Submitting…" : "Submit leave request"}</button>
@@ -646,7 +646,7 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
         requests={regularizationRequests}
         now={now}
         owner={role === "Owner"}
-        employee={role === "Employee"}
+        employee={role === "Employee" || role === "ProjectManager"}
         onPreview={(proof, label) => setPreview({ proof, label })}
         onRegularize={(record) => { setRegularizationError(""); setRegularizationRecord(record); }}
         onRequestRegularization={(record) => { setRequestError(""); setRequestRecord(record); }}

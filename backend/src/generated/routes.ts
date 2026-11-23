@@ -60,7 +60,7 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Project": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"image":{"dataType":"string","required":true},"dueDate":{"dataType":"string","required":true},"spent":{"dataType":"double","required":true},"budget":{"dataType":"double","required":true},"quotationAmount":{"dataType":"double"},"progress":{"dataType":"double","required":true},"status":{"dataType":"string","required":true},"engineer":{"dataType":"string","required":true},"client":{"dataType":"string","required":true},"site":{"dataType":"string","required":true},"name":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"image":{"dataType":"string","required":true},"dueDate":{"dataType":"string","required":true},"spent":{"dataType":"double","required":true},"budget":{"dataType":"double","required":true},"quotationAmount":{"dataType":"double"},"progress":{"dataType":"double","required":true},"status":{"dataType":"string","required":true},"projectManager":{"dataType":"string"},"engineer":{"dataType":"string","required":true},"client":{"dataType":"string","required":true},"site":{"dataType":"string","required":true},"name":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Activity": {
@@ -70,7 +70,7 @@ const models: TsoaRoute.Models = {
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Person": {
         "dataType": "refAlias",
-        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"image":{"dataType":"string"},"phoneVerified":{"dataType":"boolean"},"phone":{"dataType":"string"},"email":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"role":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Client"]},{"dataType":"enum","enums":["Site Engineer"]}],"required":true},"name":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"image":{"dataType":"string"},"phoneVerified":{"dataType":"boolean"},"phone":{"dataType":"string"},"email":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"role":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Client"]},{"dataType":"enum","enums":["Site Engineer"]},{"dataType":"enum","enums":["Project Manager"]}],"required":true},"name":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Payment": {

@@ -1,5 +1,5 @@
-export type Role = "Owner" | "Employee" | "Client";
-export type RoleId = "owner" | "employee" | "client";
+export type Role = "Owner" | "Employee" | "ProjectManager" | "Client";
+export type RoleId = "owner" | "employee" | "project_manager" | "client";
 export type PaletteId = "current" | "previous" | "reference";
 export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "payment" | "visit" | "material" | "material-allocation" | "material-log" | "material-request" | "person";
 export type SessionUser = { name: string; email: string; role: RoleId };
@@ -9,6 +9,7 @@ export type Project = {
   site: string;
   client: string;
   engineer: string;
+  projectManager?: string;
   status: string;
   progress: number;
   quotationAmount?: number;
@@ -35,7 +36,7 @@ export type AttendanceRegularizationRequest = { id: string; attendanceId: string
 export type Feedback = { id: string; project: string; client: string; rating: number; comment: string; date: string };
 export type Backup = { id: string; status: string; requestedAt: string; requestedBy: string };
 export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
-export type Person = { id: string; name: string; role: "Client" | "Site Engineer"; project: string; email: string; phone?: string };
+export type Person = { id: string; name: string; role: "Client" | "Site Engineer" | "Project Manager"; project: string; email: string; phone?: string };
 export type ProjectContact = { id?: string; name: string; phone?: string };
 export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; payments: Payment[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialAllocations: MaterialAllocation[]; materialUsageLogs: MaterialUsageLog[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
 export type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };

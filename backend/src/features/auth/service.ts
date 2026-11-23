@@ -4,7 +4,6 @@ import {
   completeInitialOwnerSetup,
   consumeClientLoginQuota,
   findOwnerAccount,
-  isAccountRole,
   isInitialOwnerSetupRequired,
   ownerProfiles,
   people,
@@ -60,7 +59,7 @@ export async function setupInitialOwners(body: unknown) {
     if (!name || name.length > 100 || !email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return failure(400, "Enter a valid name and email address for each owner.");
     }
-    if (!phone) return failure(400, "Enter a valid international phone number (+country code) for each owner.");
+    if (!phone) return failure(400, "Enter a valid 10-digit India mobile number for each owner.");
     if (password.length < 12 || password.length > 256 || !password.trim()) {
       return failure(400, "Each owner password must be at least 12 characters.");
     }
@@ -77,17 +76,28 @@ export async function setupInitialOwners(body: unknown) {
 export async function login(body: any) {
   const email = readText(body?.email)?.toLowerCase() ?? "";
   const password = readText(body?.password) ?? "";
-  const role: unknown = body?.role;
-  if (!isAccountRole(role)) return failure(400, "Choose a valid account role.");
-  const ownerLogin = role === "owner" && verifyOwnerCredential(email, password);
-  const invitedEmployeeLogin = role === "employee" && verifyEmployeeCredential(email, password);
-  const invitedClientLogin = role === "client" && verifyClientCredential(email, password);
-  if (!ownerLogin && !invitedEmployeeLogin && !invitedClientLogin) {
-    return failure(401, "Email or password is incorrect for this role.");
+  let role: AccountRole | undefined;
+  let account: { name: string; email: string } | undefined;
+
+  if (verifyOwnerCredential(email, password)) {
+    role = "owner";
+    account = findOwnerAccount(email);
+  } else {
+    const person = people.find((item) => item.email.toLowerCase() === email);
+    if (person) {
+      if (person.role === "Client" && verifyClientCredential(email, password)) {
+        role = "client";
+        account = person;
+      } else if ((person.role === "Site Engineer" || person.role === "Project Manager") &&
+        verifyEmployeeCredential(email, password)) {
+        role = person.role === "Project Manager" ? "project_manager" : "employee";
+        account = person;
+      }
+    }
   }
-  const invitedPerson = invitedEmployeeLogin || invitedClientLogin ? findPerson(email, role) : undefined;
-  const account = invitedPerson ?? (ownerLogin ? findOwnerAccount(email) : undefined);
-  if (!account) return failure(401, "Email or password is incorrect for this role.");
+  if (!role || !account) {
+    return failure(401, "Email or password is incorrect.");
+  }
   const user = { name: account.name, email: account.email, role };
   if (role === "client") {
     if (!await consumeClientLoginQuota(email)) {
@@ -116,7 +126,7 @@ export async function sendLoginCode(body: unknown) {
   const challenge = getLoginChallenge(challengeId);
   if (!challenge) return failure(401, "This sign-in attempt expired. Enter your password again.");
   const requestedPhone = input.phone === undefined ? challenge.phone : normalizePhone(input.phone);
-  if (!requestedPhone) return failure(400, "Enter a valid international phone number (+country code).");
+  if (!requestedPhone) return failure(400, "Enter a valid 10-digit India mobile number.");
   if (challenge.phone && requestedPhone !== challenge.phone) {
     return failure(400, "Use the phone number already linked to this account.");
   }
@@ -177,8 +187,8 @@ export const logout = async (authorization?: string, refreshToken?: string) => {
   return result({ status: "ok" });
 };
 
-function findPerson(email: string, role: "employee" | "client") {
-  const personRole = role === "employee" ? "Site Engineer" : "Client";
+function findPerson(email: string, role: "employee" | "project_manager" | "client") {
+  const personRole = role === "employee" ? "Site Engineer" : role === "project_manager" ? "Project Manager" : "Client";
   return people.find((person) => person.email.toLowerCase() === email && person.role === personRole);
 }
 
@@ -194,14 +204,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function normalizePhone(value: unknown): string | null {
-  if (typeof value !== "string" || !/^\+?[\d\s().-]+$/.test(value.trim())) return null;
-  const phone = value.trim().replace(/[\s().-]/g, "");
-  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : null;
+  if (typeof value !== "string") return null;
+  const digits = value.trim().replace(/[\s().-]/g, "").replace(/\D/g, "");
+  if (!/^\d{10}$/.test(digits)) return null;
+  return `+91${digits}`;
 }
 
 function accountPhone(email: string, role: AccountRole): string | null {
   if (role === "owner") return normalizePhone(ownerProfiles[email]?.phone);
-  const personRole = role === "employee" ? "Site Engineer" : "Client";
+  const personRole = role === "employee" ? "Site Engineer" : role === "project_manager" ? "Project Manager" : "Client";
   const person = people.find((item) => item.email.toLowerCase() === email && item.role === personRole);
   return normalizePhone(person?.phone);
 }
@@ -297,7 +308,7 @@ function completePhoneVerification(challenge: LoginChallenge) {
     profile.phoneVerified = true;
     return { name: owner.name, email: owner.email, role };
   }
-  const personRole = role === "employee" ? "Site Engineer" : "Client";
+  const personRole = role === "employee" ? "Site Engineer" : role === "project_manager" ? "Project Manager" : "Client";
   const person = people.find((item) => item.email.toLowerCase() === email && item.role === personRole);
   if (!person) return undefined;
   person.phone = phone;

@@ -68,7 +68,7 @@ export async function rotateRefreshToken(token: string) {
     if (!parsed || typeof parsed !== "object") return undefined;
     const value = parsed as Partial<AuthenticatedSession>;
     if (typeof value.name !== "string" || typeof value.email !== "string" ||
-      (value.role !== "owner" && value.role !== "employee" && value.role !== "client")) return undefined;
+      (value.role !== "owner" && value.role !== "employee" && value.role !== "project_manager" && value.role !== "client")) return undefined;
     user = { name: value.name, email: value.email, role: value.role };
   } catch {
     return undefined;
