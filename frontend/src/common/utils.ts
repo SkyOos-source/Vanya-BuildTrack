@@ -3,6 +3,22 @@ import type { Expense } from "./types";
 export const formatCurrency = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(amount);
 export const initials = (name: string) => name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 export const isLoggedExpense = (expense: Expense) => expense.entryType === "log" || (!expense.entryType && expense.status === "Logged");
+export const monthKeyForDate = (value: string) => {
+  const dateOnly = /^(\d{4})-(\d{2})-\d{2}/.exec(value);
+  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}`;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+};
+export const currentMonthKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+export const formatMonthLabel = (month: string) => {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return month;
+  return new Date(Number(match[1]), Number(match[2]) - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+};
 
 export async function reverseGeocode(latitude: number, longitude: number): Promise<string | undefined> {
   const endpoint = import.meta.env.VITE_REVERSE_GEOCODER_URL?.trim();

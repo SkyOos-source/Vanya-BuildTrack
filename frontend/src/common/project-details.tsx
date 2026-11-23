@@ -12,10 +12,6 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
   const displayedQuotationAmount = quotations.length > 0
     ? quotations.reduce((total, quotation) => total + quotation.amount, 0)
     : project.quotationAmount ?? 0;
-  const paymentQuotationCents = Math.round(displayedQuotationAmount * 100);
-  const paymentProgress = paymentQuotationCents > 0
-    ? Math.min(100, Math.floor(Math.round(totalPayments * 100) / paymentQuotationCents * 100))
-    : 0;
   const assignedEngineer = data.people.find((person) => person.role === "Site Engineer" && person.name === project.engineer);
   const assignedClient = data.people.find((person) =>
     person.role === "Client"
@@ -121,7 +117,7 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
       <section><h3>Quotations</h3>{quotations.length > 0
         ? <div className="project-details-list">{quotations.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.id} · {item.date}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} />{item.attachment && <QuotationPdfPreview attachment={item.attachment} title={item.title} />}</article>)}</div>
         : <p className="project-details-empty">No additional quotations recorded.</p>}</section>
-      <section><div className="list-toolbar"><div><h3>Project payments</h3><span className="project-payment-total">{formatCurrency(totalPayments)} recorded · {paymentProgress}% of quotation paid · {projectPayments.length} {projectPayments.length === 1 ? "payment" : "payments"}</span><div className="payment-progress-track" role="progressbar" aria-label="Project quotation payment progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={paymentProgress}><span style={{ width: `${paymentProgress}%` }} /></div></div>{role !== "Employee" && onCreate && <button className="button button-primary" type="button" onClick={() => onCreate("payment", project)}>＋ Add payment</button>}</div>{projectPayments.length
+      <section><div className="list-toolbar"><div><h3>Project payments</h3><span className="project-payment-total">{formatCurrency(totalPayments)} received · {projectPayments.length} {projectPayments.length === 1 ? "payment" : "payments"}</span></div>{role !== "Employee" && onCreate && <button className="button button-primary" type="button" onClick={() => onCreate("payment", project)}>＋ Add payment</button>}</div>{projectPayments.length
         ? <div className="project-details-list">{projectPayments.map((payment) => <article className="project-payment-row" key={payment.id}><div><strong>{formatCurrency(payment.amount)} · {payment.method}</strong><span>{payment.date} · Recorded by {payment.recordedBy} ({payment.recordedByRole}){payment.note ? ` · ${payment.note}` : ""}</span></div>{payment.proofImage && <a className="project-payment-proof" href={payment.proofImage} target="_blank" rel="noreferrer"><img src={payment.proofImage} alt={`Online payment proof uploaded by ${payment.recordedBy}`} />View proof</a>}</article>)}</div>
         : <p className="project-details-empty">No payments have been recorded for this project yet.</p>}</section>
     </div>

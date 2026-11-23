@@ -184,22 +184,11 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     .reduce((total, payment) => total + payment.amount, 0);
   const onlinePaymentTotal = filteredPayments.filter((payment) => payment.method === "Online")
     .reduce((total, payment) => total + payment.amount, 0);
-  const paymentProgressProjects = data.projects
+  const paymentReceivedByProject = data.projects
     .filter((project) => paymentProjectFilter === "All" || project.name === paymentProjectFilter)
     .map((project) => {
-      const quoteTotal = data.quotes.filter((quote) => quote.project === project.name)
-        .reduce((total, quote) => total + quote.amount, 0);
-      const quotationAmount = quoteTotal || project.quotationAmount || 0;
-      const paidAmount = projectPayments
-        .filter((payment) => payment.project === project.name)
-        .reduce((total, payment) => total + payment.amount, 0);
-      const quotationCents = Math.round(quotationAmount * 100);
-      return {
-        project,
-        quotationAmount,
-        paidAmount,
-        percentage: quotationCents > 0 ? Math.min(100, Math.floor(Math.round(paidAmount * 100) / quotationCents * 100)) : 0
-      };
+      const payments = projectPayments.filter((payment) => payment.project === project.name);
+      return { project, payments, receivedAmount: payments.reduce((total, payment) => total + payment.amount, 0) };
     });
   const allocationEngineers = [...new Set(visibleExpenseAllocations.map((allocation) => allocation.engineer))]
     .sort((left, right) => left.localeCompare(right));
@@ -340,11 +329,10 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
         <article className="payment-summary-stat"><span>Cash payments</span><strong>{formatCurrency(cashPaymentTotal)}</strong><small>{filteredPayments.filter((payment) => payment.method === "Cash").length} records</small></article>
         <article className="payment-summary-stat"><span>Online payments</span><strong>{formatCurrency(onlinePaymentTotal)}</strong><small>{filteredPayments.filter((payment) => payment.method === "Online").length} records</small></article>
       </section>
-      {paymentProgressProjects.length > 0 && <section className="payment-progress-grid" aria-label="Payment progress by project">
-        {paymentProgressProjects.map(({ project, quotationAmount, paidAmount, percentage }) => <article className="payment-progress-card" key={project.id}>
-          <div><strong>{project.name}</strong><b>{percentage}% paid</b></div>
-          <div className="payment-progress-track" role="progressbar" aria-label={`${project.name} quotation payment progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}><span style={{ width: `${percentage}%` }} /></div>
-          <small>{formatCurrency(paidAmount)} paid · {quotationAmount > 0 ? `${formatCurrency(quotationAmount)} quotation` : "No quotation amount recorded"}</small>
+      {paymentReceivedByProject.length > 0 && <section className="payment-progress-grid" aria-label="Payments received by project">
+        {paymentReceivedByProject.map(({ project, payments, receivedAmount }) => <article className="payment-progress-card" key={project.id}>
+          <div><strong>{project.name}</strong><b>{formatCurrency(receivedAmount)}</b></div>
+          <small>{payments.length} {payments.length === 1 ? "payment" : "payments"} received</small>
         </article>)}
       </section>}
       <section className="panel feature-panel">

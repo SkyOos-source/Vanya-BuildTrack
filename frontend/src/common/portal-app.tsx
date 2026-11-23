@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Payment, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
-import { compressImageFile, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
+import { compressImageFile, currentMonthKey, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
 import OwnerDashboard from "../owner/dashboard/page";
 import EngineerDashboard from "../engineer/dashboard/page";
@@ -107,6 +107,12 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState<DashboardData>(emptyDashboardData);
+  const [dashboardDataLoading, setDashboardDataLoading] = useState(true);
+  const [dashboardDataLoadError, setDashboardDataLoadError] = useState("");
+  const [dashboardDataRetry, setDashboardDataRetry] = useState(0);
+  const dashboardDataLoaded = useRef(false);
+  const dashboardDataRequestInFlight = useRef(false);
+  const [financialMonth, setFinancialMonth] = useState(currentMonthKey());
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsLoadError, setProjectsLoadError] = useState("");
   const [peopleLoading, setPeopleLoading] = useState(role === "Owner");
@@ -356,29 +362,34 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   };
 
   useEffect(() => {
-    if (page !== "Dashboard") return;
-    let active = true;
+    if (page !== "Dashboard" && page !== "Financial Overview") return;
+    if (dashboardDataLoaded.current || dashboardDataRequestInFlight.current) return;
+    dashboardDataRequestInFlight.current = true;
+    setDashboardDataLoading(true);
+    setDashboardDataLoadError("");
     const load = async () => {
       try {
         const response = await apiFetch("/api/dashboard");
         if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
         const result: DashboardData = await response.json();
-        if (active) {
-          setData(result);
-          setProjectsLoading(false);
-          setProjectsLoadError("");
-          if (role === "Owner") {
-            setPeopleLoading(false);
-            setPeopleLoadError("");
-          }
+        setData(result);
+        dashboardDataLoaded.current = true;
+        setProjectsLoading(false);
+        setProjectsLoadError("");
+        if (role === "Owner") {
+          setPeopleLoading(false);
+          setPeopleLoadError("");
         }
       } catch (error) {
         console.error("Unable to load workspace data from the API:", error);
+        setDashboardDataLoadError(error instanceof Error ? error.message : "Workspace data could not be loaded.");
+      } finally {
+        dashboardDataRequestInFlight.current = false;
+        setDashboardDataLoading(false);
       }
     };
     void load();
-    return () => { active = false; };
-  }, [page]);
+  }, [page, dashboardDataRetry]);
 
   useEffect(() => {
     if (role !== "Employee") {
@@ -1453,7 +1464,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     "Work Progress": role === "Owner" ? "Review site updates and photos shared by engineers." : "Follow construction updates and photos from your project.",
     Attendance: "Review daily attendance across your construction sites.",
     Reports: "Project-wise progress, expenses, materials, and activity.",
-    "Financial Overview": "Review revenue, expenses, quotations, and profit across your projects.",
+    "Financial Overview": "Review monthly payments received, logged expenses, and profit or loss across your projects.",
     "Site Visits": "View and filter engineer site check-ins and check-outs.",
     "Settings & Backup": "Manage your profile and request an account data backup.",
     Logs: "Review recent owner actions across the workspace.",
@@ -1550,11 +1561,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           </section>
 
           {page === "Profile" && role !== "Client" && <AccountProfilePage role={role} email={userEmail} onProfileImageChange={setProfileImage} />}
-          {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
-          {page === "Dashboard" && role === "ProjectManager" && <OwnerDashboard data={data} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
+          {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} selectedMonth={financialMonth} onMonthChange={setFinancialMonth} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
+          {page === "Dashboard" && role === "ProjectManager" && <OwnerDashboard data={data} selectedMonth={financialMonth} onMonthChange={setFinancialMonth} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
           {page === "Dashboard" && role === "Employee" && <EngineerDashboard data={data} currentUser={currentUser} onNavigate={navigateToPage} />}
           {page === "Dashboard" && role === "Client" && <ClientDashboard data={data} currentUser={currentUser} currentUserEmail={userEmail} onNavigate={navigateToPage} onQuote={updateQuote} />}
-          {page === "Financial Overview" && role === "Owner" && <OwnerFinancialReport data={data} onBack={() => navigateToPage("Dashboard")} />}
+          {page === "Financial Overview" && role === "Owner" && (dashboardDataLoading
+            ? <div className="panel inline-empty" role="status">Loading financial data…</div>
+            : dashboardDataLoadError
+              ? <div className="panel inline-empty" role="alert">{dashboardDataLoadError} <button className="text-link" onClick={() => setDashboardDataRetry((retry) => retry + 1)}>Retry</button></div>
+              : <OwnerFinancialReport data={data} selectedMonth={financialMonth} onMonthChange={setFinancialMonth} onBack={() => navigateToPage("Dashboard")} />)}
           {page !== "Dashboard" && role === "Owner" && page === "Projects & Sites" && <OwnerProjectsPage {...featurePageProps} />}
           {page !== "Dashboard" && role === "Owner" && page === "Materials" && <OwnerMaterialsPage {...featurePageProps} />}
           {page !== "Dashboard" && page !== "Profile" && !(role === "Owner" && (page === "Projects & Sites" || page === "Materials" || page === "Financial Overview")) && <FeaturePage {...featurePageProps} page={page} role={role} />}
