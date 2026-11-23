@@ -35,6 +35,7 @@ function auditOwnerRequest(request: express.Request, body: unknown) {
     progress: "Progress update",
     materials: "Material",
     "material-requests": "Material request",
+    "work-requests": "Work request",
     attendance: "Attendance",
     "leave-requests": "Leave request",
     "regularization-requests": "Regularization request",
@@ -253,6 +254,42 @@ app.use((request, response, next) => {
           });
           if (payload.allocation) {
             publishWorkspaceUpdate({ resource: "materialAllocations", materialAllocation: payload.allocation });
+          }
+        }
+      }
+      if (request.path === "/api/work-requests" || /^\/api\/work-requests\/[^/]+$/.test(request.path)) {
+        const requestRecord = (body as { record?: { id: string; project: string; requestedBy: string; requesterEmail: string; status: string; description: string } } | null)?.record;
+        if (requestRecord) {
+          if (request.method === "POST") {
+            const project = projects.find((item) => item.name === requestRecord.project);
+            const engineer = project && people.find((person) => person.role === "Site Engineer" &&
+              person.name.toLowerCase() === project.engineer.toLowerCase());
+            const manager = project?.projectManager && people.find((person) => person.role === "Project Manager" &&
+              (person.name.toLowerCase() === project.projectManager!.toLowerCase() ||
+                person.email.toLowerCase() === project.projectManager!.toLowerCase()));
+            publishWorkspaceUpdate({
+              resource: "workRequests",
+              project: requestRecord.project,
+              push: {
+                title: "New client work request",
+                body: `${requestRecord.requestedBy} requested additional work for ${requestRecord.project}.`,
+                targets: [
+                  { role: "owner", url: "/admin/work-requests" },
+                  ...(engineer ? [{ role: "employee" as const, userName: engineer.name, userEmail: engineer.email, url: "/employee/work-requests" }] : []),
+                  ...(manager ? [{ role: "project_manager" as const, userName: manager.name, userEmail: manager.email, url: "/project_manager/work-requests" }] : [])
+                ]
+              }
+            });
+          } else {
+            publishWorkspaceUpdate({
+              resource: "workRequests",
+              project: requestRecord.project,
+              push: {
+                title: `Work request ${requestRecord.status.toLowerCase()}`,
+                body: `Your request for ${requestRecord.project} was ${requestRecord.status.toLowerCase()}.`,
+                targets: [{ role: "client", userName: requestRecord.requestedBy, userEmail: requestRecord.requesterEmail, url: "/client/work-requests" }]
+              }
+            });
           }
         }
       }

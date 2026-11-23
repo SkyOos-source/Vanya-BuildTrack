@@ -4,6 +4,8 @@
 import type { TsoaRoute } from '@tsoa/runtime';
 import {  fetchMiddlewares, ExpressTemplateService } from '@tsoa/runtime';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { WorkRequestsController } from './../features/work-requests/controller';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { SiteVisitsController } from './../features/site-visits/controller';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { ReportsController } from './../features/reports/controller';
@@ -48,6 +50,11 @@ import type { Request as ExRequest, Response as ExResponse, RequestHandler, Rout
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
 const models: TsoaRoute.Models = {
+    "WorkRequest": {
+        "dataType": "refAlias",
+        "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"reviewedAt":{"dataType":"string"},"reviewedByRole":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Owner"]},{"dataType":"enum","enums":["Project Manager"]},{"dataType":"enum","enums":["Site Engineer"]}]},"reviewedBy":{"dataType":"string"},"status":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["Pending review"]},{"dataType":"enum","enums":["Approved"]},{"dataType":"enum","enums":["Declined"]}],"required":true},"requestedAt":{"dataType":"string","required":true},"photos":{"dataType":"array","array":{"dataType":"string"},"required":true},"description":{"dataType":"string","required":true},"requesterEmail":{"dataType":"string","required":true},"requestedBy":{"dataType":"string","required":true},"project":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"validators":{}},
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "SiteVisitProof": {
         "dataType": "refAlias",
         "type": {"dataType":"nestedObjectLiteral","nestedProperties":{"locationName":{"dataType":"string"},"accuracy":{"dataType":"double","required":true},"longitude":{"dataType":"double","required":true},"latitude":{"dataType":"double","required":true},"capturedAt":{"dataType":"string","required":true},"image":{"dataType":"string","required":true}},"validators":{}},
@@ -155,6 +162,96 @@ export function RegisterRoutes(app: Router) {
 
 
     
+        const argsWorkRequestsController_list: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        app.get('/api/work-requests',
+            ...(fetchMiddlewares<RequestHandler>(WorkRequestsController)),
+            ...(fetchMiddlewares<RequestHandler>(WorkRequestsController.prototype.list)),
+
+            async function WorkRequestsController_list(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsWorkRequestsController_list, request, response });
+
+                const controller = new WorkRequestsController();
+
+              await templateService.apiHandler({
+                methodName: 'list',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWorkRequestsController_create: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.post('/api/work-requests',
+            ...(fetchMiddlewares<RequestHandler>(WorkRequestsController)),
+            ...(fetchMiddlewares<RequestHandler>(WorkRequestsController.prototype.create)),
+
+            async function WorkRequestsController_create(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsWorkRequestsController_create, request, response });
+
+                const controller = new WorkRequestsController();
+
+              await templateService.apiHandler({
+                methodName: 'create',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsWorkRequestsController_review: Record<string, TsoaRoute.ParameterSchema> = {
+                id: {"in":"path","name":"id","required":true,"dataType":"string"},
+                body: {"in":"body","name":"body","required":true,"dataType":"any"},
+        };
+        app.patch('/api/work-requests/:id',
+            ...(fetchMiddlewares<RequestHandler>(WorkRequestsController)),
+            ...(fetchMiddlewares<RequestHandler>(WorkRequestsController.prototype.review)),
+
+            async function WorkRequestsController_review(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsWorkRequestsController_review, request, response });
+
+                const controller = new WorkRequestsController();
+
+              await templateService.apiHandler({
+                methodName: 'review',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsSiteVisitsController_list: Record<string, TsoaRoute.ParameterSchema> = {
         };
         app.get('/api/site-visits',

@@ -96,6 +96,7 @@ export type Material = { id: string; material: string; project: string; received
 export type MaterialAllocation = { id: string; material: string; project: string; engineer: string; quantity: number; unit: string; usedQuantity: number; assignedAt: string; assignedBy: string; requestId?: string };
 export type MaterialUsageLog = { id: string; allocationId: string; material: string; project: string; quantity: number; unit: string; engineer: string; loggedBy?: string; note?: string; loggedAt: string };
 export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string; reviewedBy?: string; reviewedAt?: string };
+export type WorkRequest = { id: string; project: string; requestedBy: string; requesterEmail: string; description: string; photos: string[]; requestedAt: string; status: "Pending review" | "Approved" | "Declined"; reviewedBy?: string; reviewedByRole?: "Owner" | "Project Manager" | "Site Engineer"; reviewedAt?: string };
 export type AttendanceProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number; locationName?: string };
 export type AttendanceRegularization = { capturedAt: string; reason: string; regularizedBy: string; regularizedAt: string };
 export type Attendance = { id: string; project?: string; engineer: string; present: string; shift: string; status: string; evidence: string; date?: string; checkIn?: AttendanceProof; checkOut?: AttendanceProof; checkoutRegularization?: AttendanceRegularization };
@@ -129,6 +130,7 @@ export const materials: Material[] = [];
 export const materialAllocations: MaterialAllocation[] = [];
 export const materialUsageLogs: MaterialUsageLog[] = [];
 export const materialRequests: MaterialRequest[] = [];
+export const workRequests: WorkRequest[] = [];
 export const attendance: Attendance[] = [];
 export const attendanceLeaves: AttendanceLeave[] = [];
 export const attendanceLeaveRequests: AttendanceLeaveRequest[] = [];
@@ -143,7 +145,7 @@ export const clientCredentials: EmployeeCredential[] = [];
 export const pushSubscriptions: PushSubscriptionRecord[] = [];
 export const ownerAccounts: OwnerAccount[] = [];
 
-export const store = { projects, quotations, expenses, payments, expenseAllocations, siteVisits, activities, materials, materialAllocations, materialUsageLogs, materialRequests, attendance, attendanceLeaves, attendanceLeaveRequests, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfiles, ownerAccounts, ownerAuditLogs };
+export const store = { projects, quotations, expenses, payments, expenseAllocations, siteVisits, activities, materials, materialAllocations, materialUsageLogs, materialRequests, workRequests, attendance, attendanceLeaves, attendanceLeaveRequests, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfiles, ownerAccounts, ownerAuditLogs };
 let projectSequence = 1;
 let quotationSequence = 1;
 let expenseSequence = 1;
@@ -158,6 +160,7 @@ let materialSequence = 1;
 let materialAllocationSequence = 1;
 let materialUsageSequence = 1;
 let materialRequestSequence = 1;
+let workRequestSequence = 1;
 let personSequence = 1;
 
 export function readText(value: unknown): string | null {
@@ -293,6 +296,7 @@ export async function initializeStore() {
   restore(materialAllocations, "materialAllocations");
   restore(materialUsageLogs, "materialUsageLogs");
   restore(materialRequests, "materialRequests");
+  restore(workRequests, "workRequests");
   restore(attendance, "attendance");
   restore(attendanceLeaves, "attendanceLeaves");
   restore(attendanceLeaveRequests, "attendanceLeaveRequests");
@@ -346,6 +350,7 @@ export async function initializeStore() {
   materialAllocationSequence = nextSequence(materialAllocations, "MAL-", materialAllocationSequence);
   materialUsageSequence = nextSequence(materialUsageLogs, "MUSE-", materialUsageSequence);
   materialRequestSequence = nextSequence(materialRequests, "MREQ-", materialRequestSequence);
+  workRequestSequence = nextSequence(workRequests, "WREQ-", workRequestSequence);
   personSequence = nextSequence(people, "USR-", personSequence);
   updateSequence = nextSequence(activities, "UPD-", updateSequence);
   if (ownerAccountsNeedSaving) await saveStore();
@@ -426,6 +431,11 @@ export function restoreStoreSnapshot(snapshot: string) {
   restoreArray(materialAllocations, "materialAllocations");
   restoreArray(materialUsageLogs, "materialUsageLogs");
   restoreArray(materialRequests, "materialRequests");
+  if (Array.isArray(saved.workRequests)) {
+    workRequests.splice(0, workRequests.length, ...saved.workRequests as WorkRequest[]);
+  } else if (saved.workRequests !== undefined) {
+    throw new Error("Workspace snapshot field 'workRequests' must be an array.");
+  }
   restoreArray(attendance, "attendance");
   restoreArray(attendanceLeaves, "attendanceLeaves");
   restoreArray(attendanceLeaveRequests, "attendanceLeaveRequests");
@@ -571,6 +581,7 @@ export function nextId(kind: string): string {
     "material-allocation": { prefix: "MAL-", next: () => materialAllocationSequence++ },
     "material-usage": { prefix: "MUSE-", next: () => materialUsageSequence++ },
     "material-request": { prefix: "MREQ-", next: () => materialRequestSequence++ },
+    "work-request": { prefix: "WREQ-", next: () => workRequestSequence++ },
     person: { prefix: "USR-", next: () => personSequence++ }
   };
   const sequence = values[kind];

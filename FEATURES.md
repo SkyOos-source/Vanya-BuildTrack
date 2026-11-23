@@ -34,6 +34,9 @@ Owners manage their organization, projects, people, finances, and overall constr
 - **Attendance and progress**
   - Review worker and engineer attendance.
   - Monitor construction progress updates and photos submitted from sites.
+- **Client work requests**
+  - Review client requests for additional project work and their attached photos.
+  - Approve or decline a request; assigned site engineers and project managers can also review requests for their projects.
 - **Quotations and additional work**
   - Upload quotations and assign them to clients.
   - Create and manage quotations for additional or add-on work.
@@ -60,6 +63,7 @@ Site engineers record field activity and keep owners and clients informed.
 - Participate in site visits:
   - View assigned or requested site visits.
   - Access visit details and record a visit outcome or notes.
+- Review client work requests for assigned projects, including their photos, and approve or decline them.
 
 ### 3. Client portal
 
@@ -70,6 +74,7 @@ Clients follow the work on their assigned projects and respond to quotations.
 - View and download quotations assigned to them.
 - Use the Payments page to review and record payments for their assigned project.
 - Accept or reject quotations, including quotations for add-on work.
+- Request additional work for an assigned project with a description and up to five photos, taken with a device camera or selected from the gallery; track whether the request is approved or declined.
 - View approved expense reports.
 - Receive notifications about quotations and project updates.
 - Submit feedback and reviews about projects or completed site visits.
@@ -121,6 +126,7 @@ Clients follow the work on their assigned projects and respond to quotations.
 - Owners can manage the projects and sites in their account and review related submissions.
 - Site engineers can access only the projects, sites, and instructions assigned to them.
 - Clients can access only their assigned projects, quotations, approved expense reports, and project updates.
+- Clients can view only their own work requests; owners, assigned engineers, and assigned project managers can review requests for their accessible projects.
 - Owners and clients can record and view payments only for projects they are authorized to access.
 - Users must be authenticated before viewing protected project information or files.
 

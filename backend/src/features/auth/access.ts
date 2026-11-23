@@ -14,6 +14,7 @@ import {
   projects,
   quotations,
   siteVisits,
+  workRequests,
   type AccountRole,
   type Activity,
   type ExpenseAllocation
@@ -36,6 +37,7 @@ const employeeReadRoutes = new Set([
   "/api/quotations",
   "/api/progress",
   "/api/site-visits",
+  "/api/work-requests",
   "/api/attendance",
   "/api/attendance/leaves",
   "/api/attendance/leave-requests",
@@ -49,6 +51,7 @@ const projectManagerReadRoutes = new Set([
   "/api/material-allocations", "/api/material-usage", "/api/material-requests",
   "/api/expenses", "/api/expenses/allocations", "/api/quotations", "/api/progress",
   "/api/site-visits", "/api/attendance", "/api/attendance/leaves",
+  "/api/work-requests",
   "/api/attendance/leave-requests", "/api/attendance/regularization-requests",
   "/api/payments", "/api/feedback", "/api/events", "/api/profiles/me"
 ]);
@@ -59,6 +62,7 @@ const clientReadRoutes = new Set([
   "/api/people",
   "/api/people",
   "/api/progress",
+  "/api/work-requests",
   "/api/quotations",
   "/api/feedback",
   "/api/events",
@@ -149,11 +153,30 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
       body.reviewedBy = session.name;
       if (body.status === "Approved") body.assignedBy = session.name;
     }
+    if (method === "POST" && path === "/api/work-requests") {
+      return { allowed: false, status: 403, error: "Only clients can submit work requests." };
+    }
+    if (method === "PATCH" && /^\/api\/work-requests\/[^/]+$/.test(path)) {
+      body.reviewedBy = session.name;
+      body.reviewedByRole = "Owner";
+    }
     if (method === "POST" && path === "/api/expenses") body.submittedBy = session.name;
     return { allowed: true };
   }
 
   if (session.role === "project_manager") {
+    if (method === "POST" && path === "/api/work-requests") {
+      return { allowed: false, status: 403, error: "Only clients can submit work requests." };
+    }
+    if (method === "PATCH" && /^\/api\/work-requests\/[^/]+$/.test(path)) {
+      const request = workRequests.find((item) => item.id === path.slice("/api/work-requests/".length));
+      if (!request || !projectNames.has(request.project)) {
+        return { allowed: false, status: 403, error: "You can only review work requests for your assigned projects." };
+      }
+      body.reviewedBy = session.name;
+      body.reviewedByRole = "Project Manager";
+      return { allowed: true };
+    }
     if (method === "POST" && path === "/api/site-visits") {
       body.engineer = body.engineer || session.name;
       if (!belongsToAssignedProject(session, body.project)) {
@@ -212,6 +235,16 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   if (path === "/api/push/subscriptions" && (method === "POST" || method === "DELETE")) return { allowed: true };
 
   if (session.role === "employee") {
+    if (method === "PATCH" && /^\/api\/work-requests\/[^/]+$/.test(path)) {
+      const request = workRequests.find((item) => item.id === path.slice("/api/work-requests/".length));
+      const assignedProject = request && projects.find((project) => project.name === request.project);
+      if (!request || !assignedProject || !sameName(assignedProject.engineer, session.name)) {
+        return { allowed: false, status: 403, error: "You can only review work requests for projects assigned to you." };
+      }
+      body.reviewedBy = session.name;
+      body.reviewedByRole = "Site Engineer";
+      return { allowed: true };
+    }
     if (method === "POST" && path === "/api/site-visits") {
       if (body.action !== "check-in") {
         return { allowed: false, status: 403, error: "Site engineers can check in directly but cannot schedule owner visits." };
@@ -286,6 +319,17 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   }
 
   if (session.role === "client") {
+    if (method === "POST" && path === "/api/work-requests") {
+      if (!belongsToAssignedProject(session, body.project)) {
+        return { allowed: false, status: 403, error: "You can only request work for your assigned projects." };
+      }
+      body.requestedBy = session.name;
+      body.requesterEmail = session.email;
+      return { allowed: true };
+    }
+    if (method === "PATCH" && /^\/api\/work-requests\/[^/]+$/.test(path)) {
+      return { allowed: false, status: 403, error: "Clients cannot review work requests." };
+    }
     if (method === "POST" && path === "/api/payments") {
       if (!belongsToAssignedProject(session, body.project)) {
         return { allowed: false, status: 403, error: "You can only add payments to your assigned project." };
@@ -483,6 +527,12 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
       "engineer" in item && sameName((item as { engineer: unknown }).engineer, session.name));
   }
   if (pathname === "/api/attendance/leaves") return body;
+  if (pathname === "/api/work-requests") {
+    return body.filter((item) => item && typeof item === "object" &&
+      matchesProject(item as { project?: unknown }, projectNames) &&
+      (session.role !== "client" ||
+        (item as { requesterEmail?: unknown }).requesterEmail === session.email));
+  }
   if (pathname === "/api/site-visits") {
     if (session.role === "project_manager") {
       return body.filter((item) => item && typeof item === "object" &&
@@ -530,12 +580,18 @@ export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: Authentic
       sameName(update.engineer, session.name)) return update;
     if (update.resource === "siteVisits" && update.visit && sameName(update.visit.engineer, session.name) &&
       assignedProjectNames(session).has(update.visit.project)) return update;
+    if (update.resource === "workRequests" && update.project && assignedProjectNames(session).has(update.project)) {
+      return {
+        ...update,
+        ...(push ? { push: { ...push, targets: push.targets.filter((target) => ownPushTarget(session, target)) } } : {})
+      };
+    }
     if (update.resource === "attendance" && update.push?.targets.some((target) => ownPushTarget(session, target))) {
       return update;
     }
     return undefined;
   }
-  if ((update.resource !== "progress" && update.resource !== "quotations" && update.resource !== "payments") ||
+  if ((update.resource !== "progress" && update.resource !== "quotations" && update.resource !== "payments" && update.resource !== "workRequests") ||
     !update.project || !belongsToAssignedProject(session, update.project)) return undefined;
   return {
     ...update,

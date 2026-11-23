@@ -9,13 +9,14 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
     { label: "Quotations", icon: "quotations" }, { label: "People", icon: "people" },
     { label: "Attendance", icon: "attendance" }, { label: "Reports", icon: "reports" },
     { label: "Site Visits", icon: "site-visits" }, { label: "Feedback", icon: "feedback" },
+    { label: "Work Requests", icon: "work-requests" },
     { label: "Logs", icon: "logs" }
   ],
   Employee: [
     { label: "Dashboard", icon: "dashboard" }, { label: "My Sites", icon: "projects" },
     { label: "Progress Updates", icon: "progress" }, { label: "Materials", icon: "materials" },
     { label: "Expenses", icon: "expenses" }, { label: "Attendance", icon: "attendance" },
-    { label: "Site Visits", icon: "site-visits" }
+    { label: "Site Visits", icon: "site-visits" }, { label: "Work Requests", icon: "work-requests" }
   ],
   ProjectManager: [
     { label: "Dashboard", icon: "dashboard" }, { label: "Projects & Sites", icon: "projects" },
@@ -23,13 +24,15 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
     { label: "Expenses", icon: "expenses" }, { label: "Payments", icon: "payments" },
     { label: "Quotations", icon: "quotations" }, { label: "People", icon: "people" },
     { label: "Attendance", icon: "attendance" }, { label: "Reports", icon: "reports" },
-    { label: "Site Visits", icon: "site-visits" }, { label: "Feedback", icon: "feedback" }
+    { label: "Site Visits", icon: "site-visits" }, { label: "Feedback", icon: "feedback" },
+    { label: "Work Requests", icon: "work-requests" }
   ],
   Client: [
     { label: "Dashboard", icon: "dashboard" }, { label: "My Projects", icon: "projects" },
     { label: "Work Progress", icon: "progress" }, { label: "Quotations", icon: "quotations" },
     { label: "Payments", icon: "payments" },
     { label: "Timeline", icon: "timeline" },
+    { label: "Work Requests", icon: "work-requests" },
     { label: "Feedback", icon: "feedback" }
   ]
 };

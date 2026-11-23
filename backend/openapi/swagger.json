@@ -7,6 +7,67 @@
 		"requestBodies": {},
 		"responses": {},
 		"schemas": {
+			"WorkRequest": {
+				"properties": {
+					"reviewedAt": {
+						"type": "string"
+					},
+					"reviewedByRole": {
+						"type": "string",
+						"enum": [
+							"Owner",
+							"Project Manager",
+							"Site Engineer"
+						]
+					},
+					"reviewedBy": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"Pending review",
+							"Approved",
+							"Declined"
+						]
+					},
+					"requestedAt": {
+						"type": "string"
+					},
+					"photos": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"description": {
+						"type": "string"
+					},
+					"requesterEmail": {
+						"type": "string"
+					},
+					"requestedBy": {
+						"type": "string"
+					},
+					"project": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
+					"requestedAt",
+					"photos",
+					"description",
+					"requesterEmail",
+					"requestedBy",
+					"project",
+					"id"
+				],
+				"type": "object"
+			},
 			"SiteVisitProof": {
 				"properties": {
 					"locationName": {
@@ -744,6 +805,85 @@
 		"contact": {}
 	},
 	"paths": {
+		"/api/work-requests": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/WorkRequest"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/work-requests/{id}": {
+			"patch": {
+				"operationId": "Review",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/site-visits": {
 			"get": {
 				"operationId": "List",

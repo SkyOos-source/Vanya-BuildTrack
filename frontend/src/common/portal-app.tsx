@@ -54,6 +54,9 @@ function NavigationIcon({ name }: { name: string }) {
     case "site-visits":
       content = <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0z" /><circle cx="12" cy="10" r="2.5" /></>;
       break;
+    case "work-requests":
+      content = <><path d="M12 3v18M3 12h18" /><path d="m6 6 12 12M18 6 6 18" /></>;
+      break;
     case "feedback":
       content = <><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></>;
       break;
@@ -131,6 +134,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [attendanceReviewNotifications, setAttendanceReviewNotifications] = useState<NotificationItem[]>([]);
   const [attendanceReviewVersion, setAttendanceReviewVersion] = useState(0);
+  const [workRequestsRefresh, setWorkRequestsRefresh] = useState(0);
   const [pushStatus, setPushStatus] = useState<PushStatus>("checking");
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -446,7 +450,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         resource?: unknown;
         visit?: SiteVisit;
         action?: unknown;
-        push?: { body: string; targets: Array<{ role: string; userName?: string }> };
+        push?: { body: string; targets: Array<{ role: string; userName?: string; userEmail?: string }> };
       };
       try {
         update = JSON.parse(eventData) as typeof update;
@@ -471,6 +475,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             console.error("Unable to refresh site visits after a real-time update:", error);
           }
         })();
+        return;
+      }
+      if (update.resource === "workRequests") {
+        if (page === "Work Requests") setWorkRequestsRefresh((version) => version + 1);
+        const isTargeted = update.push?.targets.some((target) =>
+          target.role === roleId(role) &&
+          (target.userEmail?.toLowerCase() === userEmail.toLowerCase() || target.userName === userName)
+        );
+        if (isTargeted && update.push) showToast(update.push.body);
         return;
       }
       if (role === "Employee") {
@@ -1505,7 +1518,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     onAttendanceLeaveReview: reviewAttendanceLeaveRequest,
     onToast: showToast,
     onFeedback: submitFeedback,
-    onBackup: requestBackup
+    onBackup: requestBackup,
+    workRequestsRefresh
   };
 
   return (
