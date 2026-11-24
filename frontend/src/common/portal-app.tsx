@@ -794,7 +794,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           detail: `${activity.actor} · ${activity.project} · ${activity.description || activity.action}`,
           time: activity.time,
           icon: "▥",
-          page: "Progress Updates"
+          page: "Work Progress"
         })),
         ...data.expenses.filter((expense) => expense.status.toLowerCase().includes("pending")).map((expense) => ({
           title: "Expense needs review",

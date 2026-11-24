@@ -49,7 +49,7 @@ export function createProgress(body: any) {
     title: "Work update from Vanya BuildTrack",
     body: `${activity.actor} shared a work update for ${project}.`,
     targets: [
-      { role: "owner" as const, url: "/admin/progress-updates" },
+      { role: "owner" as const, url: "/admin/work-progress" },
       ...(assignedProject?.client ? [{ role: "client" as const, userName: assignedProject.client, url: "/client/timeline" }] : [])
     ]
   };

@@ -7,18 +7,19 @@ type ProjectFinancialTotals = Omit<ProjectFinancials, "project" | "profit">;
 
 export default function OwnerFinancialReport({ data, selectedMonth, onMonthChange, onBack }: { data: DashboardData; selectedMonth: string; onMonthChange: (month: string) => void; onBack: () => void }) {
   const [projectFilter, setProjectFilter] = useState("All");
+  const monthLabel = selectedMonth ? formatMonthLabel(selectedMonth) : "All months";
   const projectFinancials = useMemo(() => {
     const totals = new Map<string, ProjectFinancialTotals>();
     for (const project of data.projects) {
       totals.set(project.name, { quotations: 0, payments: 0, revenue: 0, expenses: 0, expenditure: 0 });
     }
     for (const quote of data.quotes) {
-      if (monthKeyForDate(quote.date) !== selectedMonth) continue;
+      if (selectedMonth && monthKeyForDate(quote.date) !== selectedMonth) continue;
       const total = totals.get(quote.project);
       if (total) total.quotations += 1;
     }
     for (const payment of data.payments) {
-      if (monthKeyForDate(payment.date) !== selectedMonth) continue;
+      if (selectedMonth && monthKeyForDate(payment.date) !== selectedMonth) continue;
       const total = totals.get(payment.project);
       if (total) {
         total.payments += 1;
@@ -26,7 +27,7 @@ export default function OwnerFinancialReport({ data, selectedMonth, onMonthChang
       }
     }
     for (const expense of data.expenses) {
-      if (!isLoggedExpense(expense) || monthKeyForDate(expense.date) !== selectedMonth) continue;
+      if (!isLoggedExpense(expense) || (selectedMonth && monthKeyForDate(expense.date) !== selectedMonth)) continue;
       const total = totals.get(expense.project);
       if (total) {
         total.expenses += 1;
@@ -73,14 +74,14 @@ export default function OwnerFinancialReport({ data, selectedMonth, onMonthChang
           <button className="button button-outline" onClick={onBack}>← Dashboard</button>
         </div>
       </div>
-      <section className="payment-summary-grid" aria-label={`Financial totals for ${formatMonthLabel(selectedMonth)}`}>
-        <article className="payment-summary-stat"><span>Revenue received</span><strong>{formatCurrency(totalRevenue)}</strong><small>{totalPayments} payments · {formatMonthLabel(selectedMonth)}</small></article>
-        <article className="payment-summary-stat"><span>Expenses logged</span><strong>{formatCurrency(totalExpenditure)}</strong><small>{totalExpenses} records · {formatMonthLabel(selectedMonth)}</small></article>
+      <section className="payment-summary-grid" aria-label={`Financial totals for ${monthLabel}`}>
+        <article className="payment-summary-stat"><span>Revenue received</span><strong>{formatCurrency(totalRevenue)}</strong><small>{totalPayments} payments · {monthLabel}</small></article>
+        <article className="payment-summary-stat"><span>Expenses logged</span><strong>{formatCurrency(totalExpenditure)}</strong><small>{totalExpenses} records · {monthLabel}</small></article>
         <article className="payment-summary-stat"><span>Profit / loss</span><strong className={totalProfit < 0 ? "financial-loss" : ""}>{formatCurrency(totalProfit)}</strong><small>Revenue less expenses</small></article>
       </section>
       {projectFinancials.length ? <div className="financial-report-charts">
         <section className="financial-report-chart-panel">
-          <div className="financial-report-chart-heading"><div><h3>Payments received vs expenses</h3><p>{formatMonthLabel(selectedMonth)} project totals · INR thousands</p></div><div className="chart-legend"><span><i className="legend-orange" /> Revenue</span><span><i className="legend-charcoal" /> Expenditure</span></div></div>
+          <div className="financial-report-chart-heading"><div><h3>Payments received vs expenses</h3><p>{monthLabel} project totals · INR thousands</p></div><div className="chart-legend"><span><i className="legend-orange" /> Revenue</span><span><i className="legend-charcoal" /> Expenditure</span></div></div>
           <div className="financial-chart-scroll">
             <div className="chart financial-report-bar-chart" style={{ width: `${Math.max(projectFinancials.length * 100, 520)}px` }} role="img" aria-label={`Revenue and expenditure for ${projectFinancials.map((item) => item.project.name).join(", ")}`}>
               <div className="chart-y">{chartAxisLabels.map((label, index) => <span key={index}>{label}</span>)}</div>

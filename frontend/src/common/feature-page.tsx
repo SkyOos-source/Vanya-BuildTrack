@@ -48,6 +48,10 @@ function isAssignedToClient(project: Project, client: Person) {
     project.name.trim().toLocaleLowerCase() === client.project.trim().toLocaleLowerCase();
 }
 
+function isAssignedToProjectManager(project: Project, manager: Person) {
+  return (project.projectManager ?? "").trim().toLocaleLowerCase() === manager.name.trim().toLocaleLowerCase();
+}
+
 export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerContacts, ownerContactsError, data, projects, search, setSearch, filter, setFilter, onCreate, onCreatePerson, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onAttendanceLeaveReview, onExpenseStatus, onVisitStatus, onVisitCheckIn, onUpdatePerson, onRemovePerson, onUnassignEngineerProject, onUnassignClientProject, onToast, onFeedback, onBackup, workRequestsRefresh }: FeaturePageProps) {
   const [rating, setRating] = useState(5);
   const [workProgressDate, setWorkProgressDate] = useState("");
@@ -56,6 +60,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   const [selectedWorkProgress, setSelectedWorkProgress] = useState<Activity | null>(null);
   const [workProgressPhotoIndex, setWorkProgressPhotoIndex] = useState(0);
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | null>(null);
+  const [selectedProjectManagerId, setSelectedProjectManagerId] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [engineerPage, setEngineerPage] = useState(1);
   const [clientPage, setClientPage] = useState(1);
@@ -162,10 +167,12 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   }
   const selectedEngineer = data.people.find((person) => person.id === selectedEngineerId && person.role === "Site Engineer");
   const engineerProjects = selectedEngineer ? data.projects.filter((project) => isAssignedToEngineer(project, selectedEngineer)) : [];
+  const selectedProjectManager = data.people.find((person) => person.id === selectedProjectManagerId && person.role === "Project Manager");
+  const projectManagerProjects = selectedProjectManager ? data.projects.filter((project) => isAssignedToProjectManager(project, selectedProjectManager)) : [];
   const selectedClient = data.people.find((person) => person.id === selectedClientId && person.role === "Client");
   const clientProjects = selectedClient ? data.projects.filter((project) => isAssignedToClient(project, selectedClient)) : [];
-  const selectedTeamMember = selectedEngineer ?? selectedClient;
-  const selectedTeamProjects = selectedEngineer ? engineerProjects : clientProjects;
+  const selectedTeamMember = selectedEngineer ?? selectedProjectManager ?? selectedClient;
+  const selectedTeamProjects = selectedEngineer ? engineerProjects : selectedProjectManager ? projectManagerProjects : clientProjects;
   const visibleExpenses = role === "Client"
     ? data.expenses.filter((expense) => expense.status === "Approved" && data.projects.some((project) => (project.client === currentUser || project.name === clientProjectName) && project.name === expense.project))
     : role === "Employee"
@@ -273,7 +280,11 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
           <tbody>{visiblePeople.map((person) => <tr key={person.id}>
             <td>{person.name}</td><td>{person.email}</td><td>{person.phone || "—"}</td>
             <td>{engineers ? data.projects.filter((project) => isAssignedToEngineer(project, person)).length : person.project}</td>
-            <td><div className="person-card-actions"><button className="button button-outline person-details-button" type="button" onClick={() => engineers ? setSelectedEngineerId(person.id) : setSelectedClientId(person.id)}>View details</button></div></td>
+            <td><div className="person-card-actions"><button className="button button-outline person-details-button" type="button" onClick={() => {
+              if (!engineers) setSelectedClientId(person.id);
+              else if (person.role === "Project Manager") setSelectedProjectManagerId(person.id);
+              else setSelectedEngineerId(person.id);
+            }}>View details</button></div></td>
           </tr>)}</tbody>
         </table></div>
         : <p className="people-empty">No people in this section yet.</p>}
@@ -454,8 +465,8 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     </section>}
     {page === "People" && (role === "Owner" || role === "ProjectManager") && <section className="panel feature-panel">
       {selectedTeamMember ? <>
-        <div className="list-toolbar engineer-details-header"><div><span className="panel-kicker">{selectedEngineer ? "SITE ENGINEER DETAILS" : "CLIENT DETAILS"}</span><h2 className="list-title">{selectedTeamMember.name}</h2></div><button className="button button-outline" onClick={() => { setSelectedEngineerId(null); setSelectedClientId(null); }}>← Back to people</button></div>
-        <div className="engineer-details-actions"><button className="button button-outline" onClick={() => setPersonBeingEdited(selectedTeamMember)}>Edit {selectedEngineer ? "engineer" : "client"}</button><button className="button button-danger" onClick={() => setPersonPendingDeletion(selectedTeamMember)}>Delete {selectedEngineer ? "engineer" : "client"}</button></div>
+        <div className="list-toolbar engineer-details-header"><div><span className="panel-kicker">{selectedEngineer ? "SITE ENGINEER DETAILS" : selectedProjectManager ? "PROJECT MANAGER DETAILS" : "CLIENT DETAILS"}</span><h2 className="list-title">{selectedTeamMember.name}</h2></div><button className="button button-outline" onClick={() => { setSelectedEngineerId(null); setSelectedProjectManagerId(null); setSelectedClientId(null); }}>← Back to people</button></div>
+        <div className="engineer-details-actions"><button className="button button-outline" onClick={() => setPersonBeingEdited(selectedTeamMember)}>Edit {selectedEngineer ? "engineer" : selectedProjectManager ? "project manager" : "client"}</button><button className="button button-danger" onClick={() => setPersonPendingDeletion(selectedTeamMember)}>Delete {selectedEngineer ? "engineer" : selectedProjectManager ? "project manager" : "client"}</button></div>
         <div className="engineer-profile-grid">
           <article><span>Full name</span><strong>{selectedTeamMember.name}</strong></article>
           <article><span>Email</span><strong>{selectedTeamMember.email}</strong></article>
@@ -481,15 +492,14 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
                 {selectedEngineer && <div className="engineer-site-materials"><span>Materials</span>{siteMaterials.length > 0
                   ? <ul>{siteMaterials.map((material) => <li key={material.id}><strong>{material.material}</strong><span>Received {material.received} · Used {material.used} · In stock {material.stock}</span></li>)}</ul>
                   : <p>No materials recorded for this site.</p>}</div>}
-                <button className="button button-danger engineer-site-unassign" type="button" disabled={unassigningProjectId === project.id} onClick={() => setProjectPendingUnassignment(project)}>{unassigningProjectId === project.id ? "Unassigning…" : `Unassign ${selectedEngineer ? "site" : "project"}`}</button>
+                {!selectedProjectManager && <button className="button button-danger engineer-site-unassign" type="button" disabled={unassigningProjectId === project.id} onClick={() => setProjectPendingUnassignment(project)}>{unassigningProjectId === project.id ? "Unassigning…" : `Unassign ${selectedEngineer ? "site" : "project"}`}</button>}
               </div>}
             </article>;
           })}</div>
-          : <p className="people-empty">No {selectedEngineer ? "sites are currently assigned to this engineer." : "projects are currently assigned to this client."}</p>}
+          : <p className="people-empty">No {selectedEngineer ? "sites are currently assigned to this engineer." : selectedProjectManager ? "projects are currently assigned to this project manager." : "projects are currently assigned to this client."}</p>}
       </> : <>
         <div className="list-toolbar"><div><span className="panel-kicker">YOUR TEAM</span><h2 className="list-title">People</h2></div></div>
-        <section className="people-section"><div className="people-section-heading"><h3 className="people-section-title">Project Managers</h3>{role === "Owner" && <button className="button button-primary" type="button" onClick={() => onCreatePerson("Project Manager")}>＋ Add project manager</button>}</div>{renderPeople(data.people.filter((person) => person.role === "Project Manager"), true)}</section>
-        <section className="people-section"><div className="people-section-heading"><h3 className="people-section-title">Site Engineers</h3>{role === "Owner" && <button className="button button-primary" type="button" onClick={() => onCreatePerson("Site Engineer")}>＋ Add engineer</button>}</div>{renderPeople(data.people.filter((person) => person.role === "Site Engineer"), true)}</section>
+        <section className="people-section"><div className="people-section-heading"><h3 className="people-section-title">Site Engineers &amp; Project Managers</h3>{role === "Owner" && <button className="button button-primary" type="button" onClick={() => onCreatePerson("Site Engineer")}>＋ Add team member</button>}</div>{renderPeople(data.people.filter((person) => person.role === "Site Engineer" || person.role === "Project Manager"), true)}</section>
         <section className="people-section"><div className="people-section-heading"><h3 className="people-section-title">Clients</h3>{role === "Owner" && <button className="button button-primary" type="button" onClick={() => onCreatePerson("Client")}>＋ Add client</button>}</div>{renderPeople(data.people.filter((person) => person.role === "Client"))}</section>
       </>}
     </section>}
@@ -544,8 +554,8 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     {personPendingDeletion && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPersonPendingDeletion(null); }}>
       <section className="modal-card delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-description">
         <div className="modal-heading"><div><span className="panel-kicker">CONFIRM DELETE</span><h2 id="delete-confirm-title">Remove {personPendingDeletion.name}?</h2></div><button className="icon-button modal-close" aria-label="Cancel delete" onClick={() => setPersonPendingDeletion(null)}>×</button></div>
-        <p id="delete-confirm-description">{personPendingDeletion.role === "Site Engineer" ? "This will remove the engineer from your team list and revoke their sign-in access. This action cannot be undone." : "This will remove the client from your team list and revoke their sign-in access. This action cannot be undone."}</p>
-        <div className="modal-actions"><button className="button button-outline" onClick={() => setPersonPendingDeletion(null)}>Cancel</button><button className="button button-danger" onClick={() => { const person = personPendingDeletion; setPersonPendingDeletion(null); if (selectedEngineerId === person.id) setSelectedEngineerId(null); if (selectedClientId === person.id) setSelectedClientId(null); onRemovePerson(person); }}>{personPendingDeletion.role === "Site Engineer" ? "Delete engineer" : "Delete client"}</button></div>
+        <p id="delete-confirm-description">{personPendingDeletion.role === "Site Engineer" ? "This will remove the engineer from your team list and revoke their sign-in access. This action cannot be undone." : personPendingDeletion.role === "Project Manager" ? "This will remove the project manager from your team list and revoke their sign-in access. This action cannot be undone." : "This will remove the client from your team list and revoke their sign-in access. This action cannot be undone."}</p>
+        <div className="modal-actions"><button className="button button-outline" onClick={() => setPersonPendingDeletion(null)}>Cancel</button><button className="button button-danger" onClick={() => { const person = personPendingDeletion; setPersonPendingDeletion(null); if (selectedEngineerId === person.id) setSelectedEngineerId(null); if (selectedProjectManagerId === person.id) setSelectedProjectManagerId(null); if (selectedClientId === person.id) setSelectedClientId(null); onRemovePerson(person); }}>{personPendingDeletion.role === "Site Engineer" ? "Delete engineer" : personPendingDeletion.role === "Project Manager" ? "Delete project manager" : "Delete client"}</button></div>
       </section>
     </div>}
   </div>;
