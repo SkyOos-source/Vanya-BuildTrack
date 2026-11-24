@@ -1,6 +1,7 @@
-import { nextId, people, projects, readAmount, readAttachment, readText, type ExpenseAllocation } from "../../data/store";
+import { nextId, people, projects, readAmount, readCompressedImage, readText, type ExpenseAllocation } from "../../data/store";
 import { expenses, expenseAllocations } from "./data";
 import { failure, result, today } from "../shared";
+import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
 
 export const listExpenses = () => expenses;
 
@@ -53,17 +54,25 @@ export function createExpenseAllocation(body: any) {
   return result({ record: allocationTotals(allocation) }, 201);
 }
 
-export function createExpense(body: any) {
+export async function createExpense(body: any) {
   const description = readText(body?.description);
   const project = readText(body?.project);
   const amount = readPositiveCurrencyAmount(body?.amount);
-  const attachment = readAttachment(body?.attachment);
+  const attachment = readCompressedImage(body?.attachment);
   const isLog = body?.entryType === "log";
   if (!project || !projects.some((item) => item.name === project)) {
     return failure(400, "Select an existing project for this expense.");
   }
   if (!description || amount === null || (body?.attachment && !attachment)) {
-    return failure(400, "Expense description, project, positive amount with no more than two decimal places, and a supported attachment are required.");
+    return failure(400, "Expense description, project, positive amount with no more than two decimal places, and a valid image attachment are required.");
+  }
+  let uploadedAttachment = attachment ?? undefined;
+  if (attachment) {
+    try {
+      uploadedAttachment = await uploadBase64Image(attachment, "expenses");
+    } catch (error) {
+      return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Expense attachment could not be uploaded.");
+    }
   }
   let allocation: ExpenseAllocation | undefined;
   const allocationId = readText(body?.allocationId);
@@ -79,7 +88,7 @@ export function createExpense(body: any) {
   }
   const expense = {
     id: nextId("expense"), project, category: "Other", description, amount, date: today(),
-    submittedBy: readText(body?.submittedBy) ?? "Arjun Mehta", attachment: attachment ?? undefined,
+    submittedBy: readText(body?.submittedBy) ?? "Arjun Mehta", attachment: uploadedAttachment,
     status: isLog ? "Logged" : "Pending review",
     entryType: isLog ? "log" as const : "request" as const,
     ...(allocation ? { allocationId: allocation.id } : {})

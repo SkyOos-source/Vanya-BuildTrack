@@ -1,6 +1,7 @@
 import QRCode from "qrcode";
 import { findOwnerAccount, ownerProfiles, ownerAccounts, people, readCompressedImage, readText } from "../../data/store";
 import { failure, result } from "../shared";
+import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
 
 type PublicProfile = {
   id: string;
@@ -40,7 +41,7 @@ function findProfile(role: string, email: string): PublicProfile | undefined {
   };
 }
 
-export function updateMyProfile(role: string, email: string, body: unknown) {
+export async function updateMyProfile(role: string, email: string, body: unknown) {
   const profile = findProfile(role, email);
   if (!profile) return failure(404, "Profile not found.");
   if (profile.role !== "Owner" && profile.role !== "Site Engineer") {
@@ -63,7 +64,11 @@ export function updateMyProfile(role: string, email: string, body: unknown) {
     else {
       const compressedImage = readCompressedImage(input.image);
       if (!compressedImage) return failure(400, "Choose a valid compressed JPEG profile photo no larger than 500 KB.");
-      image = compressedImage;
+      try {
+        image = await uploadBase64Image(compressedImage, "profiles");
+      } catch (error) {
+        return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Profile photo could not be uploaded.");
+      }
     }
   }
   if (role === "owner") {

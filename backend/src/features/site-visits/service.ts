@@ -1,6 +1,7 @@
 import { nextId, people, projects, readCompressedImage, readProject, readText, type SiteVisitProof } from "../../data/store";
 import { siteVisits } from "./data";
 import { failure, result } from "../shared";
+import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
 
 export const listSiteVisits = () => siteVisits;
 
@@ -38,13 +39,19 @@ function readSiteVisitProof(value: unknown): SiteVisitProof | null {
   };
 }
 
-export function createSiteVisit(body: any) {
+export async function createSiteVisit(body: any) {
   const action = body?.action;
   if (action === "check-in") {
     const engineer = readText(body?.engineer);
     const proof = readSiteVisitProof(body?.proof);
     if (!engineer) return failure(400, "Engineer name is required.");
     if (!proof) return failure(400, "A valid site photo and capture time are required.");
+    let uploadedProof: typeof proof = proof;
+    try {
+      uploadedProof = { ...proof, image: await uploadBase64Image(proof.image, "site-visits") };
+    } catch (error) {
+      return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Site visit photo could not be uploaded.");
+    }
 
     const activeVisit = siteVisits.find((item) => item.engineer === engineer && item.status === "Checked in");
     if (activeVisit) return failure(409, "Check out of the current site before starting another visit.");
@@ -88,7 +95,7 @@ export function createSiteVisit(body: any) {
       date,
       purpose: readText(body?.description) ?? undefined,
       status: "Checked in",
-      checkIn: proof
+      checkIn: uploadedProof
     };
     siteVisits.unshift(visit);
     return result({ record: visit, project: body?.createProject ? selectedProject : undefined }, 201);
@@ -119,7 +126,7 @@ export function createSiteVisit(body: any) {
   return result({ record: visit }, 201);
 }
 
-export function updateSiteVisit(id: string, body: any) {
+export async function updateSiteVisit(id: string, body: any) {
   const visit = siteVisits.find((item) => item.id === id);
   if (!visit) return failure(404, "Site visit not found.");
   const action = body?.action;
@@ -130,9 +137,15 @@ export function updateSiteVisit(id: string, body: any) {
     return failure(400, "Choose check-in or check-out for this site visit.");
   }
   if (!proof) return failure(400, "A valid site photo and capture time are required.");
+  let uploadedProof: typeof proof = proof;
+  try {
+    uploadedProof = { ...proof, image: await uploadBase64Image(proof.image, "site-visits") };
+  } catch (error) {
+    return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Site visit photo could not be uploaded.");
+  }
   if (action === "check-in") {
     if (visit.status !== "Scheduled") return failure(409, "This visit is no longer scheduled for check-in.");
-    visit.checkIn = proof;
+    visit.checkIn = uploadedProof;
     visit.status = "Checked in";
   } else {
     if (visit.status !== "Checked in" || !visit.checkIn) {
@@ -141,7 +154,7 @@ export function updateSiteVisit(id: string, body: any) {
     if (Date.parse(proof.capturedAt) <= Date.parse(visit.checkIn.capturedAt)) {
       return failure(400, "The check-out photo must be captured after check-in.");
     }
-    visit.checkOut = proof;
+    visit.checkOut = uploadedProof;
     visit.status = "Completed";
   }
   return result({ record: visit });

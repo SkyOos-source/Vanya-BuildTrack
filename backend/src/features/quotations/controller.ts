@@ -8,7 +8,7 @@ export class QuotationsController extends ApiController {
   public list() { return listQuotations(); }
 
   @Post()
-  public create(@Body() body: any): any { return this.respond(createQuotation(body)); }
+  public async create(@Body() body: any): Promise<any> { return this.respond(await createQuotation(body)); }
 
   @Patch("{id}")
   public update(@Path() id: string, @Body() body: any): any { return this.respond(updateQuotation(id, body)); }

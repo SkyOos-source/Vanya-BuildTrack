@@ -14,7 +14,7 @@ export class ExpensesController extends ApiController {
   public createAllocation(@Body() body: any): any { return this.respond(createExpenseAllocation(body)); }
 
   @Post()
-  public create(@Body() body: any): any { return this.respond(createExpense(body)); }
+  public async create(@Body() body: any): Promise<any> { return this.respond(await createExpense(body)); }
 
   @Patch("{id}")
   public update(@Path() id: string, @Body() body: any): any { return this.respond(updateExpense(id, body)); }

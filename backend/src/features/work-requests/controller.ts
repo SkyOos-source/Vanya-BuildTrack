@@ -8,7 +8,7 @@ export class WorkRequestsController extends ApiController {
   public list() { return listWorkRequests(); }
 
   @Post()
-  public create(@Body() body: any): any { return this.respond(createWorkRequest(body)); }
+  public async create(@Body() body: any): Promise<any> { return this.respond(await createWorkRequest(body)); }
 
   @Patch("{id}")
   public review(@Path() id: string, @Body() body: any): any { return this.respond(reviewWorkRequest(id, body)); }

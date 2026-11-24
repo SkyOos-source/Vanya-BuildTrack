@@ -5,7 +5,8 @@ export const listPeople = () => people;
 
 function normalizePhone(value: unknown) {
   if (typeof value !== "string") return null;
-  const digits = value.trim().replace(/[\s().-]/g, "").replace(/\D/g, "");
+  let digits = value.trim().replace(/[\s().-]/g, "").replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
   if (!/^\d{10}$/.test(digits)) return null;
   return `+91${digits}`;
 }

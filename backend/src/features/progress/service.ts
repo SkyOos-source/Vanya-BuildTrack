@@ -1,11 +1,12 @@
 import { nextId, projects, readAmount, readAttachment, readText } from "../../data/store";
 import { publishWorkspaceUpdate } from "../../realtime";
 import { failure, result } from "../shared";
+import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
 import { activities, progressUpdates } from "./data";
 
 export const listProgress = () => progressUpdates();
 
-export function createProgress(body: any) {
+export async function createProgress(body: any) {
   const description = readText(body?.description);
   const project = readText(body?.project);
   const attachment = readAttachment(body?.attachment);
@@ -26,6 +27,16 @@ export function createProgress(body: any) {
         !attachments[index] || !attachments[index]?.startsWith("data:image/"))))) {
     return failure(400, "Progress description, project, valid photo stage, completion percentage from 0 to 100, and up to 5 valid images are required.");
   }
+  const imageAttachments = validAttachments.filter((item) => item.startsWith("data:image/"));
+  let uploadedAttachments: string[] = [];
+  try {
+    uploadedAttachments = await Promise.all(imageAttachments.map((item) => uploadBase64Image(item, `progress/${project}`)));
+  } catch (error) {
+    return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Progress photos could not be uploaded.");
+  }
+  if (attachment && attachment.startsWith("data:image/") && uploadedAttachments.length === 0) {
+    return failure(503, "Progress photos could not be uploaded.");
+  }
   const assignedProject = projects.find((item) => item.name === project);
   if (hasProgressValue && !assignedProject) {
     return failure(400, "A valid project is required to update completion.");
@@ -39,8 +50,8 @@ export function createProgress(body: any) {
     kind: "progress",
     stage,
     description,
-    attachment: validAttachments[0] ?? attachment ?? undefined,
-    ...(validAttachments.length ? { attachments: validAttachments } : {}),
+    attachment: uploadedAttachments[0] ?? (attachment?.startsWith("data:") ? undefined : attachment) ?? undefined,
+    ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
     createdAt: new Date().toISOString()
   };
   activities.unshift(activity);

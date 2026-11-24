@@ -2,16 +2,25 @@ import { nextId, people, projects, readAmount, readPdfAttachment, readText } fro
 import { publishWorkspaceUpdate } from "../../realtime";
 import { listQuotationsWithClientEmails, quotations } from "./data";
 import { failure, result, today } from "../shared";
+import { R2StorageError, uploadBase64Pdf } from "../../object-storage/r2";
 
 export const listQuotations = () => listQuotationsWithClientEmails();
 
-export function createQuotation(body: any) {
+export async function createQuotation(body: any) {
   const title = readText(body?.title);
   const project = readText(body?.project);
   const amount = readAmount(body?.amount);
   const attachment = readPdfAttachment(body?.quotationAttachment);
   if (!title || !project || amount === null) return failure(400, "Quotation title, project, and non-negative amount are required.");
   if (body?.quotationAttachment && !attachment) return failure(400, "Quotation attachment must be a valid PDF file.");
+  let uploadedAttachment: string | undefined;
+  if (attachment) {
+    try {
+      uploadedAttachment = await uploadBase64Pdf(attachment, "quotations");
+    } catch (error) {
+      return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Quotation PDF could not be uploaded.");
+    }
+  }
   const client = people.find((person) => person.role === "Client" && person.project === project);
   const quote = {
     id: nextId("quotation"),
@@ -22,7 +31,7 @@ export function createQuotation(body: any) {
     amount,
     date: today(),
     status: "Awaiting review",
-    ...(attachment ? { attachment } : {})
+    ...(uploadedAttachment ? { attachment: uploadedAttachment } : {})
   };
   quotations.unshift(quote);
   const projectRecord = projects.find((item) => item.name === project);

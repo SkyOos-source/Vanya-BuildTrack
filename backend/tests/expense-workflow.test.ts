@@ -3,7 +3,7 @@ import test from "node:test";
 import { expenseAllocations, expenses, people, projects, restoreStoreSnapshot, snapshotStore } from "../src/data/store";
 import { createExpense, createExpenseAllocation, listExpenseAllocations, updateExpense } from "../src/features/expenses/service";
 
-test("allocated funds are reduced only by logged project expenses", () => {
+test("allocated funds are reduced only by logged project expenses", async () => {
   const original = snapshotStore();
   try {
     people.push({
@@ -36,7 +36,7 @@ test("allocated funds are reduced only by logged project expenses", () => {
     }
     assert.equal(createExpenseAllocation({ engineer: "Missing Engineer", amount: 100 }).status, 400);
 
-    const requestResult = createExpense({
+    const requestResult = await createExpense({
       project: "Expense Test Project",
       description: "Request additional funds",
       amount: 300,
@@ -46,16 +46,16 @@ test("allocated funds are reduced only by logged project expenses", () => {
     assert.equal(requestResult.status, 201);
     assert.equal(listExpenseAllocations("Expense Test Engineer")[0].remainingAmount, 1000);
     for (const invalidAmount of [0, -1, 0.001]) {
-      assert.equal(createExpense({
+      assert.equal((await createExpense({
         project: "Expense Test Project",
         description: "Invalid amount",
         amount: invalidAmount,
         submittedBy: "Expense Test Engineer",
         entryType: "log",
         allocationId: allocation.id
-      }).status, 400);
+      })).status, 400);
     }
-    assert.equal(createExpense({
+    assert.equal((await createExpense({
       project: "Expense Test Project",
       description: "Unsupported attachment",
       amount: 10,
@@ -63,26 +63,35 @@ test("allocated funds are reduced only by logged project expenses", () => {
       entryType: "log",
       allocationId: allocation.id,
       attachment: "not-an-image-or-pdf"
-    }).status, 400);
+    })).status, 400);
+    assert.equal((await createExpense({
+      project: "Expense Test Project",
+      description: "PDF receipt",
+      amount: 10,
+      submittedBy: "Expense Test Engineer",
+      entryType: "log",
+      allocationId: allocation.id,
+      attachment: "data:application/pdf;base64,JVBERi0xLjQ="
+    })).status, 400);
     assert.equal(listExpenseAllocations("Expense Test Engineer")[0].remainingAmount, 1000);
-    assert.equal(createExpense({
+    assert.equal((await createExpense({
       project: "Missing Project",
       description: "Invalid project",
       amount: 10,
       submittedBy: "Expense Test Engineer",
       entryType: "log",
       allocationId: allocation.id
-    }).status, 400);
-    assert.equal(createExpense({
+    })).status, 400);
+    assert.equal((await createExpense({
       project: "Expense Test Project",
       description: "Invalid allocation owner",
       amount: 10,
       submittedBy: "Another Engineer",
       entryType: "log",
       allocationId: allocation.id
-    }).status, 400);
+    })).status, 400);
 
-    const logResult = createExpense({
+    const logResult = await createExpense({
       project: "Expense Test Project",
       description: "Cement purchase",
       amount: 400,
@@ -98,7 +107,7 @@ test("allocated funds are reduced only by logged project expenses", () => {
     assert.equal((approvalResult.body as { error: string }).error, "Logged expenses are recorded immediately and do not require approval.");
     assert.equal(expenses.find((expense) => expense.id === loggedRecord.id)?.status, "Logged");
 
-    const overspendResult = createExpense({
+    const overspendResult = await createExpense({
       project: "Expense Test Project",
       description: "Overspend",
       amount: 700,
@@ -122,24 +131,24 @@ test("allocated funds are reduced only by logged project expenses", () => {
     assert.equal(decimalAllocationResult.status, 201);
     const decimalAllocation = decimalAllocationResult.body.record as { id: string };
     for (const [description, amount] of [["Ten paise", 0.1], ["Twenty paise", 0.2]] as const) {
-      assert.equal(createExpense({
+      assert.equal((await createExpense({
         project: "Expense Test Project",
         description,
         amount,
         submittedBy: "Expense Test Engineer",
         entryType: "log",
         allocationId: decimalAllocation.id
-      }).status, 201);
+      })).status, 201);
     }
     assert.equal(listExpenseAllocations("Expense Test Engineer").find((item) => item.id === decimalAllocation.id)?.remainingAmount, 0);
-    assert.equal(createExpense({
+    assert.equal((await createExpense({
       project: "Expense Test Project",
       description: "One paise overspend",
       amount: 0.01,
       submittedBy: "Expense Test Engineer",
       entryType: "log",
       allocationId: decimalAllocation.id
-    }).status, 201);
+    })).status, 201);
     assert.equal(listExpenseAllocations("Expense Test Engineer").find((item) => item.id === decimalAllocation.id)?.remainingAmount, -0.01);
     assert.equal(expenseAllocations.length, 3);
   } finally {

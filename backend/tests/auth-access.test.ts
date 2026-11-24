@@ -335,7 +335,7 @@ test("duplicate project and person names are rejected at creation", () => {
       email: "new@example.com",
       role: "Site Engineer",
       password: "password123",
-      phone: "+14155550123"
+      phone: "+919876543210"
     }).status, 409);
   } finally {
     projects.splice(0, projects.length, ...projectsBefore);

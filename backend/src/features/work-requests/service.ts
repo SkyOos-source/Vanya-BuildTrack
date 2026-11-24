@@ -1,9 +1,10 @@
 import { nextId, projects, readCompressedImage, readText, workRequests } from "../../data/store";
 import { failure, result } from "../shared";
+import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
 
 export const listWorkRequests = () => workRequests;
 
-export function createWorkRequest(body: any) {
+export async function createWorkRequest(body: any) {
   const project = readText(body?.project);
   const description = readText(body?.description);
   const requestedBy = readText(body?.requestedBy);
@@ -17,13 +18,19 @@ export function createWorkRequest(body: any) {
   if (!Array.isArray(photos) || photos.length > 5 || photos.some((photo) => !readCompressedImage(photo))) {
     return failure(400, "Attach up to five valid compressed photos.");
   }
+  let uploadedPhotos: string[] = [];
+  try {
+    uploadedPhotos = await Promise.all(photos.map((photo: string) => uploadBase64Image(photo, `work-requests/${project}`)));
+  } catch (error) {
+    return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Work request photos could not be uploaded.");
+  }
   const request = {
     id: nextId("work-request"),
     project,
     requestedBy,
     requesterEmail: requesterEmail.toLowerCase(),
     description,
-    photos,
+    photos: uploadedPhotos,
     requestedAt: new Date().toISOString(),
     status: "Pending review" as const
   };

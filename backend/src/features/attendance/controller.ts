@@ -50,5 +50,5 @@ export class AttendanceController extends ApiController {
   public regularize(@Path() id: string, @Body() body: any): any { return this.respond(regularizeAttendance(id, body)); }
 
   @Post()
-  public record(@Body() body: any): any { return this.respond(recordAttendance(body)); }
+  public async record(@Body() body: any): Promise<any> { return this.respond(await recordAttendance(body)); }
 }

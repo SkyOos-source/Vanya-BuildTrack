@@ -1,9 +1,10 @@
 import { nextId, payments, projects, readAmount, readCompressedImage, readText } from "../../data/store";
 import { failure, result, today } from "../shared";
+import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
 
 export const listPayments = () => payments;
 
-export function createPayment(body: any) {
+export async function createPayment(body: any) {
   const project = readText(body?.project);
   const amount = readAmount(body?.amount);
   const method = body?.method;
@@ -30,6 +31,14 @@ export function createPayment(body: any) {
   if (!recordedBy || (recordedByRole !== "Owner" && recordedByRole !== "Client")) {
     return failure(400, "The payment recorder could not be verified.");
   }
+  let uploadedProof: string | undefined;
+  if (proofImage) {
+    try {
+      uploadedProof = await uploadBase64Image(proofImage, "payments");
+    } catch (error) {
+      return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Payment proof could not be uploaded.");
+    }
+  }
   const payment = {
     id: nextId("payment"),
     project,
@@ -39,7 +48,7 @@ export function createPayment(body: any) {
     recordedByRole,
     date: today(),
     ...(note ? { note: note.slice(0, 500) } : {}),
-    ...(proofImage ? { proofImage } : {})
+    ...(proofImage ? { proofImage: uploadedProof } : {})
   };
   payments.unshift(payment);
   return result({ record: payment }, 201);

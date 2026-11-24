@@ -8,5 +8,5 @@ export class ProgressController extends ApiController {
   public list() { return listProgress(); }
 
   @Post()
-  public create(@Body() body: any): any { return this.respond(createProgress(body)); }
+  public async create(@Body() body: any): Promise<any> { return this.respond(await createProgress(body)); }
 }

@@ -1,5 +1,6 @@
 import { Attendance, AttendanceLeaveRequest, AttendanceRegularizationRequest, attendance, attendanceLeaveRequests, attendanceLeaves, attendanceRegularizationRequests, nextAttendanceLeaveId, nextId, people, readAttendanceProof, readText } from "../../data/store";
 import { failure, result } from "../shared";
+import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
 
 function dateKey(date: Date) {
   const year = date.getFullYear();
@@ -260,7 +261,7 @@ export function regularizeAttendance(id: string, body: any) {
   return result({ record });
 }
 
-export function recordAttendance(body: any) {
+export async function recordAttendance(body: any) {
   const engineer = readText(body?.engineer);
   const date = readText(body?.date);
   const action = body?.action;
@@ -275,6 +276,12 @@ export function recordAttendance(body: any) {
   if (action === "check-out" && record && hasMissedCheckOutDeadline(record)) {
     return failure(409, "The check-out deadline has passed. Submit a regularization request instead.");
   }
+  let uploadedProof: typeof proof = proof;
+  try {
+    uploadedProof = { ...proof, image: await uploadBase64Image(proof.image, "attendance") };
+  } catch (error) {
+    return failure(error instanceof R2StorageError ? 503 : 500, error instanceof R2StorageError ? error.message : "Attendance photo could not be uploaded.");
+  }
   if (!record) {
     record = {
       id: nextId("attendance"), engineer, present: "—", shift: "Full day", status: "Checked in",
@@ -283,11 +290,11 @@ export function recordAttendance(body: any) {
     attendance.unshift(record);
   }
   if (action === "check-in") {
-    record.checkIn = proof;
+    record.checkIn = uploadedProof;
     record.status = "Checked in";
     record.evidence = "Check-in photo";
   } else {
-    record.checkOut = proof;
+    record.checkOut = uploadedProof;
     record.status = "Present";
     record.evidence = "Check-in and check-out photos";
   }

@@ -8,8 +8,8 @@ export class SiteVisitsController extends ApiController {
   public list() { return listSiteVisits(); }
 
   @Post()
-  public create(@Body() body: any): any { return this.respond(createSiteVisit(body)); }
+  public async create(@Body() body: any): Promise<any> { return this.respond(await createSiteVisit(body)); }
 
   @Patch("{id}")
-  public update(@Path() id: string, @Body() body: any): any { return this.respond(updateSiteVisit(id, body)); }
+  public async update(@Path() id: string, @Body() body: any): Promise<any> { return this.respond(await updateSiteVisit(id, body)); }
 }

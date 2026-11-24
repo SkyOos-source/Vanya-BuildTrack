@@ -29,8 +29,8 @@ export class ProfilesController extends ApiController {
   }
 
   @Patch("me")
-  public updateMe(@Query() role: string, @Query() email: string, @Body() body: unknown): any {
-    return this.respond(updateMyProfile(role, email, body));
+  public async updateMe(@Query() role: string, @Query() email: string, @Body() body: unknown): Promise<any> {
+    return this.respond(await updateMyProfile(role, email, body));
   }
 
   @Get("owners")

@@ -90,6 +90,20 @@ TWILIO_VERIFY_SERVICE_SID=VA...
 
 Keep the credentials private and do not commit `.env` files. MFA remains off unless `MFA_ENABLED=true`; sign-in verification cannot complete until all three Twilio values are configured. Restart or redeploy the backend after changing the setting.
 
+### Cloudflare R2 image storage
+
+Uploaded profile photos, progress photos, attendance and site-visit evidence, payment proofs, expense receipt images, quotation PDFs, and work-request photos are stored in Cloudflare R2. Configure an R2 API token and add these variables to the deployment root `.env`:
+
+```dotenv
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_PUBLIC_BASE_URL=https://images.example.com
+```
+
+`R2_PUBLIC_BASE_URL` must be a public R2 custom-domain or `r2.dev` bucket URL. The API rejects image uploads with HTTP 503 while R2 is not configured. Existing database images are automatically migrated to R2 once at startup when R2 is configured.
+
 Site engineers can set overall project completion and mark a photo's stage when submitting a progress update. When a project reaches 100%, its client can open a completion report from the project details and compare photos marked as project start and completion (or the earliest and latest uploaded photos). On the client Feedback page, a rating and comment can be saved in BuildTrack for the owner and posted publicly through the Google review page. The default Google link opens the Vanya Concrete Technologies listing, where clients can select **Write a review**. To use a direct review form link instead, set `VITE_GOOGLE_REVIEW_URL` in `frontend/.env`.
 
 ### Browser push notifications

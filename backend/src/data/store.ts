@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { prisma } from "../prisma";
+import { migrateLegacyBase64Images } from "../object-storage/r2";
 
 
 export type Project = {
@@ -354,6 +355,7 @@ export async function initializeStore() {
   personSequence = nextSequence(people, "USR-", personSequence);
   updateSequence = nextSequence(activities, "UPD-", updateSequence);
   if (ownerAccountsNeedSaving) await saveStore();
+  if (await migrateLegacyBase64Images(store)) await saveStore();
 }
 
 export function isInitialOwnerSetupRequired() {

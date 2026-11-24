@@ -8,5 +8,5 @@ export class PaymentsController extends ApiController {
   public list() { return listPayments(); }
 
   @Post()
-  public create(@Body() body: any): any { return this.respond(createPayment(body)); }
+  public async create(@Body() body: any): Promise<any> { return this.respond(await createPayment(body)); }
 }
