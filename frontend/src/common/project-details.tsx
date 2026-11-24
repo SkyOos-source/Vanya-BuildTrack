@@ -1,14 +1,17 @@
 import { useState } from "react";
 import type { DashboardData, Project, ProjectContact, Role } from "./types";
-import { formatCurrency, googleReviewUrl } from "./utils";
-import { StatusBadge } from "./components";
+import { formatCurrency, googleReviewUrl, isLoggedExpense } from "./utils";
+import { ExpenseRows, StatusBadge } from "./components";
 import { QuotationPdfPreview } from "./quotation-pdf-preview";
 
-export function ProjectDetails({ project, data, role, currentUser, ownerContacts, ownerContactsError, onBack, onEdit, onCreate }: { project: Project; data: DashboardData; role: Role; currentUser: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; onBack: () => void; onEdit?: (project: Project) => void; onCreate?: (modal: "payment", project: Project) => void }) {
+export function ProjectDetails({ project, data, role, currentUser, ownerContacts, ownerContactsError, onBack, onEdit, onCreate }: { project: Project; data: DashboardData; role: Role; currentUser: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; onBack: () => void; onEdit?: (project: Project) => void; onCreate?: (modal: "payment" | "expense-log", project: Project) => void }) {
   const [showCompletionReport, setShowCompletionReport] = useState(false);
   const quotations = data.quotes.filter((item) => item.project === project.name);
   const projectPayments = data.payments.filter((item) => item.project === project.name);
   const totalPayments = projectPayments.reduce((total, payment) => total + payment.amount, 0);
+  const projectExpenses = data.expenses.filter((item) => item.project === project.name);
+  const loggedProjectExpenses = projectExpenses.filter(isLoggedExpense);
+  const totalProjectExpenses = loggedProjectExpenses.reduce((total, expense) => total + expense.amount, 0);
   const displayedQuotationAmount = quotations.length > 0
     ? quotations.reduce((total, quotation) => total + quotation.amount, 0)
     : project.quotationAmount ?? 0;
@@ -117,9 +120,30 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
       <section><h3>Quotations</h3>{quotations.length > 0
         ? <div className="project-details-list">{quotations.map((item) => <article key={item.id}><div><strong>{item.title}</strong><span>{item.id} · {item.date}</span></div><strong>{formatCurrency(item.amount)}</strong><StatusBadge status={item.status} />{item.attachment && <QuotationPdfPreview attachment={item.attachment} title={item.title} />}</article>)}</div>
         : <p className="project-details-empty">No additional quotations recorded.</p>}</section>
-      <section><div className="list-toolbar"><div><h3>Project payments</h3><span className="project-payment-total">{formatCurrency(totalPayments)} received · {projectPayments.length} {projectPayments.length === 1 ? "payment" : "payments"}</span></div>{role !== "Employee" && onCreate && <button className="button button-primary" type="button" onClick={() => onCreate("payment", project)}>＋ Add payment</button>}</div>{projectPayments.length
+      {(role === "Owner" || role === "ProjectManager") && <div className="project-cash-summary">
+        <article>
+          <span>Total amount in</span>
+          <strong>{formatCurrency(totalPayments)}</strong>
+          <small>{projectPayments.length} {projectPayments.length === 1 ? "payment" : "payments"} received</small>
+        </article>
+        <article>
+          <span>Total amount out</span>
+          <strong>{formatCurrency(totalProjectExpenses)}</strong>
+          <small>{loggedProjectExpenses.length} {loggedProjectExpenses.length === 1 ? "expense" : "expenses"} logged</small>
+        </article>
+      </div>}
+      <section className="project-financial-section"><div className="list-toolbar"><div><span className="panel-kicker">PROJECT CASH FLOW</span><h3>Payments</h3><span className="project-payment-total">{formatCurrency(totalPayments)} received · {projectPayments.length} {projectPayments.length === 1 ? "payment" : "payments"}</span></div>{(role === "Owner" || role === "ProjectManager") && onCreate && <button className="button button-primary" type="button" onClick={() => onCreate("payment", project)}>＋ Add payment</button>}</div>{projectPayments.length
         ? <div className="project-details-list">{projectPayments.map((payment) => <article className="project-payment-row" key={payment.id}><div><strong>{formatCurrency(payment.amount)} · {payment.method}</strong><span>{payment.date} · Recorded by {payment.recordedBy} ({payment.recordedByRole}){payment.note ? ` · ${payment.note}` : ""}</span></div>{payment.proofImage && <a className="project-payment-proof" href={payment.proofImage} target="_blank" rel="noreferrer"><img src={payment.proofImage} alt={`Online payment proof uploaded by ${payment.recordedBy}`} />View proof</a>}</article>)}</div>
         : <p className="project-details-empty">No payments have been recorded for this project yet.</p>}</section>
+      {(role === "Owner" || role === "ProjectManager") && <section className="project-financial-section project-expense-section">
+        <div className="list-toolbar">
+          <div><span className="panel-kicker">PROJECT COSTS</span><h3>Expenses</h3><span className="project-payment-total">{formatCurrency(totalProjectExpenses)} logged · {loggedProjectExpenses.length} {loggedProjectExpenses.length === 1 ? "expense" : "expenses"}</span></div>
+          {onCreate && <button className="button button-primary" type="button" onClick={() => onCreate("expense-log", project)}>＋ Add expense</button>}
+        </div>
+        {loggedProjectExpenses.length
+          ? <ExpenseRows expenses={loggedProjectExpenses} detailed />
+          : <p className="project-details-empty">No expenses have been logged for this project yet.</p>}
+      </section>}
     </div>
   </section>;
 }

@@ -1612,7 +1612,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" || modal === "expense-log" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
     </div>
   );
 }
