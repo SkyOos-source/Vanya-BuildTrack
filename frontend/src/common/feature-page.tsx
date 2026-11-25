@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, MaterialRequest, OwnerAuditLog, Payment, Project, ProjectContact, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
 import { apiFetch } from "./api";
-import { formatCurrency, initials, isLoggedExpense } from "./utils";
+import { formatCurrency, initials, isLoggedExpense, withRetryGuidance } from "./utils";
 import { DateInput, ExpenseRows, ProjectCards, StatusBadge } from "./components";
 import { AttendancePage } from "./attendance-page";
 import { ProjectDetails } from "./project-details";
@@ -10,7 +10,7 @@ import { SiteVisitsPage, type SiteVisitAction } from "./site-visits-page";
 import { PalettePicker } from "./palette";
 import { WorkRequestsPage } from "./work-requests-page";
 
-export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null, project?: Project) => void; onEditProject?: (project: Project) => void; onCreatePerson: (role: "Site Engineer" | "Client" | "Project Manager") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onUnassignEngineerProject: (project: Project) => Promise<void>; onUnassignClientProject: (client: Person, project: Project) => Promise<void>; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => void; onBackup: () => void; workRequestsRefresh: number };
+export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null, project?: Project) => void; onEditProject?: (project: Project) => void; onCreatePerson: (role: "Site Engineer" | "Client" | "Project Manager") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onUnassignEngineerProject: (project: Project) => Promise<void>; onUnassignClientProject: (client: Person, project: Project) => Promise<void>; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => Promise<void>; onBackup: () => void; workRequestsRefresh: number };
 
 const RECORDS_PER_PAGE = 10;
 const AUDIT_LOGS_PER_PAGE = 20;
@@ -75,11 +75,40 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [personPendingDeletion, setPersonPendingDeletion] = useState<Person | null>(null);
   const [personBeingEdited, setPersonBeingEdited] = useState<Person | null>(null);
+  const [personUpdateBusy, setPersonUpdateBusy] = useState(false);
+  const personUpdateInFlight = useRef(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const feedbackSubmissionInFlight = useRef(false);
   const [unassigningProjectId, setUnassigningProjectId] = useState<string | null>(null);
   const [projectPendingUnassignment, setProjectPendingUnassignment] = useState<Project | null>(null);
   const [materialProjectFilter, setMaterialProjectFilter] = useState("All");
   const [materialLogProjectFilter, setMaterialLogProjectFilter] = useState("All");
   const [materialActivityStatusFilter, setMaterialActivityStatusFilter] = useState("All");
+  const submitClientFeedback = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (feedbackSubmissionInFlight.current) return;
+    feedbackSubmissionInFlight.current = true;
+    setFeedbackSubmitting(true);
+    try {
+      await onFeedback(event);
+    } finally {
+      feedbackSubmissionInFlight.current = false;
+      setFeedbackSubmitting(false);
+    }
+  };
+  const submitPersonUpdate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!personBeingEdited || personUpdateInFlight.current) return;
+    personUpdateInFlight.current = true;
+    setPersonUpdateBusy(true);
+    try {
+      const updated = await onUpdatePerson(personBeingEdited, event);
+      if (updated) setPersonBeingEdited(null);
+    } finally {
+      personUpdateInFlight.current = false;
+      setPersonUpdateBusy(false);
+    }
+  };
   const materialAssignmentRows = [
     ...data.materialAllocations
       .filter((item) => (role !== "Employee" || item.engineer === currentUser) &&
@@ -306,7 +335,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error(`Unable to generate ${type} report:`, error);
-      onToast(error instanceof Error ? error.message : "Could not generate this report.");
+      onToast(withRetryGuidance(error instanceof Error ? error.message : "Could not generate this report."));
     }
   };
   const downloadBackup = async (id: string) => {
@@ -322,7 +351,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Unable to download workspace backup:", error);
-      onToast(error instanceof Error ? error.message : "Could not download this backup.");
+      onToast(withRetryGuidance(error instanceof Error ? error.message : "Could not download this backup."));
     }
   };
   return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${page === "Payments" ? "payment-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""} ${role === "Employee" && page === "Materials" ? "engineer-materials-feature-page" : ""}`}>
@@ -524,15 +553,15 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     </div>}
     {page === "Timeline" && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">PROJECT ACTIVITY</span><h2 className="list-title">Project timeline & updates</h2></div><div className="toolbar-actions"><select className="select-button" aria-label="Filter project timeline by project" value={timelineProject} onChange={(event) => setTimelineProject(event.target.value)}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select><StatusBadge status="In progress" /></div></div><div className="timeline full-timeline">{data.activities.filter((item) => item.kind === "progress" && scopedProjects.some((project) => project.name === item.project) && (timelineProject === "All" || item.project === timelineProject)).map((item) => <div className="timeline-item timeline-done" key={item.id}><div className="timeline-marker">✓</div><div className="timeline-date">{item.createdAt ? new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : item.time}</div><div className="timeline-content"><strong>{item.description || item.action}</strong><span>{item.project} · {item.actor}</span></div></div>)}</div></section>}
     {page === "Feedback" && role === "Owner" && <section className="panel feature-panel"><div className="panel-heading compact"><div><span className="panel-kicker">CLIENT VOICE</span><h2>Project feedback & reviews</h2></div><span className="backup-count">{data.feedback.length} reviews</span></div><div className="quote-list">{data.feedback.map((item) => <article className="feedback-review" key={item.id}><span className="avatar">{initials(item.client)}</span><div><div className="review-title"><strong>{item.client}</strong><span className="aside-stars">{"★".repeat(item.rating)}</span></div><p>{item.comment}</p><small>{item.project} · {item.date}</small></div></article>)}</div></section>}
-    {page === "Feedback" && role === "Client" && <section className="panel feature-panel feedback-layout"><div><span className="panel-kicker">YOUR VOICE MATTERS</span><h2 className="list-title">Share your review</h2><p className="feature-subtitle">Your rating and comment will be saved for the project owner, then you’ll continue to Google to post it publicly.</p><form className="feedback-form" onSubmit={onFeedback}><label>Project<select name="project" required defaultValue={scopedProjects[0]?.name}>{scopedProjects.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label><label>Your rating<div className="rating-stars" role="radiogroup" aria-label="Rate your experience">{[1, 2, 3, 4, 5].map((star) => <button type="button" key={star} aria-label={`${star} stars`} aria-checked={rating === star} role="radio" className={star <= rating ? "star-selected" : ""} onClick={() => setRating(star)}>★</button>)}</div><input type="hidden" name="rating" value={rating} /></label><label>Your review<textarea name="comment" required rows={4} maxLength={2000} placeholder="Share your experience with the project team..." /></label><button className="button button-primary" type="submit" disabled={!scopedProjects.length}>Post review on Google ↗</button></form></div><aside className="feedback-aside"><span>★</span><p>Your review will be saved for the project owner before you continue to Google.</p><strong>Vanya BuildTrack</strong><small>BuildTrack and Google reviews</small></aside></section>}
-    {personBeingEdited && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPersonBeingEdited(null); }}>
+    {page === "Feedback" && role === "Client" && <section className="panel feature-panel feedback-layout"><div><span className="panel-kicker">YOUR VOICE MATTERS</span><h2 className="list-title">Share your review</h2><p className="feature-subtitle">Your rating and comment will be saved for the project owner, then you’ll continue to Google to post it publicly.</p><form className="feedback-form" onSubmit={(event) => void submitClientFeedback(event)}><label>Project<select name="project" required defaultValue={scopedProjects[0]?.name}>{scopedProjects.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label><label>Your rating<div className="rating-stars" role="radiogroup" aria-label="Rate your experience">{[1, 2, 3, 4, 5].map((star) => <button type="button" key={star} aria-label={`${star} stars`} aria-checked={rating === star} role="radio" className={star <= rating ? "star-selected" : ""} disabled={feedbackSubmitting} onClick={() => setRating(star)}>★</button>)}</div><input type="hidden" name="rating" value={rating} /></label><label>Your review<textarea name="comment" required rows={4} maxLength={2000} placeholder="Share your experience with the project team..." /></label><button className="button button-primary" type="submit" disabled={feedbackSubmitting || !scopedProjects.length}>{feedbackSubmitting ? "Submitting…" : "Post review on Google ↗"}</button></form></div><aside className="feedback-aside"><span>★</span><p>Your review will be saved for the project owner before you continue to Google.</p><strong>Vanya BuildTrack</strong><small>BuildTrack and Google reviews</small></aside></section>}
+    {personBeingEdited && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (!personUpdateBusy && event.target === event.currentTarget) setPersonBeingEdited(null); }}>
       <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-person-title">
-        <div className="modal-heading"><div><span className="panel-kicker">YOUR TEAM</span><h2 id="edit-person-title">Edit {personBeingEdited.name}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" onClick={() => setPersonBeingEdited(null)}>×</button></div>
-        <form onSubmit={(event) => { event.preventDefault(); void onUpdatePerson(personBeingEdited, event).then((updated) => { if (updated) setPersonBeingEdited(null); }); }}>
+        <div className="modal-heading"><div><span className="panel-kicker">YOUR TEAM</span><h2 id="edit-person-title">Edit {personBeingEdited.name}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" disabled={personUpdateBusy} onClick={() => setPersonBeingEdited(null)}>×</button></div>
+        <form onSubmit={(event) => void submitPersonUpdate(event)}>
           <label>Full name<input name="name" required defaultValue={personBeingEdited.name} /></label>
           <label>Email<input name="email" type="email" required defaultValue={personBeingEdited.email} /></label>
           <label>Phone number<div className="phone-input-prefix"><span>+91</span><input name="phone" type="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} autoComplete="tel" defaultValue={(personBeingEdited.phone ?? "").replace(/^\+91/, "")} placeholder="98765 43210" /></div></label>
-          <div className="modal-actions"><button className="button button-outline" type="button" onClick={() => setPersonBeingEdited(null)}>Cancel</button><button className="button button-primary" type="submit">Save changes</button></div>
+          <div className="modal-actions"><button className="button button-outline" type="button" disabled={personUpdateBusy} onClick={() => setPersonBeingEdited(null)}>Cancel</button><button className="button button-primary" type="submit" disabled={personUpdateBusy}>{personUpdateBusy ? "Saving…" : "Save changes"}</button></div>
         </form>
       </section>
     </div>}

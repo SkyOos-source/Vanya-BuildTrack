@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Payment, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
-import { compressImageFile, currentMonthKey, formatCurrency, googleReviewUrl, initials, siteVisitDateParts } from "./utils";
+import { compressImageFile, currentMonthKey, formatCurrency, googleReviewUrl, initials, siteVisitDateParts, withRetryGuidance } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
 import OwnerDashboard from "../owner/dashboard/page";
 import EngineerDashboard from "../engineer/dashboard/page";
@@ -127,6 +127,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<RecordModalType | null>(null);
+  const [recordSubmissionBusy, setRecordSubmissionBusy] = useState(false);
+  const recordSubmissionInFlight = useRef(false);
+  const mutationInFlight = useRef(new Set<string>());
+  const acquireMutation = (key: string) => {
+    if (mutationInFlight.current.has(key)) return null;
+    mutationInFlight.current.add(key);
+    return () => mutationInFlight.current.delete(key);
+  };
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [modalProject, setModalProject] = useState<Project | null>(null);
   const [personCreationRole, setPersonCreationRole] = useState<"Site Engineer" | "Client" | "Project Manager">("Site Engineer");
@@ -137,6 +145,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [workRequestsRefresh, setWorkRequestsRefresh] = useState(0);
   const [pushStatus, setPushStatus] = useState<PushStatus>("checking");
   const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
+  const pushToggleInFlight = useRef(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const navigateToPage = (nextPage: string) => navigate(pagePath(role, nextPage));
   const createPerson = (personRole: "Site Engineer" | "Client" | "Project Manager") => {
@@ -311,6 +320,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, [role, userName]);
 
   const togglePushNotifications = async () => {
+    if (pushToggleInFlight.current) return;
+    pushToggleInFlight.current = true;
     if (pushStatus === "enabled") {
       try {
         const registration = await navigator.serviceWorker.getRegistration("/");
@@ -328,11 +339,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       } catch (error) {
         console.error("Unable to disable browser push notifications:", error);
         setPushStatus("error");
-        showToast(error instanceof Error ? error.message : "Could not disable browser notifications.");
+        showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not disable browser notifications."));
+      } finally {
+        pushToggleInFlight.current = false;
       }
       return;
     }
-    if (!pushPublicKey) return;
+    if (!pushPublicKey) {
+      pushToggleInFlight.current = false;
+      return;
+    }
     try {
       setPushStatus("checking");
       const permission = await Notification.requestPermission();
@@ -361,7 +377,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to enable browser push notifications:", error);
       setPushStatus("error");
-      showToast(error instanceof Error ? error.message : "Could not enable browser notifications.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not enable browser notifications."));
+    } finally {
+      pushToggleInFlight.current = false;
     }
   };
 
@@ -643,27 +661,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   }, [data.people, data.projects, role, userName]);
 
   useEffect(() => {
-    if (role !== "Client" || page !== "My Projects") return;
-    let active = true;
-    const loadClientProgress = async () => {
-      try {
-        const response = await apiFetch("/api/progress");
-        if (!response.ok) throw new Error(`Project progress request failed (${response.status})`);
-        const activities = await response.json() as DashboardData["activities"];
-        if (!Array.isArray(activities)) throw new Error("Project progress request returned invalid data.");
-        const clientProjectNames = data.projects.filter((project) => project.client === userName).map((project) => project.name);
-        const assignedClientProject = data.people.find((person) => person.role === "Client" && person.name === userName)?.project;
-        const visibleActivities = activities.filter((activity) => clientProjectNames.includes(activity.project) || activity.project === assignedClientProject);
-        if (active) setData((current) => ({ ...current, activities: visibleActivities }));
-      } catch (error) {
-        console.error("Unable to load progress photos for the client project report:", error);
-      }
-    };
-    void loadClientProgress();
-    return () => { active = false; };
-  }, [data.people, data.projects, page, role, userName]);
-
-  useEffect(() => {
     if (page !== "Materials") return;
     let active = true;
     const loadMaterialData = async () => {
@@ -719,6 +716,13 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
         const result: unknown = await response.json();
         if (!active || !Array.isArray(result)) return;
+        const isProjectPage = page === "Projects & Sites" || page === "My Sites" || page === "My Projects";
+        const progressResponse = isProjectPage ? await apiFetch("/api/progress") : undefined;
+        if (progressResponse && !progressResponse.ok) throw new Error(`Project progress request failed (${progressResponse.status})`);
+        const progressActivities: unknown = progressResponse ? await progressResponse.json() : undefined;
+        if (progressActivities !== undefined && !Array.isArray(progressActivities)) {
+          throw new Error("Project progress request returned invalid data.");
+        }
         const quotationsResponse = page === "Payments" ? await apiFetch("/api/quotations") : undefined;
         if (quotationsResponse && !quotationsResponse.ok) throw new Error(`Quotation amounts request failed (${quotationsResponse.status})`);
         const paymentQuotations: unknown = quotationsResponse ? await quotationsResponse.json() : undefined;
@@ -741,7 +745,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             case "Projects & Sites":
             case "My Sites":
             case "My Projects":
-              return { ...current, projects: result as DashboardData["projects"] };
+              return {
+                ...current,
+                projects: result as DashboardData["projects"],
+                activities: [
+                  ...(progressActivities as DashboardData["activities"] ?? []),
+                  ...current.activities.filter((item) => item.kind !== "progress")
+                ]
+              };
             case "Materials":
               return { ...current, materials: result as DashboardData["materials"] };
             case "Expenses":
@@ -916,14 +927,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
 
   const createRecord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!modal) return;
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
-    const amount = Number(form.get("amount") || 0);
-    const materialAllocation = modal === "material-log"
-      ? data.materialAllocations.find((item) => item.id === form.get("allocationId"))
-      : undefined;
+    if (!modal || recordSubmissionInFlight.current) return;
+    recordSubmissionInFlight.current = true;
+    setRecordSubmissionBusy(true);
     try {
+      const form = new FormData(event.currentTarget);
+      const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
+      const amount = Number(form.get("amount") || 0);
+      const materialAllocation = modal === "material-log"
+        ? data.materialAllocations.find((item) => item.id === form.get("allocationId"))
+        : undefined;
       const projectEndpoint = modal === "project" && editingProject
         ? `/api/projects/${editingProject.id}`
         : "/api/projects";
@@ -981,7 +994,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         attachments: progressAttachments,
         quotationAttachment,
         stage: modal === "progress" ? form.get("stage") : undefined,
-        progress: modal === "progress" ? form.get("progress") : undefined
+        progress: modal === "progress" ? form.get("progress") : undefined,
+        completionSummary: modal === "progress" ? form.get("completionSummary") : undefined
       };
       const response = await apiFetch(endpoint, {
         method: modal === "project" && editingProject ? "PATCH" : "POST",
@@ -1069,11 +1083,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "payment" ? "Payment" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save record:", error);
-      showToast(error instanceof Error ? error.message : "Could not save this record.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not save this record."));
+    } finally {
+      recordSubmissionInFlight.current = false;
+      setRecordSubmissionBusy(false);
     }
   };
 
   const updateQuote = async (quote: Quote, decision: "Approved" | "Declined") => {
+    const release = acquireMutation(`quotation:${quote.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/quotations/${quote.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: decision }) });
       if (!response.ok) throw new Error(`Quotation update failed (${response.status})`);
@@ -1081,11 +1100,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`Quotation ${decision.toLowerCase()}.`);
     } catch (error) {
       console.error("Unable to update quotation:", error);
-      showToast("Could not update quotation. Check the API connection.");
+      showToast(withRetryGuidance("Could not update quotation. Check the API connection."));
+    } finally {
+      release();
     }
   };
 
   const updateExpense = async (expense: Expense, status: "Approved" | "Declined" | "Paid") => {
+    const release = acquireMutation(`expense:${expense.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/expenses/${expense.id}`, {
         method: "PATCH",
@@ -1098,11 +1121,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`Expense ${status.toLowerCase()}.`);
     } catch (error) {
       console.error("Unable to update expense:", error);
-      showToast(error instanceof Error ? error.message : "Could not update expense.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not update expense."));
+    } finally {
+      release();
     }
   };
 
   const updateMaterialRequest = async (request: MaterialRequest, status: "Approved" | "Declined") => {
+    const release = acquireMutation(`material-request:${request.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/material-requests/${request.id}`, {
         method: "PATCH",
@@ -1121,11 +1148,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(status === "Approved" ? "Request approved and material assigned." : "Material request declined.");
     } catch (error) {
       console.error("Unable to review material request:", error);
-      showToast(error instanceof Error ? error.message : "Could not update material request.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not update material request."));
+    } finally {
+      release();
     }
   };
 
   const updateVisit = async (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => {
+    const release = acquireMutation(`site-visit:${visit.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/site-visits/${visit.id}`, {
         method: "PATCH",
@@ -1148,13 +1179,17 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`Site visit ${action === "check-in" ? "check-in" : "check-out"} saved.`);
     } catch (error) {
       console.error("Unable to update site visit:", error);
-      const message = error instanceof Error ? error.message : "Could not update site visit.";
+      const message = withRetryGuidance(error instanceof Error ? error.message : "Could not update site visit.");
       showToast(message);
       throw error instanceof Error ? error : new Error(message);
+    } finally {
+      release();
     }
   };
 
   const checkInVisit = async (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => {
+    const release = acquireMutation(`site-visit-check-in:${currentUser}:${project}`);
+    if (!release) return;
     try {
       const response = await apiFetch("/api/site-visits", {
         method: "POST",
@@ -1192,13 +1227,17 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`Checked in at ${result.record.project}.`);
     } catch (error) {
       console.error("Unable to check in for site visit:", error);
-      const message = error instanceof Error ? error.message : "Could not check in at the site.";
+      const message = withRetryGuidance(error instanceof Error ? error.message : "Could not check in at the site.");
       showToast(message);
       throw error instanceof Error ? error : new Error(message);
+    } finally {
+      release();
     }
   };
 
   const removePerson = async (person: Person) => {
+    const release = acquireMutation(`person-delete:${person.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/people/${person.id}`, { method: "DELETE" });
       const result = await response.json() as { error?: string };
@@ -1207,11 +1246,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`${person.name} removed from the team list.`);
     } catch (error) {
       console.error("Unable to remove person:", error);
-      showToast(error instanceof Error ? error.message : "Could not remove this person.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not remove this person."));
+    } finally {
+      release();
     }
   };
 
   const unassignEngineerProject = async (project: Project) => {
+    const release = acquireMutation(`project-engineer-unassign:${project.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/projects/${project.id}`, {
         method: "PATCH",
@@ -1229,11 +1272,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`${project.name} unassigned from the engineer.`);
     } catch (error) {
       console.error("Unable to unassign project from engineer:", error);
-      showToast(error instanceof Error ? error.message : "Could not unassign this site.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not unassign this site."));
+    } finally {
+      release();
     }
   };
 
   const unassignClientProject = async (client: Person, project: Project) => {
+    const release = acquireMutation(`project-client-unassign:${client.id}:${project.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/people/${client.id}`, {
         method: "PATCH",
@@ -1257,11 +1304,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`${project.name} unassigned from ${client.name}.`);
     } catch (error) {
       console.error("Unable to unassign project from client:", error);
-      showToast(error instanceof Error ? error.message : "Could not unassign this project.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not unassign this project."));
+    } finally {
+      release();
     }
   };
 
   const updatePerson = async (person: Person, event: FormEvent<HTMLFormElement>) => {
+    const release = acquireMutation(`person-update:${person.id}`);
+    if (!release) return false;
     const form = new FormData(event.currentTarget);
     try {
       const response = await apiFetch(`/api/people/${person.id}`, {
@@ -1295,12 +1346,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       return true;
     } catch (error) {
       console.error("Unable to update person:", error);
-      showToast(error instanceof Error ? error.message : "Could not update this person.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not update this person."));
       return false;
+    } finally {
+      release();
     }
   };
 
   const submitAttendance = async (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => {
+    const release = acquireMutation(`attendance:${currentUser}:${date}:${action}`);
+    if (!release) return;
     try {
       const response = await apiFetch("/api/attendance", {
         method: "POST",
@@ -1325,10 +1380,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to submit attendance:", error);
       throw error;
+    } finally {
+      release();
     }
   };
 
   const regularizeAttendance = async (record: Attendance, capturedAt: string, reason: string) => {
+    const release = acquireMutation(`attendance-regularize:${record.id}`);
+    if (!release) return;
     try {
       const response = await apiFetch(`/api/attendance/${record.id}/regularize`, {
         method: "PATCH",
@@ -1345,10 +1404,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to regularize attendance:", error);
       throw error instanceof Error ? error : new Error("Could not regularize attendance.");
+    } finally {
+      release();
     }
   };
 
   const reviewAttendanceRequest = async (requestId: string, decision: "Approved" | "Declined"): Promise<AttendanceRegularizationRequest> => {
+    const release = acquireMutation(`attendance-request-review:${requestId}`);
+    if (!release) throw new Error("This attendance request is already being reviewed.");
     try {
       const response = await apiFetch(`/api/attendance/regularization-requests/${requestId}`, {
         method: "PATCH",
@@ -1368,10 +1431,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to review attendance regularization request:", error);
       throw error instanceof Error ? error : new Error("Could not review attendance request.");
+    } finally {
+      release();
     }
   };
 
   const reviewAttendanceLeaveRequest = async (requestId: string, decision: "Approved" | "Declined"): Promise<{ request: AttendanceLeaveRequest; record?: Attendance }> => {
+    const release = acquireMutation(`attendance-leave-review:${requestId}`);
+    if (!release) throw new Error("This leave request is already being reviewed.");
     try {
       const response = await apiFetch(`/api/attendance/leave-requests/${requestId}`, {
         method: "PATCH",
@@ -1397,11 +1464,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       console.error("Unable to review attendance leave request:", error);
       throw error instanceof Error ? error : new Error("Could not review the leave request.");
+    } finally {
+      release();
     }
   };
 
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const release = acquireMutation("feedback:create");
+    if (!release) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const reviewWindow = window.open("about:blank", "_blank");
@@ -1430,11 +1501,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     } catch (error) {
       if (reviewWindow && !reviewWindow.closed) reviewWindow.close();
       console.error("Unable to submit client feedback:", error);
-      showToast(error instanceof Error ? error.message : "Could not save your review.");
+      showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not save your review."));
+    } finally {
+      release();
     }
   };
 
   const requestBackup = async () => {
+    const release = acquireMutation("backup:create");
+    if (!release) return;
     try {
       const response = await apiFetch("/api/backups", { method: "POST" });
       if (!response.ok) throw new Error(`Backup request failed (${response.status})`);
@@ -1443,11 +1518,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       showToast(`Backup ${result.record.id} requested. Status: ${result.record.status}.`);
     } catch (error) {
       console.error("Unable to request account backup:", error);
-      showToast("Could not request a backup. Check the API connection.");
+      showToast(withRetryGuidance("Could not request a backup. Check the API connection."));
+    } finally {
+      release();
     }
   };
 
   const signOut = async () => {
+    const release = acquireMutation("auth:sign-out");
+    if (!release) return;
+    let notice: string | undefined;
     try {
       const response = await apiFetch("/api/auth/logout", {
         method: "POST",
@@ -1457,10 +1537,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       if (!response.ok) throw new Error(`Sign-out failed (${response.status})`);
     } catch (error) {
       console.error("API sign-out failed:", error);
+      notice = withRetryGuidance(error instanceof Error ? error.message : "Server sign-out failed.");
     }
-    localStorage.removeItem("buildtrack-session");
-    clearAuthTokens();
-    navigate("/signin", { replace: true });
+    try {
+      localStorage.removeItem("buildtrack-session");
+      clearAuthTokens();
+      navigate("/signin", { replace: true, state: notice ? { notice } : undefined });
+    } finally {
+      release();
+    }
   };
 
   const currentUser = userName;
@@ -1612,7 +1697,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </aside>
       </>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} role={role} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" || modal === "expense-log" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} isSubmitting={recordSubmissionBusy} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" || modal === "expense-log" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
     </div>
   );
 }

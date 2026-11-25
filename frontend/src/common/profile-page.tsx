@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Role } from "./types";
 import { roleId } from "./data";
-import { compressImageFile, initials } from "./utils";
+import { compressImageFile, initials, withRetryGuidance } from "./utils";
 import { apiFetch } from "./api";
 
 type UserProfile = {
@@ -57,6 +57,8 @@ function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: Pro
   const [photoError, setPhotoError] = useState("");
   const [savedImage, setSavedImage] = useState(profile.image);
   const photoInput = useRef<HTMLInputElement>(null);
+  const phoneUpdateInFlight = useRef(false);
+  const photoUpdateInFlight = useRef(false);
 
   useEffect(() => {
     setPhone(profile.phone);
@@ -65,7 +67,8 @@ function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: Pro
 
   const updatePhone = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editable) return;
+    if (!editable || phoneUpdateInFlight.current) return;
+    phoneUpdateInFlight.current = true;
     setSaving(true);
     setSaveError("");
     try {
@@ -78,14 +81,16 @@ function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: Pro
       if (!response.ok || !result.profile) throw new Error(result.error || `Phone number update failed (${response.status})`);
       setPhone(result.profile.phone);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Unable to update the phone number.");
+      setSaveError(withRetryGuidance(error instanceof Error ? error.message : "Phone number update failed."));
     } finally {
+      phoneUpdateInFlight.current = false;
       setSaving(false);
     }
   };
 
   const selectPhoto = async (file: File | undefined) => {
-    if (!file || !editable) return;
+    if (!file || !editable || photoUpdateInFlight.current) return;
+    photoUpdateInFlight.current = true;
     setPhotoError("");
     setSavingPhoto(true);
     try {
@@ -100,8 +105,9 @@ function ProfileDetails({ profile, qrCode, editable, onProfileImageChange }: Pro
       setSavedImage(result.profile.image);
       onProfileImageChange?.(result.profile.image);
     } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : "Unable to prepare the selected photo.");
+      setPhotoError(withRetryGuidance(error instanceof Error ? error.message : "Profile photo update failed."));
     } finally {
+      photoUpdateInFlight.current = false;
       setSavingPhoto(false);
       if (photoInput.current) photoInput.current.value = "";
     }

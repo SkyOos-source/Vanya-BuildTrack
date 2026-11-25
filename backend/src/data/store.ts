@@ -88,6 +88,7 @@ export type Activity = {
   kind: string;
   stage?: "Start" | "Progress" | "Completion";
   description?: string;
+  completionSummary?: string;
   attachment?: string;
   attachments?: string[];
   createdAt?: string;

@@ -3,6 +3,12 @@ import type { Expense } from "./types";
 export const formatCurrency = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(amount);
 export const initials = (name: string) => name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 export const isLoggedExpense = (expense: Expense) => expense.entryType === "log" || (!expense.entryType && expense.status === "Logged");
+export function withRetryGuidance(message: string): string {
+  const detail = message.trim();
+  if (!detail) return "The request failed. Please try again; if the problem persists, try again in a few minutes.";
+  if (/try again|retry/i.test(detail)) return detail;
+  return `${detail} Please try again; if the problem persists, try again in a few minutes.`;
+}
 export const monthKeyForDate = (value: string) => {
   const dateOnly = /^(\d{4})-(\d{2})-\d{2}/.exec(value);
   if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}`;

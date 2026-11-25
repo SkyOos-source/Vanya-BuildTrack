@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Project, Role, SiteVisit, SiteVisitProof } from "./types";
 import { DateInput, StatusBadge } from "./components";
-import { captureCameraPhoto, compressImageFile, reverseGeocode, siteVisitDateParts } from "./utils";
+import { captureCameraPhoto, compressImageFile, reverseGeocode, siteVisitDateParts, withRetryGuidance } from "./utils";
 
 export type SiteVisitAction = "check-in" | "check-out";
 
@@ -58,6 +58,7 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
   const [photoPreview, setPhotoPreview] = useState<{ proof: SiteVisitProof; label: string; fallbackLocation: string } | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraRequestRef = useRef(0);
+  const proofSubmissionInFlight = useRef(false);
   useEffect(() => {
     if (!cameraStream) return;
     if (cameraVideoRef.current) cameraVideoRef.current.srcObject = cameraStream;
@@ -125,11 +126,13 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
 
   const submitProof = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (proofSubmissionInFlight.current) return;
     const video = cameraVideoRef.current;
     if (!capture || !cameraReady || !video) {
       setError("Camera is not ready yet. Please wait a moment and try again.");
       return;
     }
+    proofSubmissionInFlight.current = true;
     setSaving(true);
     setError("");
     try {
@@ -160,8 +163,9 @@ export function SiteVisitsPage({ visits, projects, role, currentUser, onAction, 
       setCameraReady(false);
       setCameraStream(null);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Could not save the site visit photo.");
+      setError(withRetryGuidance(submitError instanceof Error ? submitError.message : "Could not save the site visit photo."));
     } finally {
+      proofSubmissionInFlight.current = false;
       setSaving(false);
     }
   };

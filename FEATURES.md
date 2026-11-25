@@ -52,7 +52,7 @@ Site engineers record field activity and keep owners and clients informed.
 - View assigned projects and construction sites.
 - Submit daily construction progress updates.
 - Upload construction progress photos.
-- Record the overall project completion percentage and mark start or completion photos.
+- Record the overall project completion percentage and mark start or completion photos. Reaching 100% prompts the site engineer for a completion summary, which is shown in the completion report.
 - Log use against owner-assigned material quantities and request additional materials when needed.
 - Log expenses against owner-assigned funds even when spending exceeds the remaining balance; show the balance as negative until the owner assigns more funds. Select a project and upload supporting receipts.
 - Request additional funds separately when the assigned balance is insufficient.
@@ -111,8 +111,9 @@ Clients follow the work on their assigned projects and respond to quotations.
 
 - Let clients save a project rating and comment in BuildTrack for the owner, and open the configured Google review page to post it publicly.
 - Make received client feedback available to the owner.
-- When a project reaches 100% completion, let its client open a report with project-start and project-completion photos, falling back to the earliest and latest uploaded photos.
-- Include a direct Google review link in the completion report.
+- When a project reaches 100% completion, let every role open a report for projects they can access. Include branded report metadata, a completion summary from the final progress update, project and team details, and all photos from the start and completion updates, falling back to the earliest and latest photo updates.
+- Let users export the completion report to PDF through the browser's print-to-PDF flow.
+- Include a direct Google review link in the client's completion report.
 
 ### Engineer site visits
 

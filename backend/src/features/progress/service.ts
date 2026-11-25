@@ -19,13 +19,15 @@ export async function createProgress(body: any) {
   const progressValue = body?.progress;
   const hasProgressValue = progressValue !== undefined && progressValue !== "";
   const completionProgress = hasProgressValue && progressValue !== null ? readAmount(progressValue) : null;
+  const completionSummary = readText(body?.completionSummary);
   if (!description || !project || (stage !== "Start" && stage !== "Progress" && stage !== "Completion") ||
     (hasProgressValue && (completionProgress === null || completionProgress > 100)) ||
+    (completionProgress === 100 && !completionSummary) ||
     (body?.attachment && !attachment) ||
     (rawAttachments !== undefined &&
       (!Array.isArray(rawAttachments) || rawAttachments.length > 5 || rawAttachments.some((item, index) =>
         !attachments[index] || !attachments[index]?.startsWith("data:image/"))))) {
-    return failure(400, "Progress description, project, valid photo stage, completion percentage from 0 to 100, and up to 5 valid images are required.");
+    return failure(400, "Progress description, project, valid photo stage, completion percentage from 0 to 100, a completion summary at 100%, and up to 5 valid images are required.");
   }
   const imageAttachments = validAttachments.filter((item) => item.startsWith("data:image/"));
   let uploadedAttachments: string[] = [];
@@ -50,6 +52,7 @@ export async function createProgress(body: any) {
     kind: "progress",
     stage,
     description,
+    ...(completionSummary ? { completionSummary } : {}),
     attachment: uploadedAttachments[0] ?? (attachment?.startsWith("data:") ? undefined : attachment) ?? undefined,
     ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}),
     createdAt: new Date().toISOString()

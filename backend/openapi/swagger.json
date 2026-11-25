@@ -216,6 +216,9 @@
 					"attachment": {
 						"type": "string"
 					},
+					"completionSummary": {
+						"type": "string"
+					},
 					"description": {
 						"type": "string"
 					},

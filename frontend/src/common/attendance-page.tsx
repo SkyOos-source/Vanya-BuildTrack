@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Attendance, AttendanceLeave, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Role } from "./types";
 import { DateInput, StatusBadge } from "./components";
 import { apiFetch } from "./api";
-import { captureCameraPhoto, compressImageFile, reverseGeocode } from "./utils";
+import { captureCameraPhoto, compressImageFile, reverseGeocode, withRetryGuidance } from "./utils";
 
 type AttendancePageProps = {
   data: DashboardData;
@@ -172,6 +172,12 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraRequestRef = useRef(0);
+  const inFlightActions = useRef(new Set<string>());
+  const acquireAction = (key: string) => {
+    if (inFlightActions.current.has(key)) return null;
+    inFlightActions.current.add(key);
+    return () => inFlightActions.current.delete(key);
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -260,6 +266,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
 
   const addLeave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const release = acquireAction("leave:create");
+    if (!release) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     setLeaveBusy(true);
@@ -276,13 +284,16 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       formElement.reset();
     } catch (saveError) {
       console.error("Unable to add attendance leave:", saveError);
-      setLeaveError(saveError instanceof Error ? saveError.message : "Could not add leave.");
+      setLeaveError(withRetryGuidance(saveError instanceof Error ? saveError.message : "Could not add leave."));
     } finally {
+      release();
       setLeaveBusy(false);
     }
   };
 
   const removeLeave = async (leave: AttendanceLeave) => {
+    const release = acquireAction(`leave:delete:${leave.id}`);
+    if (!release) return;
     setLeaveBusy(true);
     setLeaveError("");
     try {
@@ -292,14 +303,17 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       setLeaves((current) => current.filter((item) => item.id !== leave.id));
     } catch (deleteError) {
       console.error("Unable to remove attendance leave:", deleteError);
-      setLeaveError(deleteError instanceof Error ? deleteError.message : "Could not remove leave.");
+      setLeaveError(withRetryGuidance(deleteError instanceof Error ? deleteError.message : "Could not remove leave."));
     } finally {
+      release();
       setLeaveBusy(false);
     }
   };
 
   const submitLeaveRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const release = acquireAction("leave-request:create");
+    if (!release) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     setLeaveRequestBusy(true);
@@ -320,21 +334,25 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       formElement.reset();
     } catch (submitError) {
       console.error("Unable to submit attendance leave request:", submitError);
-      setLeaveRequestError(submitError instanceof Error ? submitError.message : "Could not submit leave request.");
+      setLeaveRequestError(withRetryGuidance(submitError instanceof Error ? submitError.message : "Could not submit leave request."));
     } finally {
+      release();
       setLeaveRequestBusy(false);
     }
   };
 
   const reviewLeaveRequest = async (request: AttendanceLeaveRequest, decision: "Approved" | "Declined") => {
+    const release = acquireAction(`leave-request:review:${request.id}`);
+    if (!release) return;
     setReviewingLeaveRequestId(request.id);
     setLeaveRequestError("");
     try {
       const reviewed = await onReviewLeaveRequest(request.id, decision);
       setLeaveRequests((current) => current.map((item) => item.id === reviewed.request.id ? reviewed.request : item));
     } catch (reviewError) {
-      setLeaveRequestError(reviewError instanceof Error ? reviewError.message : "Could not review the leave request.");
+      setLeaveRequestError(withRetryGuidance(reviewError instanceof Error ? reviewError.message : "Could not review the leave request."));
     } finally {
+      release();
       setReviewingLeaveRequestId(null);
     }
   };
@@ -342,6 +360,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const submitRegularization = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!regularizationRecord) return;
+    const release = acquireAction(`attendance:regularize:${regularizationRecord.id}`);
+    if (!release) return;
     const form = new FormData(event.currentTarget);
     setRegularizing(true);
     setRegularizationError("");
@@ -349,8 +369,9 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       await onRegularize(regularizationRecord, String(form.get("capturedAt")), String(form.get("reason")));
       setRegularizationRecord(null);
     } catch (error) {
-      setRegularizationError(error instanceof Error ? error.message : "Could not regularize attendance.");
+      setRegularizationError(withRetryGuidance(error instanceof Error ? error.message : "Could not regularize attendance."));
     } finally {
+      release();
       setRegularizing(false);
     }
   };
@@ -358,6 +379,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
   const submitRegularizationRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!requestRecord || !requestRecord.date) return;
+    const release = acquireAction(`regularization-request:create:${requestRecord.id}`);
+    if (!release) return;
     const form = new FormData(event.currentTarget);
     setRequestingRegularization(true);
     setRequestError("");
@@ -378,21 +401,25 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       setRequestRecord(null);
     } catch (submitError) {
       console.error("Unable to submit attendance regularization request:", submitError);
-      setRequestError(submitError instanceof Error ? submitError.message : "Could not submit regularization request.");
+      setRequestError(withRetryGuidance(submitError instanceof Error ? submitError.message : "Could not submit regularization request."));
     } finally {
+      release();
       setRequestingRegularization(false);
     }
   };
 
   const reviewRequest = async (request: AttendanceRegularizationRequest, decision: "Approved" | "Declined") => {
+    const release = acquireAction(`regularization-request:review:${request.id}`);
+    if (!release) return;
     setReviewingRequestId(request.id);
     setRequestError("");
     try {
       const reviewed = await onReviewRequest(request.id, decision);
       setRegularizationRequests((current) => current.map((item) => item.id === reviewed.id ? reviewed : item));
     } catch (reviewError) {
-      setRequestError(reviewError instanceof Error ? reviewError.message : "Could not review the attendance request.");
+      setRequestError(withRetryGuidance(reviewError instanceof Error ? reviewError.message : "Could not review the attendance request."));
     } finally {
+      release();
       setReviewingRequestId(null);
     }
   };
@@ -443,6 +470,8 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       setError("Camera is not ready yet. Please wait a moment and try again.");
       return;
     }
+    const release = acquireAction("attendance:capture");
+    if (!release) return;
     setSubmitting(true);
     setError("");
     try {
@@ -462,8 +491,9 @@ export function AttendancePage({ data, role, currentUser, onSubmit, onRegularize
       setCameraReady(false);
       setCameraStream(null);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Could not submit attendance.");
+      setError(withRetryGuidance(submitError instanceof Error ? submitError.message : "Could not submit attendance."));
     } finally {
+      release();
       setSubmitting(false);
     }
   };

@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Project, Role, WorkRequest } from "./types";
 import { apiFetch } from "./api";
-import { compressImageFile } from "./utils";
+import { compressImageFile, withRetryGuidance } from "./utils";
 import { StatusBadge } from "./components";
 
 type SelectedPhoto = { name: string; image: string };
@@ -23,6 +23,8 @@ export function WorkRequestsPage({ role, currentUser, projects, refreshKey, onTo
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const submissionInFlight = useRef(false);
+  const reviewsInFlight = useRef(new Set<string>());
   const isClient = role === "Client";
 
   useEffect(() => {
@@ -73,6 +75,8 @@ export function WorkRequestsPage({ role, currentUser, projects, refreshKey, onTo
 
   const submitRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
     setBusy(true);
     setFormError("");
     try {
@@ -88,13 +92,16 @@ export function WorkRequestsPage({ role, currentUser, projects, refreshKey, onTo
       setPhotos([]);
       onToast("Your work request has been sent.");
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Work request could not be submitted.");
+      setFormError(withRetryGuidance(error instanceof Error ? error.message : "Work request could not be submitted."));
     } finally {
+      submissionInFlight.current = false;
       setBusy(false);
     }
   };
 
   const reviewRequest = async (request: WorkRequest, status: "Approved" | "Declined") => {
+    if (reviewsInFlight.current.has(request.id)) return;
+    reviewsInFlight.current.add(request.id);
     setReviewingId(request.id);
     try {
       const response = await apiFetch(`/api/work-requests/${request.id}`, {
@@ -107,8 +114,9 @@ export function WorkRequestsPage({ role, currentUser, projects, refreshKey, onTo
       setRequests((current) => current.map((item) => item.id === request.id ? result.record! : item));
       onToast(`Work request ${status.toLowerCase()}.`);
     } catch (error) {
-      onToast(error instanceof Error ? error.message : "Work request review failed.");
+      onToast(withRetryGuidance(error instanceof Error ? error.message : "Work request review failed."));
     } finally {
+      reviewsInFlight.current.delete(request.id);
       setReviewingId(null);
     }
   };

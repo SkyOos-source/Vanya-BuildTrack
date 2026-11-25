@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { SessionUser } from "../common/types";
 import { readSession, rolePath, saveAuthTokens } from "../common/data";
 import { BuildingIcon, PasswordInput } from "../common/components";
 import { apiFetch } from "../common/api";
+import { withRetryGuidance } from "../common/utils";
 
 type SetupOwner = { name: string; email: string; phone: string; password: string; confirmation: string };
 const emptySetupOwners: SetupOwner[] = [
@@ -18,6 +19,7 @@ export function SignInPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const authSubmissionInFlight = useRef(false);
   const [authChallenge, setAuthChallenge] = useState<{ challengeId: string; phoneRequired: boolean; phoneHint?: string } | null>(null);
   const [enrollmentPhone, setEnrollmentPhone] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
@@ -29,6 +31,8 @@ export function SignInPage() {
   const [setupError, setSetupError] = useState("");
   const [setupSuccess, setSetupSuccess] = useState("");
   const [setupSubmitting, setSetupSubmitting] = useState(false);
+  const setupSubmissionInFlight = useRef(false);
+  const notice = (location.state as { notice?: string } | null)?.notice;
 
   useEffect(() => {
     if (session) navigate(rolePath(session.role), { replace: true });
@@ -54,6 +58,8 @@ export function SignInPage() {
 
   const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (authSubmissionInFlight.current) return;
+    authSubmissionInFlight.current = true;
     setSubmitting(true);
     setError("");
     try {
@@ -76,15 +82,17 @@ export function SignInPage() {
       const destination = (location.state as { from?: string } | null)?.from;
       navigate(destination?.startsWith(rolePath(result.user.role)) ? destination : rolePath(result.user.role), { replace: true });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to sign in. Please try again.");
+      setError(withRetryGuidance(cause instanceof Error ? cause.message : "Sign-in failed."));
     } finally {
+      authSubmissionInFlight.current = false;
       setSubmitting(false);
     }
   };
 
   const sendVerificationCode = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!authChallenge) return;
+    if (!authChallenge || authSubmissionInFlight.current) return;
+    authSubmissionInFlight.current = true;
     setSubmitting(true);
     setError("");
     try {
@@ -100,15 +108,17 @@ export function SignInPage() {
       if (!response.ok || !result.phoneHint) throw new Error(result.error || `Could not send verification code (${response.status}).`);
       setAuthChallenge({ ...authChallenge, phoneRequired: false, phoneHint: result.phoneHint });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not send the verification code.");
+      setError(withRetryGuidance(cause instanceof Error ? cause.message : "Could not send the verification code."));
     } finally {
+      authSubmissionInFlight.current = false;
       setSubmitting(false);
     }
   };
 
   const verifyCode = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!authChallenge) return;
+    if (!authChallenge || authSubmissionInFlight.current) return;
+    authSubmissionInFlight.current = true;
     setSubmitting(true);
     setError("");
     try {
@@ -125,14 +135,16 @@ export function SignInPage() {
       const destination = (location.state as { from?: string } | null)?.from;
       navigate(destination?.startsWith(rolePath(result.user.role)) ? destination : rolePath(result.user.role), { replace: true });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to verify this code. Please try again.");
+      setError(withRetryGuidance(cause instanceof Error ? cause.message : "Could not verify the code."));
     } finally {
+      authSubmissionInFlight.current = false;
       setSubmitting(false);
     }
   };
 
   const resendVerificationCode = async () => {
-    if (!authChallenge) return;
+    if (!authChallenge || authSubmissionInFlight.current) return;
+    authSubmissionInFlight.current = true;
     setSubmitting(true);
     setError("");
     try {
@@ -145,8 +157,9 @@ export function SignInPage() {
       if (!response.ok || !result.phoneHint) throw new Error(result.error || `Could not send verification code (${response.status}).`);
       setAuthChallenge({ ...authChallenge, phoneRequired: false, phoneHint: result.phoneHint });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not resend the verification code.");
+      setError(withRetryGuidance(cause instanceof Error ? cause.message : "Could not resend the verification code."));
     } finally {
+      authSubmissionInFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -159,6 +172,8 @@ export function SignInPage() {
 
   const completeSetup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (setupSubmissionInFlight.current) return;
+    setupSubmissionInFlight.current = true;
     setSetupSubmitting(true);
     setSetupError("");
     try {
@@ -184,8 +199,9 @@ export function SignInPage() {
       setSetupCode("");
       setSetupOwners(emptySetupOwners);
     } catch (cause) {
-      setSetupError(cause instanceof Error ? cause.message : "Unable to complete setup. Please try again.");
+      setSetupError(withRetryGuidance(cause instanceof Error ? cause.message : "Could not complete workspace setup."));
     } finally {
+      setupSubmissionInFlight.current = false;
       setSetupSubmitting(false);
     }
   };
@@ -221,6 +237,7 @@ export function SignInPage() {
           <button className="button button-primary signin-submit" type="button" onClick={() => { setSetupError(""); setSetupAttempt((attempt) => attempt + 1); }}>Try again <span>→</span></button>
         </> : <>
           <span className="panel-kicker">WELCOME BACK</span><h2>Sign in to BuildTrack</h2><p className="signin-description">Enter your email and password to open your workspace.</p>
+          {notice && <div className="signin-error" role="alert">{notice}</div>}
           {setupSuccess && <div className="setup-success" role="status">{setupSuccess}</div>}
           {authChallenge ? <>
             <span className="panel-kicker">TWO-STEP VERIFICATION</span>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { DashboardData, Project, ProjectContact, Role } from "./types";
 import { formatCurrency, googleReviewUrl, isLoggedExpense } from "./utils";
 import { ExpenseRows, StatusBadge } from "./components";
@@ -6,6 +6,13 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview";
 
 export function ProjectDetails({ project, data, role, currentUser, ownerContacts, ownerContactsError, onBack, onEdit, onCreate }: { project: Project; data: DashboardData; role: Role; currentUser: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; onBack: () => void; onEdit?: (project: Project) => void; onCreate?: (modal: "payment" | "expense-log", project: Project) => void }) {
   const [showCompletionReport, setShowCompletionReport] = useState(false);
+  const [completionReportGeneratedAt, setCompletionReportGeneratedAt] = useState<Date | null>(null);
+  useEffect(() => {
+    if (!showCompletionReport || project.progress < 100) return;
+    const previousTitle = document.title;
+    document.title = `${project.name} - Project Completion Report`;
+    return () => { document.title = previousTitle; };
+  }, [showCompletionReport, project.name, project.progress]);
   const quotations = data.quotes.filter((item) => item.project === project.name);
   const projectPayments = data.payments.filter((item) => item.project === project.name);
   const totalPayments = projectPayments.reduce((total, payment) => total + payment.amount, 0);
@@ -21,10 +28,8 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
     && (person.project === project.name || person.name === project.client)
   );
   const assignedClientName = assignedClient?.name || (project.client !== "Unassigned" ? project.client : "No client assigned");
-  const activities = data.activities.filter((item) => item.project === project.name && item.kind === "progress");
-  const sitePhotos = activities
-    .flatMap((item) => (item.attachments?.length ? item.attachments : item.attachment ? [item.attachment] : [])
-      .map((attachment, index) => ({ ...item, id: `${item.id}-${index}`, attachment })))
+  const projectActivities = data.activities
+    .filter((item) => item.project === project.name && item.kind === "progress")
     .sort((left, right) => {
       const leftTime = left.createdAt ? Date.parse(left.createdAt) : Number.NaN;
       const rightTime = right.createdAt ? Date.parse(right.createdAt) : Number.NaN;
@@ -32,45 +37,76 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
       if (!Number.isFinite(rightTime)) return -1;
       return leftTime - rightTime;
     });
-  const startingPhoto = sitePhotos.find((item) => item.stage === "Start") ?? sitePhotos[0];
-  const completionPhotos = sitePhotos.filter((item) => item.stage === "Completion");
-  const completionPhoto = completionPhotos[completionPhotos.length - 1] ?? sitePhotos[sitePhotos.length - 1];
+  const photosForUpdate = (activity: (typeof projectActivities)[number]) =>
+    activity.attachments?.length ? activity.attachments : activity.attachment ? [activity.attachment] : [];
+  const updatesWithPhotos = projectActivities.filter((activity) => photosForUpdate(activity).length > 0);
+  const startingUpdate = updatesWithPhotos.find((activity) => activity.stage === "Start") ?? updatesWithPhotos[0];
+  const completionUpdate = [...updatesWithPhotos].reverse().find((activity) => activity.stage === "Completion") ??
+    updatesWithPhotos[updatesWithPhotos.length - 1];
+  const completionSummaryUpdate = [...projectActivities].reverse().find((activity) => activity.completionSummary) ??
+    [...projectActivities].reverse().find((activity) => activity.stage === "Completion") ??
+    projectActivities[projectActivities.length - 1];
+  const completionReportId = `VBT-${project.id}-${completionReportGeneratedAt?.getTime().toString(36).toUpperCase() ?? "FINAL"}`;
   const formatPhotoDate = (createdAt?: string) => createdAt
     ? new Date(createdAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
     : "Date not recorded";
-  if (showCompletionReport && role === "Client" && project.progress >= 100) {
+  if (showCompletionReport && project.progress >= 100) {
     return <section className="panel completion-report">
+      <header className="completion-report-brand">
+        <div className="completion-report-brand-name">
+          <img src="/buildtrack-logo-transparent.png" alt="" />
+          <div><strong>Vanya BuildTrack</strong><span>Project completion report</span></div>
+        </div>
+        <dl>
+          <div><dt>Report ID</dt><dd>{completionReportId}</dd></div>
+          <div><dt>Generated</dt><dd>{completionReportGeneratedAt?.toLocaleString() ?? "Just now"}</dd></div>
+        </dl>
+      </header>
       <div className="list-toolbar completion-report-toolbar">
         <div><span className="panel-kicker">PROJECT COMPLETION</span><h2 className="list-title">{project.name} · Final report</h2></div>
         <div className="toolbar-actions">
-          <button className="button button-outline" onClick={() => window.print()}>Print / Save report</button>
+          <button className="button button-primary" type="button" onClick={() => window.print()}>Export PDF</button>
           <button className="button button-outline" onClick={() => setShowCompletionReport(false)}>Back to project</button>
         </div>
       </div>
-      <p className="completion-report-intro">The project has reached 100% completion. Compare the site photos marked for project start and completion. If a stage was not marked, the earliest or latest available photo is shown.</p>
+      <p className="completion-report-intro">This project has reached 100% completion. Use Export PDF and choose “Save as PDF” in your browser’s print dialog. All photos from the first and last photo updates are included; explicitly marked start and completion updates take priority.</p>
       <div className="completion-report-overview">
         <div><span>Project</span><strong>{project.name}</strong></div>
         <div><span>Site</span><strong>{project.site}</strong></div>
-        <div><span>Client</span><strong>{currentUser}</strong></div>
-        <div><span>Completion</span><strong>{project.progress}%</strong></div>
-        <div><span>Engineer</span><strong>{project.engineer}</strong></div>
+        <div><span>Client</span><strong>{project.client}</strong></div>
+        <div><span>Report prepared for</span><strong>{currentUser}</strong></div>
+        <div><span>Site engineer</span><strong>{project.engineer}</strong></div>
+        <div><span>Project manager</span><strong>{project.projectManager || "Not assigned"}</strong></div>
+        <div><span>Completion status</span><strong>Completed · {project.progress}%</strong></div>
+        <div><span>Started</span><strong>{startingUpdate ? formatPhotoDate(startingUpdate.createdAt) : "Date not recorded"}</strong></div>
+        <div><span>Completed</span><strong>{completionUpdate ? formatPhotoDate(completionUpdate.createdAt) : "Date not recorded"}</strong></div>
+        <div><span>Due date</span><strong>{project.dueDate || "Not recorded"}</strong></div>
       </div>
+      <section className="completion-report-summary">
+        <span className="panel-kicker">COMPLETION SUMMARY</span>
+        <p>{completionSummaryUpdate?.completionSummary || completionSummaryUpdate?.description || "No completion summary was provided."}</p>
+        {completionSummaryUpdate && <small>{completionSummaryUpdate.stage === "Completion" ? "Completion update" : "Latest progress update"} · {formatPhotoDate(completionSummaryUpdate.createdAt)} · {completionSummaryUpdate.actor}</small>}
+      </section>
       <section className="completion-report-photos" aria-label="Before and after site photos">
         {[
-          { title: "Starting site condition", photo: startingPhoto },
-          { title: "Completed site condition", photo: completionPhoto }
-        ].map(({ title, photo }) => <article className="completion-photo-card" key={title}>
+          { title: "Starting site condition", update: startingUpdate },
+          { title: "Completed site condition", update: completionUpdate }
+        ].map(({ title, update }) => <article className="completion-photo-card" key={title}>
           <h3>{title}</h3>
-          {photo?.attachment
-            ? <><a href={photo.attachment} target="_blank" rel="noreferrer"><img src={photo.attachment} alt={`${title} at ${project.site}`} /></a><p>{photo.description || photo.action}</p><small>{formatPhotoDate(photo.createdAt)} · {photo.actor}</small></>
+          {update
+            ? <><div className="completion-photo-images">{photosForUpdate(update).map((photo, index) =>
+                <a href={photo} target="_blank" rel="noreferrer" key={`${update.id}-${index}`}>
+                  <img src={photo} alt={`${title} photo ${index + 1} at ${project.site}`} />
+                </a>
+              )}</div><small>{formatPhotoDate(update.createdAt)} · {update.actor}</small></>
             : <p className="project-details-empty">No site photo was uploaded for this stage.</p>}
         </article>)}
       </section>
-      {startingPhoto && completionPhoto && startingPhoto.id === completionPhoto.id && <p className="completion-photo-note">Only one site photo is available, so it appears for both stages. Ask your site team to upload separate start and completion photos for a clearer comparison.</p>}
-      <section className="completion-review">
+      {startingUpdate && completionUpdate && startingUpdate.id === completionUpdate.id && <p className="completion-photo-note">Only one progress update with photos is available, so its photos appear for both stages. Upload separate start and completion updates for a clearer comparison.</p>}
+      {role === "Client" && <section className="completion-review">
         <div><span className="panel-kicker">SHARE YOUR EXPERIENCE</span><h3>How was your project?</h3><p>Rate our work and share your experience on Google.</p></div>
         <a className="button button-primary" href={googleReviewUrl} target="_blank" rel="noreferrer">Leave a Google review ↗</a>
-      </section>
+      </section>}
     </section>;
   }
   const coverImageUrl = project.image
@@ -83,7 +119,7 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
     <div className="list-toolbar">
       <div><span className="panel-kicker">PROJECT DETAILS</span><h2 className="list-title">{project.name}</h2></div>
       <div className="toolbar-actions">
-        {role === "Client" && project.progress >= 100 && <button className="button button-primary" onClick={() => setShowCompletionReport(true)}>Get the project report</button>}
+        {project.progress >= 100 && <button className="button button-primary" type="button" onClick={() => { setCompletionReportGeneratedAt(new Date()); setShowCompletionReport(true); }}>View completion report</button>}
         {(role === "Owner" || role === "ProjectManager") && onEdit && <button className="button button-outline" onClick={() => onEdit(project)}>Edit details</button>}
         <button className="button button-outline" onClick={onBack}>← Back to projects</button>
       </div>
