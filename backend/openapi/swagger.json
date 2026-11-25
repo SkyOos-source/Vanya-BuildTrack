@@ -370,6 +370,9 @@
 					"project": {
 						"type": "string"
 					},
+					"category": {
+						"type": "string"
+					},
 					"material": {
 						"type": "string"
 					},
@@ -382,8 +385,29 @@
 					"stock",
 					"used",
 					"received",
-					"project",
 					"material",
+					"id"
+				],
+				"type": "object"
+			},
+			"MaterialCategory": {
+				"properties": {
+					"createdBy": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"createdAt",
+					"name",
 					"id"
 				],
 				"type": "object"
@@ -1568,6 +1592,51 @@
 				}
 			}
 		},
+		"/api/material-categories": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/MaterialCategory"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
 		"/api/material-requests": {
 			"get": {
 				"operationId": "List",
@@ -2128,6 +2197,12 @@
 											},
 											"type": "array"
 										},
+										"materialCategories": {
+											"items": {
+												"$ref": "#/components/schemas/MaterialCategory"
+											},
+											"type": "array"
+										},
 										"materials": {
 											"items": {
 												"$ref": "#/components/schemas/Material"
@@ -2259,6 +2334,7 @@
 										"materialRequests",
 										"materialUsageLogs",
 										"materialAllocations",
+										"materialCategories",
 										"materials",
 										"activities",
 										"siteVisits",

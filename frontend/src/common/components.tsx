@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
-import type { Expense, ExpenseAllocation, MaterialAllocation, Person, Project, RecordModalType, Role } from "./types";
+import type { Expense, ExpenseAllocation, Material, MaterialAllocation, MaterialCategory, Person, Project, RecordModalType, Role } from "./types";
 import { captureCameraPhoto, formatCurrency } from "./utils";
 
 export function ProjectCards({ projects, onOpen }: { projects: Project[]; onOpen: (project: Project) => void }) {
@@ -113,12 +113,18 @@ export function DateInput({ value, defaultValue, onChange, onClear, ...props }: 
   </span>;
 }
 
-export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Site Engineer", initialProject, projects, projectsLoading, projectsLoadError, people, peopleLoading, peopleLoadError, expenseAllocations, materialAllocations, onClose, onSubmit }: { modal: RecordModalType; role: Role; isSubmitting: boolean; initialPersonRole?: "Site Engineer" | "Client" | "Project Manager"; initialProject?: Project; projects: Project[]; projectsLoading: boolean; projectsLoadError: string; people: Person[]; peopleLoading: boolean; peopleLoadError: string; expenseAllocations: ExpenseAllocation[]; materialAllocations: MaterialAllocation[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function getAvailableMaterialQuantity(stock: string) {
+  const quantity = stock.trim().match(/^(\d+(?:\.\d{1,3})?)/)?.[1];
+  return quantity ? Number(quantity) : 0;
+}
+
+export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Site Engineer", initialProject, projects, projectsLoading, projectsLoadError, people, peopleLoading, peopleLoadError, materials, materialCategories, expenseAllocations, materialAllocations, onAddMaterialCategory, onClose, onSubmit }: { modal: RecordModalType; role: Role; isSubmitting: boolean; initialPersonRole?: "Site Engineer" | "Client" | "Project Manager"; initialProject?: Project; projects: Project[]; projectsLoading: boolean; projectsLoadError: string; people: Person[]; peopleLoading: boolean; peopleLoadError: string; materials: Material[]; materialCategories: MaterialCategory[]; expenseAllocations: ExpenseAllocation[]; materialAllocations: MaterialAllocation[]; onAddMaterialCategory: (name: string) => Promise<MaterialCategory>; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const [personRole, setPersonRole] = useState<"Site Engineer" | "Client" | "Project Manager">(initialPersonRole);
   const visitEngineers = people.filter((person) => person.role === "Site Engineer");
   const projectManagers = people.filter((person) => person.role === "Project Manager");
   const selectableAllocations = expenseAllocations;
   const selectableMaterialAllocations = materialAllocations.filter((allocation) => allocation.remainingQuantity > 0);
+  const selectableMaterials = materials.filter((material) => getAvailableMaterialQuantity(material.stock) > 0);
   const defaultVisitEngineer = visitEngineers.find((person) => person.name === projects[0]?.engineer)?.name ?? visitEngineers[0]?.name ?? projects[0]?.engineer ?? "";
   const [visitProject, setVisitProject] = useState(projects[0]?.name ?? "");
   const [visitEngineer, setVisitEngineer] = useState(defaultVisitEngineer);
@@ -128,6 +134,12 @@ export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Si
   const [clientProject, setClientProject] = useState("");
   const [selectedAllocation, setSelectedAllocation] = useState(selectableAllocations[0]?.id ?? "");
   const [selectedMaterialAllocation, setSelectedMaterialAllocation] = useState(selectableMaterialAllocations[0]?.id ?? "");
+  const [selectedStockMaterial, setSelectedStockMaterial] = useState(selectableMaterials[0]?.material ?? "");
+  const [selectedRequestCategory, setSelectedRequestCategory] = useState(materialCategories[0]?.name ?? "");
+  const [showRequestCategoryForm, setShowRequestCategoryForm] = useState(materialCategories.length === 0);
+  const [newRequestCategory, setNewRequestCategory] = useState("");
+  const [requestCategoryError, setRequestCategoryError] = useState("");
+  const [creatingRequestCategory, setCreatingRequestCategory] = useState(false);
   const [progressCameraOpen, setProgressCameraOpen] = useState(false);
   const [progressCameraReady, setProgressCameraReady] = useState(false);
   const [progressCameraStream, setProgressCameraStream] = useState<MediaStream | null>(null);
@@ -135,11 +147,13 @@ export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Si
   const [progressCameraFiles, setProgressCameraFiles] = useState<File[]>([]);
   const progressCameraVideoRef = useRef<HTMLVideoElement>(null);
   const progressCameraInputRef = useRef<HTMLInputElement>(null);
-  const projectSelectorRequired = ["material", "material-allocation", "material-request", "quote", "expense", "expense-log", "payment", "progress", "visit"].includes(modal);
+  const projectSelectorRequired = ["material-allocation", "material-request", "quote", "expense", "expense-log", "payment", "progress", "visit"].includes(modal);
   const projectSelectionUnavailable = projectSelectorRequired && (projectsLoading || projects.length === 0);
   const engineerSelectionUnavailable = (modal === "project" || modal === "expense-allocation") && (peopleLoading || visitEngineers.length === 0);
   const allocationSelectionUnavailable = modal === "expense-log" && role === "Employee" && selectableAllocations.length === 0 ||
-    modal === "material-log" && selectableMaterialAllocations.length === 0;
+    modal === "material-log" && selectableMaterialAllocations.length === 0 ||
+    modal === "material-allocation" && selectableMaterials.length === 0 ||
+    modal === "material-request" && materialCategories.length === 0;
   const projectOptionMessage = projectsLoading ? "Loading projects…" : projectsLoadError ? "Could not load projects" : "No projects available";
   useEffect(() => {
     setPersonRole(initialPersonRole);
@@ -157,6 +171,16 @@ export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Si
       setSelectedMaterialAllocation(selectableMaterialAllocations[0]?.id ?? "");
     }
   }, [selectableMaterialAllocations, selectedMaterialAllocation]);
+  useEffect(() => {
+    if (!selectableMaterials.some((material) => material.material === selectedStockMaterial)) {
+      setSelectedStockMaterial(selectableMaterials[0]?.material ?? "");
+    }
+  }, [selectableMaterials, selectedStockMaterial]);
+  useEffect(() => {
+    if (!materialCategories.some((category) => category.name === selectedRequestCategory)) {
+      setSelectedRequestCategory(materialCategories[0]?.name ?? "");
+    }
+  }, [materialCategories, selectedRequestCategory]);
   useEffect(() => {
     const video = progressCameraVideoRef.current;
     if (progressCameraOpen && progressCameraStream && video) {
@@ -228,12 +252,31 @@ export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Si
       setProgressCameraError(error instanceof Error ? error.message : "Could not take a photo.");
     }
   };
-  const title = modal === "project" ? (initialProject ? "Edit project" : "Create a project") : modal === "quote" ? "New quotation" : modal === "progress" ? "Daily progress update" : modal === "payment" ? "Record a project payment" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log an expense" : modal === "expense-allocation" ? "Assign funds to an engineer" : modal === "visit" ? "Schedule a site visit" : modal === "material" ? "Record site stock" : modal === "material-allocation" ? "Assign materials to a site" : modal === "material-log" ? "Log material use" : modal === "material-request" ? "Request materials" : personRole === "Client" ? "Invite client" : "Add team member";
-  const label = modal === "project" ? "Project name" : modal === "quote" ? "Quotation title" : modal === "progress" ? "What did you complete today?" : modal === "expense" || modal === "expense-log" ? "Expense description" : modal === "visit" ? "Visit purpose" : modal === "material" || modal === "material-request" ? "Material" : "Full name";
+  const addRequestCategory = async () => {
+    const name = newRequestCategory.trim();
+    if (!name) {
+      setRequestCategoryError("Enter a category name.");
+      return;
+    }
+    setCreatingRequestCategory(true);
+    setRequestCategoryError("");
+    try {
+      const category = await onAddMaterialCategory(name);
+      setSelectedRequestCategory(category.name);
+      setNewRequestCategory("");
+      setShowRequestCategoryForm(false);
+    } catch (error) {
+      setRequestCategoryError(error instanceof Error ? error.message : "Could not add the category.");
+    } finally {
+      setCreatingRequestCategory(false);
+    }
+  };
+  const title = modal === "project" ? (initialProject ? "Edit project" : "Create a project") : modal === "quote" ? "New quotation" : modal === "progress" ? "Daily progress update" : modal === "payment" ? "Record a project payment" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log an expense" : modal === "expense-allocation" ? "Assign funds to an engineer" : modal === "visit" ? "Schedule a site visit" : modal === "material" ? "Record company materials" : modal === "material-category" ? "Add material category" : modal === "material-allocation" ? "Assign materials to a site" : modal === "material-log" ? "Log material use" : modal === "material-request" ? "Request materials" : personRole === "Client" ? "Invite client" : "Add team member";
+  const label = modal === "project" ? "Project name" : modal === "quote" ? "Quotation title" : modal === "progress" ? "What did you complete today?" : modal === "expense" || modal === "expense-log" ? "Expense description" : modal === "visit" ? "Visit purpose" : modal === "material-category" ? "Category name" : modal === "material" || modal === "material-request" ? "Material" : "Full name";
   return <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (!isSubmitting && event.target === event.currentTarget) onClose(); }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-heading"><div><span className="panel-kicker">BUILDTRACK WORKSPACE</span><h2 id="modal-title">{title}</h2></div><button className="icon-button modal-close" aria-label="Close dialog" disabled={isSubmitting} onClick={onClose}>×</button></div><form onSubmit={onSubmit}>
     {(modal === "expense" || modal === "expense-log") && <label>Receipt photo<input name="attachment" type="file" accept="image/*" /></label>}
-    {!["material", "material-allocation", "material-log", "person", "expense-allocation", "expense", "expense-log", "payment"].includes(modal) && <label>{modal === "project" ? "Project Name" : label}<input name={modal === "quote" ? "title" : modal === "progress" || modal === "visit" ? "description" : modal === "material-request" ? "material" : "name"} defaultValue={modal === "project" ? initialProject?.name : undefined} required placeholder={modal === "project" ? "e.g. Lakeside Residence" : modal === "quote" ? "e.g. Add-on work — kitchen island" : modal === "progress" ? "Describe work completed at site..." : modal === "visit" ? "e.g. Foundation inspection" : "e.g. M25 concrete"}/></label>}
-    {(modal === "material" || modal === "material-allocation" || modal === "material-request" || modal === "quote" || modal === "expense" || modal === "expense-log" || modal === "payment" || modal === "progress" || modal === "visit") && <label>Project<select name="project" required disabled={projectsLoading || projects.length === 0} value={modal === "visit" ? visitProject : selectedProject || projects[0]?.name || ""} onChange={(event) => {
+    {!["material", "material-allocation", "material-log", "material-request", "person", "expense-allocation", "expense", "expense-log", "payment"].includes(modal) && <label>{modal === "project" ? "Project Name" : label}<input name={modal === "quote" ? "title" : modal === "progress" || modal === "visit" ? "description" : "name"} defaultValue={modal === "project" ? initialProject?.name : undefined} required placeholder={modal === "project" ? "e.g. Lakeside Residence" : modal === "quote" ? "e.g. Add-on work — kitchen island" : modal === "progress" ? "Describe work completed at site..." : modal === "visit" ? "e.g. Foundation inspection" : "e.g. M25 concrete"}/></label>}
+    {(modal === "material-allocation" || modal === "material-request" || modal === "quote" || modal === "expense" || modal === "expense-log" || modal === "payment" || modal === "progress" || modal === "visit") && <label>{modal === "material-allocation" ? "Site / project" : "Project"}<select name="project" required disabled={projectsLoading || projects.length === 0} value={modal === "visit" ? visitProject : selectedProject || projects[0]?.name || ""} onChange={(event) => {
       if (modal !== "visit") {
         setSelectedProject(event.currentTarget.value);
         return;
@@ -248,9 +291,9 @@ export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Si
     {modal === "expense-allocation" && <><label>Site engineer<select name="engineer" required disabled={peopleLoading || visitEngineers.length === 0} defaultValue=""><option value="" disabled>{peopleLoading ? "Loading engineers…" : peopleLoadError ? "Could not load engineers" : "Select an engineer"}</option>{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select>{peopleLoadError && !peopleLoading && <small role="alert">{peopleLoadError}</small>}</label><label>Amount (INR)<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" /></label></>}
     {modal === "quote" && <label>Upload quotation<input name="quotationFile" type="file" accept="application/pdf,.pdf" /></label>}
     {modal === "person" && <><input type="hidden" name="role" value={personRole} />{personRole !== "Client" && <label>Role<select name="displayRole" value={personRole} onChange={(event) => setPersonRole(event.currentTarget.value as "Site Engineer" | "Project Manager")}><option value="Site Engineer">Site Engineer</option><option value="Project Manager">Project Manager</option></select></label>}<label>Full name<input name="name" required /></label><label>Email<input name="email" type="email" required /></label><label>Phone number<div className="phone-input-prefix"><span>+91</span><input name="phone" type="tel" inputMode="numeric" pattern="[0-9]{10}" maxLength={10} placeholder="98765 43210" required /></div></label><label>{personRole === "Client" ? "Client password" : "Temporary password"}<PasswordInput name="password" autoComplete="new-password" minLength={8} required /><small>At least 8 characters. Share it securely with the account holder.</small></label>{personRole === "Client" && <label>Assign project<select name="project" required disabled={projectsLoading || projects.length === 0} value={clientProject} onChange={(event) => setClientProject(event.currentTarget.value)}><option value="" disabled>{projects.length === 0 ? projectOptionMessage : "Select a project"}</option>{projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>{projectsLoadError && !projectsLoading && <small role="alert">{projectsLoadError}</small>}</label>}</>}
-    {modal === "material" && <><label>Material name<input name="material" required placeholder="e.g. M25 ready-mix concrete" /></label><label>Received quantity<input name="received" required placeholder="e.g. 12 m³" /></label><label>Used quantity<input name="used" defaultValue="0" /></label><label>Remaining stock<input name="stock" placeholder="Defaults to received quantity" /></label></>}
-    {modal === "material-allocation" && <><label>Material name<input name="material" required placeholder="e.g. M25 ready-mix concrete" /></label><label>Quantity<input name="quantity" type="number" min="0.001" step="0.001" required placeholder="e.g. 12" /></label><label>Unit<input name="unit" placeholder="e.g. bags, m³, kg" /></label></>}
-    {modal === "material-request" && <><label>Requested quantity<input name="quantity" required placeholder="e.g. 12 m³" /></label><label>Reason or site need<textarea name="note" rows={3} placeholder="Optional details for the owner" /></label></>}
+    {modal === "material" && <><label>Category<select name="category" required disabled={materialCategories.length === 0}><option value="">{materialCategories.length ? "Select a category" : "Add a category first"}</option>{materialCategories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</select>{materialCategories.length === 0 && <small>Add a material category before recording stock.</small>}</label><label>Quantity to add<input name="received" required placeholder="e.g. 12 bags or 2.5 m³" /></label></>}
+    {modal === "material-allocation" && <><label>Material<select name="material" required disabled={selectableMaterials.length === 0} value={selectedStockMaterial} onChange={(event) => setSelectedStockMaterial(event.currentTarget.value)}><option value="" disabled>{selectableMaterials.length ? "Select company material" : "No company materials in stock"}</option>{selectableMaterials.map((material) => <option key={material.id} value={material.material}>{material.material} · {material.stock} available</option>)}</select>{selectableMaterials.length === 0 && <small>Record company materials before assigning them to a site.</small>}</label><label>Quantity<input name="quantity" type="number" min="0.001" step="0.001" max={getAvailableMaterialQuantity(selectableMaterials.find((material) => material.material === selectedStockMaterial)?.stock ?? "0") || undefined} required placeholder="e.g. 12" /></label></>}
+    {modal === "material-request" && <><label>Material category<select name="material" required value={selectedRequestCategory} onChange={(event) => setSelectedRequestCategory(event.currentTarget.value)} disabled={materialCategories.length === 0}><option value="" disabled>{materialCategories.length ? "Select a material category" : "Add a category to continue"}</option>{materialCategories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</select></label><div className="material-request-category-create"><button className="button button-outline" type="button" onClick={() => { setShowRequestCategoryForm((show) => !show); setRequestCategoryError(""); }}>{showRequestCategoryForm ? "Cancel adding category" : "＋ Add category"}</button>{showRequestCategoryForm && <div className="material-request-category-form"><label>New category name<input value={newRequestCategory} onChange={(event) => setNewRequestCategory(event.currentTarget.value)} placeholder="e.g. Cement" /></label><button className="button button-outline" type="button" disabled={creatingRequestCategory} onClick={() => void addRequestCategory()}>{creatingRequestCategory ? "Adding…" : "Save category"}</button>{requestCategoryError && <small role="alert">{requestCategoryError}</small>}</div>}</div><label>Requested quantity<input name="quantity" required placeholder="e.g. 12 m³" /></label><label>Reason or site need<textarea name="note" rows={3} placeholder="Optional details for the owner" /></label></>}
     {modal === "material-log" && <><label>Assigned material<select name="allocationId" required value={selectedMaterialAllocation} onChange={(event) => setSelectedMaterialAllocation(event.currentTarget.value)}><option value="" disabled>{selectableMaterialAllocations.length ? "Select an assignment" : "No remaining materials assigned"}</option>{selectableMaterialAllocations.map((allocation) => <option key={allocation.id} value={allocation.id}>{allocation.material} · {allocation.project}{role === "Owner" ? ` · ${allocation.engineer}` : ""} · {allocation.remainingQuantity} {allocation.unit} remaining</option>)}</select>{selectableMaterialAllocations.length === 0 && <small>{role === "Employee" ? "Ask the owner to assign materials or request more." : "Assign materials to a site before logging usage."}</small>}</label><label>Quantity used<input name="quantity" type="number" min="0.001" step="0.001" max={selectableMaterialAllocations.find((item) => item.id === selectedMaterialAllocation)?.remainingQuantity} required placeholder="e.g. 2" /></label><label>Note<textarea name="note" rows={2} placeholder="Optional usage details" /></label></>}
     {(modal === "quote" || modal === "expense" || modal === "expense-log" || modal === "payment") && <label>Amount (INR)<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0" /></label>}
     {modal === "payment" && <><label>Payment method<select name="method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.currentTarget.value === "Online" ? "Online" : "Cash")}><option value="Cash">Cash</option><option value="Online">Online</option></select></label>{paymentMethod === "Online" && <label>Payment proof image<input name="proofImage" type="file" accept="image/*" required /><small>Upload a screenshot or photo of the online payment confirmation.</small></label>}<label>Note (optional)<input name="note" maxLength={500} placeholder="e.g. First instalment" /></label></>}
@@ -258,7 +301,7 @@ export function RecordModal({ modal, role, isSubmitting, initialPersonRole = "Si
     {modal === "visit" && <><label>Engineer<select name="engineer" required value={visitEngineer} onChange={(event) => setVisitEngineer(event.currentTarget.value)}>{visitEngineer && !visitEngineers.some((person) => person.name === visitEngineer) && <option value={visitEngineer}>{visitEngineer}</option>}{visitEngineers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}</select></label><label>Visit date<DateInput name="date" required /></label></>}
     {modal === "progress" && <div className="progress-photo-options"><div className="progress-camera-option"><span>Take photos with camera</span><button className="button button-outline" type="button" disabled={isSubmitting} onClick={() => void openProgressCamera()}>Open camera</button>{progressCameraOpen && <div className="progress-camera-preview"><video ref={progressCameraVideoRef} muted playsInline /><div className="progress-camera-actions"><button className="button button-primary" type="button" disabled={!progressCameraReady || isSubmitting} onClick={() => void takeProgressPhoto()}>Take photo</button><button className="button button-outline" type="button" disabled={isSubmitting} onClick={closeProgressCamera}>Close camera</button></div>{progressCameraFiles.length > 0 && <small>{progressCameraFiles.length} photo(s) captured</small>}</div>}{progressCameraError && <small role="alert">{progressCameraError}</small>}<input ref={progressCameraInputRef} name="cameraAttachments" type="file" accept="image/*" multiple hidden disabled={isSubmitting} /></div><label>Upload photos (up to 5)<input name="attachments" type="file" accept="image/*" multiple disabled={isSubmitting} /></label></div>}
     {(modal === "expense" || modal === "expense-log") && <label>Expense description<input name="description" required placeholder="e.g. Concrete delivery · 8 m³" /></label>}
-    <div className="modal-actions"><button className="button button-outline" type="button" disabled={isSubmitting} onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={isSubmitting || projectSelectionUnavailable || engineerSelectionUnavailable || allocationSelectionUnavailable || modal === "person" && personRole === "Client" && (projectsLoading || projects.length === 0)}>{isSubmitting ? modal === "progress" ? "Uploading photos…" : "Saving…" : modal === "progress" ? "Submit update" : modal === "payment" ? "Save payment" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log expense" : modal === "expense-allocation" ? "Assign funds" : modal === "material-request" ? "Send material request" : modal === "material-allocation" ? "Assign materials" : modal === "material-log" ? "Log material use" : modal === "visit" ? "Schedule visit" : modal === "quote" ? "Save quotation" : modal === "material" ? "Save material" : modal === "person" ? personRole === "Client" ? "Invite client" : "Add team member" : modal === "project" && initialProject ? "Save changes" : "Create project"}</button></div></form></section></div>;
+    <div className="modal-actions"><button className="button button-outline" type="button" disabled={isSubmitting} onClick={onClose}>Cancel</button><button className="button button-primary" type="submit" disabled={isSubmitting || projectSelectionUnavailable || engineerSelectionUnavailable || allocationSelectionUnavailable || modal === "material" && materialCategories.length === 0 || modal === "person" && personRole === "Client" && (projectsLoading || projects.length === 0)}>{isSubmitting ? modal === "progress" ? "Uploading photos…" : "Saving…" : modal === "progress" ? "Submit update" : modal === "payment" ? "Save payment" : modal === "expense" ? "Request extra funds" : modal === "expense-log" ? "Log expense" : modal === "expense-allocation" ? "Assign funds" : modal === "material-request" ? "Send material request" : modal === "material-allocation" ? "Assign materials" : modal === "material-log" ? "Log material use" : modal === "material-category" ? "Add category" : modal === "visit" ? "Schedule visit" : modal === "quote" ? "Save quotation" : modal === "material" ? "Save material" : modal === "person" ? personRole === "Client" ? "Invite client" : "Add team member" : modal === "project" && initialProject ? "Save changes" : "Create project"}</button></div></form></section></div>;
 }
 
 export function BuildingIcon() {

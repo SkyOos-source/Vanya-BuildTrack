@@ -1,6 +1,6 @@
 import { Body, Get, Patch, Path, Post, Route } from "tsoa";
 import { ApiController } from "../shared";
-import { createMaterial, createMaterialAllocation, createMaterialRequest, createMaterialUsage, listMaterialAllocations, listMaterialRequests, listMaterialUsage, listMaterials, updateMaterialRequest } from "./service";
+import { createMaterial, createMaterialAllocation, createMaterialCategory, createMaterialRequest, createMaterialUsage, listMaterialAllocations, listMaterialCategories, listMaterialRequests, listMaterialUsage, listMaterials, updateMaterialRequest } from "./service";
 
 @Route("api/materials")
 export class MaterialsController extends ApiController {
@@ -9,6 +9,15 @@ export class MaterialsController extends ApiController {
 
   @Post()
   public create(@Body() body: any): any { return this.respond(createMaterial(body)); }
+}
+
+@Route("api/material-categories")
+export class MaterialCategoriesController extends ApiController {
+  @Get()
+  public list() { return listMaterialCategories(); }
+
+  @Post()
+  public create(@Body() body: any): any { return this.respond(createMaterialCategory(body)); }
 }
 
 @Route("api/material-requests")

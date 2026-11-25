@@ -98,6 +98,8 @@ app.use((request, response, next) => {
       const record = (body as { record?: Record<string, unknown> } | null)?.record;
       if (request.method === "POST" && request.path === "/api/materials") {
         publishWorkspaceUpdate({ resource: "materials" });
+      } else if (request.method === "POST" && request.path === "/api/material-categories") {
+        publishWorkspaceUpdate({ resource: "materialCategories" });
       } else if (request.method === "POST" && request.path === "/api/material-requests") {
         publishWorkspaceUpdate({
           resource: "materialRequests",
@@ -201,6 +203,7 @@ app.use((request, response, next) => {
               targets: [{ role: "employee", userName: allocation.engineer, url: "/engineer/materials" }]
             }
           });
+          publishWorkspaceUpdate({ resource: "materials" });
         }
       }
       if (request.method === "POST" && request.path === "/api/material-usage") {
@@ -233,7 +236,7 @@ app.use((request, response, next) => {
         }
       }
       if (request.method === "PATCH" && /^\/api\/material-requests\/[^/]+$/.test(request.path)) {
-        const payload = body as { record?: { project: string; requestedBy: string; status: string; material: string; quantity: string }; allocation?: MaterialAllocation; engineerEmail?: string } | null;
+        const payload = body as { record?: { project: string; requestedBy: string; status: string; material: string; quantity: string }; allocation?: MaterialAllocation; material?: import("./data/store").Material; materialCategory?: import("./data/store").MaterialCategory; engineerEmail?: string } | null;
         const requestRecord = payload?.record;
         if (requestRecord) {
           publishWorkspaceUpdate({
@@ -255,6 +258,8 @@ app.use((request, response, next) => {
           if (payload.allocation) {
             publishWorkspaceUpdate({ resource: "materialAllocations", materialAllocation: payload.allocation });
           }
+          if (payload.material) publishWorkspaceUpdate({ resource: "materials" });
+          if (payload.materialCategory) publishWorkspaceUpdate({ resource: "materialCategories" });
         }
       }
       if (request.path === "/api/work-requests" || /^\/api\/work-requests\/[^/]+$/.test(request.path)) {

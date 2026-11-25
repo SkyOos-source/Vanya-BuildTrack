@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialRequest, MaterialUsageLog, Payment, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialCategory, MaterialRequest, MaterialUsageLog, Payment, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
 import { compressImageFile, currentMonthKey, formatCurrency, googleReviewUrl, initials, siteVisitDateParts, withRetryGuidance } from "./utils";
@@ -127,6 +127,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState("");
   const [modal, setModal] = useState<RecordModalType | null>(null);
+  const [materialApprovalPrompt, setMaterialApprovalPrompt] = useState<{ request: MaterialRequest; availableStock: string } | null>(null);
   const [recordSubmissionBusy, setRecordSubmissionBusy] = useState(false);
   const recordSubmissionInFlight = useRef(false);
   const mutationInFlight = useRef(new Set<string>());
@@ -576,7 +577,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         return;
       }
       const resource = update.resource;
-      if (resource !== "materials" && resource !== "materialRequests" && resource !== "materialAllocations" && resource !== "materialUsage" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "payments" && resource !== "attendance") {
+      if (resource !== "materials" && resource !== "materialCategories" && resource !== "materialRequests" && resource !== "materialAllocations" && resource !== "materialUsage" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "payments" && resource !== "attendance") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
@@ -601,6 +602,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           }
           const endpoint = resource === "materialRequests"
             ? "/api/material-requests"
+            : resource === "materialCategories" ? "/api/material-categories"
             : resource === "materialAllocations" ? "/api/material-allocations"
               : resource === "materialUsage" ? "/api/material-usage"
                 : resource === "expenseAllocations" ? "/api/expenses/allocations" : `/api/${resource}`;
@@ -626,6 +628,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           const refreshedMaterialUsage = usageRelatedRecords ? await usageRelatedRecords[1].json() as DashboardData["materialUsageLogs"] : undefined;
           if (resource === "materials") {
             setData((current) => ({ ...current, materials: records as DashboardData["materials"] }));
+          } else if (resource === "materialCategories") {
+            setData((current) => ({ ...current, materialCategories: records as DashboardData["materialCategories"] }));
           } else if (resource === "materialRequests") {
             setData((current) => ({ ...current, materialRequests: records as DashboardData["materialRequests"] }));
           } else if (resource === "materialAllocations") {
@@ -715,6 +719,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         const response = await apiFetch(endpoint);
         if (!response.ok) throw new Error(`${page} request failed (${response.status})`);
         const result: unknown = await response.json();
+        const materialCategoriesResponse = page === "Materials" && role !== "Client"
+          ? await apiFetch("/api/material-categories")
+          : undefined;
+        if (materialCategoriesResponse && !materialCategoriesResponse.ok) {
+          throw new Error(`Material categories request failed (${materialCategoriesResponse.status})`);
+        }
+        const materialCategories = materialCategoriesResponse ? await materialCategoriesResponse.json() as DashboardData["materialCategories"] : undefined;
+        if (materialCategories !== undefined && !Array.isArray(materialCategories)) {
+          throw new Error("Material categories request returned invalid data.");
+        }
         if (!active || !Array.isArray(result)) return;
         const isProjectPage = page === "Projects & Sites" || page === "My Sites" || page === "My Projects";
         const progressResponse = isProjectPage ? await apiFetch("/api/progress") : undefined;
@@ -754,7 +768,11 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
                 ]
               };
             case "Materials":
-              return { ...current, materials: result as DashboardData["materials"] };
+              return {
+                ...current,
+                materials: result as DashboardData["materials"],
+                materialCategories: materialCategories ?? current.materialCategories
+              };
             case "Expenses":
               return { ...current, expenses: result as DashboardData["expenses"], expenseAllocations: allocations ?? current.expenseAllocations };
             case "Payments":
@@ -816,7 +834,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         })),
         ...data.materials.filter((material) => material.submittedBy && material.submittedBy !== userName).map((material) => ({
           title: "Material update from engineer",
-          detail: `${material.material} · ${material.project} · ${material.submittedBy}`,
+          detail: `${material.material} · ${material.category || "Company stock"} · ${material.submittedBy}`,
           time: material.lastUpdated,
           icon: "◈",
           page: "Materials"
@@ -925,6 +943,24 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     return Promise.all(files.map((file) => readFileDataUrl(file)));
   };
 
+  const addMaterialCategory = async (name: string): Promise<MaterialCategory> => {
+    const response = await apiFetch("/api/material-categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, createdBy: currentUser })
+    });
+    const result = await response.json() as { record?: MaterialCategory; error?: string };
+    if (!response.ok) throw new Error(result.error || `Could not add category (${response.status})`);
+    const category = result.record;
+    if (!category) throw new Error("The API returned no saved category.");
+    setData((current) => ({
+      ...current,
+      materialCategories: [category, ...current.materialCategories.filter((item) => item.id !== category.id)]
+    }));
+    showToast("Material category saved.");
+    return category;
+  };
+
   const createRecord = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!modal || recordSubmissionInFlight.current) return;
@@ -940,7 +976,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       const projectEndpoint = modal === "project" && editingProject
         ? `/api/projects/${editingProject.id}`
         : "/api/projects";
-      const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "payment" ? "payments" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
+      const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "payment" ? "payments" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-category" ? "material-categories" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
       const progressFiles = modal === "progress"
         ? [...form.getAll("attachments"), ...form.getAll("cameraAttachments")].filter((file): file is File => file instanceof File && file.size > 0)
         : [];
@@ -973,6 +1009,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         dueDate: form.get("dueDate"),
         image: coverImage,
         material: form.get("material"),
+        category: form.get("category"),
         quantity: form.get("quantity"),
         note: form.get("note"),
         received: form.get("received"),
@@ -985,6 +1022,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         role: form.get("role"),
         password: form.get("password"),
         submittedBy: currentUser,
+        createdBy: currentUser,
         loggedBy: currentUser,
         entryType: modal === "expense-log" ? "log" : "request",
         method: form.get("method"),
@@ -1002,7 +1040,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const result = await response.json() as { record?: Project | Quote | Expense | Payment | ExpenseAllocation | SiteVisit | Activity | Material | MaterialAllocation | MaterialUsageLog | DashboardData["materialRequests"][number] | Person; allocation?: MaterialAllocation; project?: Project; error?: string };
+      const result = await response.json() as { record?: Project | Quote | Expense | Payment | ExpenseAllocation | SiteVisit | Activity | Material | DashboardData["materialCategories"][number] | MaterialAllocation | MaterialUsageLog | DashboardData["materialRequests"][number] | Person; allocation?: MaterialAllocation; material?: Material; project?: Project; error?: string };
       if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
       if (!record) throw new Error("The API returned no saved record.");
@@ -1053,9 +1091,20 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             : current.projects
         }));
       } else if (modal === "material") {
-        setData((current) => ({ ...current, materials: [record as Material, ...current.materials] }));
+        setData((current) => ({
+          ...current,
+          materials: [record as Material, ...current.materials.filter((material) => material.id !== (record as Material).id)]
+        }));
+      } else if (modal === "material-category") {
+        setData((current) => ({ ...current, materialCategories: [record as DashboardData["materialCategories"][number], ...current.materialCategories] }));
       } else if (modal === "material-allocation") {
-        setData((current) => ({ ...current, materialAllocations: [record as MaterialAllocation, ...current.materialAllocations] }));
+        setData((current) => ({
+          ...current,
+          materialAllocations: [record as MaterialAllocation, ...current.materialAllocations],
+          materials: result.material
+            ? current.materials.map((item) => item.id === result.material!.id ? result.material! : item)
+            : current.materials
+        }));
       } else if (modal === "material-log") {
         setData((current) => ({
           ...current,
@@ -1080,7 +1129,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       setEditingProject(null);
       setModalProject(null);
       setModal(null);
-      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "payment" ? "Payment" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
+      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "payment" ? "Payment" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-category" ? "Material category" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save record:", error);
       showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not save this record."));
@@ -1127,25 +1176,58 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     }
   };
 
-  const updateMaterialRequest = async (request: MaterialRequest, status: "Approved" | "Declined") => {
+  const updateMaterialRequest = async (
+    request: MaterialRequest,
+    status: "Approved" | "Declined",
+    addStockChoice?: boolean | "record"
+  ) => {
+    const addStock = addStockChoice === true;
+    const recordMissingMaterial = addStockChoice === "record";
+    if (status === "Approved" && addStockChoice === undefined) {
+      const quantityPattern = /^(\d+(?:\.\d{1,3})?)\s*(.*?)$/;
+      const requested = request.quantity.match(quantityPattern);
+      const inventory = data.materials.find((item) =>
+        (item.category ?? item.material).toLowerCase() === request.material.toLowerCase()
+      );
+      const available = inventory?.stock.match(quantityPattern);
+      const enoughStock = requested && available &&
+        requested[2].trim().toLowerCase() === available[2].trim().toLowerCase() &&
+        Math.round(Number(available[1]) * 1000) >= Math.round(Number(requested[1]) * 1000);
+      if (!enoughStock) {
+        setMaterialApprovalPrompt({ request, availableStock: inventory?.stock ?? "No stock" });
+        return;
+      }
+    }
     const release = acquireMutation(`material-request:${request.id}`);
     if (!release) return;
     try {
       const response = await apiFetch(`/api/material-requests/${request.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({
+          status,
+          ...(addStock ? { addStock: true } : {}),
+          ...(recordMissingMaterial ? { recordMissingMaterial: true } : {})
+        })
       });
-      const result = await response.json() as { record?: MaterialRequest; allocation?: MaterialAllocation; error?: string };
+      const result = await response.json() as { record?: MaterialRequest; allocation?: MaterialAllocation; material?: Material; materialCategory?: MaterialCategory; error?: string };
       if (!response.ok || !result.record) throw new Error(result.error || `Material request update failed (${response.status})`);
       setData((current) => ({
         ...current,
         materialRequests: current.materialRequests.map((item) => item.id === request.id ? result.record! : item),
         materialAllocations: result.allocation
           ? [result.allocation, ...current.materialAllocations]
-          : current.materialAllocations
+          : current.materialAllocations,
+        materials: result.material
+          ? [result.material, ...current.materials.filter((item) => item.id !== result.material!.id)]
+          : current.materials,
+        materialCategories: result.materialCategory
+          ? [result.materialCategory, ...current.materialCategories.filter((item) => item.id !== result.materialCategory!.id)]
+          : current.materialCategories
       }));
-      showToast(status === "Approved" ? "Request approved and material assigned." : "Material request declined.");
+      showToast(status === "Approved"
+        ? recordMissingMaterial ? "Inventory record restored for the approved request." : addStock ? "Stock recorded, request approved and material assigned." : "Request approved and material assigned."
+        : "Material request declined.");
     } catch (error) {
       console.error("Unable to review material request:", error);
       showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not update material request."));
@@ -1696,8 +1778,23 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             : <div className="notification-empty"><span>✓</span><strong>You’re all caught up</strong><p>New updates will appear here.</p></div>}
         </aside>
       </>}
+      {materialApprovalPrompt && <div className="modal-scrim" role="presentation">
+        <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="material-stock-prompt-title">
+          <div className="modal-heading"><div><span className="panel-kicker">MATERIAL REQUEST</span><h2 id="material-stock-prompt-title">Material stock is missing or insufficient</h2></div></div>
+          <p>{materialApprovalPrompt.request.material}: requested {materialApprovalPrompt.request.quantity}; available {materialApprovalPrompt.availableStock}.</p>
+          <p>Add the requested quantity to company stock before approving? The category will be created if it does not exist. Cancel leaves the request pending.</p>
+          <div className="modal-actions">
+            <button className="button button-outline" type="button" onClick={() => setMaterialApprovalPrompt(null)}>Cancel</button>
+            <button className="button button-primary" type="button" onClick={() => {
+              const request = materialApprovalPrompt.request;
+              setMaterialApprovalPrompt(null);
+              void updateMaterialRequest(request, "Approved", true);
+            }}>Add stock &amp; approve</button>
+          </div>
+        </section>
+      </div>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} role={role} isSubmitting={recordSubmissionBusy} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" || modal === "expense-log" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} isSubmitting={recordSubmissionBusy} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" || modal === "expense-log" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} materials={data.materials} materialCategories={data.materialCategories} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onAddMaterialCategory={addMaterialCategory} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
     </div>
   );
 }

@@ -29,6 +29,7 @@ const employeeReadRoutes = new Set([
   "/api/projects",
   "/api/people",
   "/api/materials",
+  "/api/material-categories",
   "/api/material-allocations",
   "/api/material-usage",
   "/api/material-requests",
@@ -48,6 +49,7 @@ const employeeReadRoutes = new Set([
 
 const projectManagerReadRoutes = new Set([
   "/api/dashboard", "/api/projects", "/api/people", "/api/materials",
+  "/api/material-categories",
   "/api/material-allocations", "/api/material-usage", "/api/material-requests",
   "/api/expenses", "/api/expenses/allocations", "/api/quotations", "/api/progress",
   "/api/site-visits", "/api/attendance", "/api/attendance/leaves",
@@ -235,6 +237,10 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   if (path === "/api/push/subscriptions" && (method === "POST" || method === "DELETE")) return { allowed: true };
 
   if (session.role === "employee") {
+    if (method === "POST" && path === "/api/material-categories") {
+      body.createdBy = session.name;
+      return { allowed: true };
+    }
     if (method === "PATCH" && /^\/api\/work-requests\/[^/]+$/.test(path)) {
       const request = workRequests.find((item) => item.id === path.slice("/api/work-requests/".length));
       const assignedProject = request && projects.find((project) => project.name === request.project);
@@ -433,6 +439,7 @@ function scopeDashboard(data: Record<string, unknown>, session: AuthenticatedSes
     person.email.toLowerCase() === session.email.toLowerCase());
   return {
     ...data,
+    materialCategories: isProjectManager || isEmployee ? data.materialCategories : [],
     projects: projects.filter((project) => projectNames.has(project.name)),
     quotes: isEmployee ? [] : filterProjects(data.quotes),
     expenses: isEmployee ? filterProjects(data.expenses) : isProjectManager ? filterProjects(data.expenses) : [],
@@ -443,7 +450,7 @@ function scopeDashboard(data: Record<string, unknown>, session: AuthenticatedSes
       : [],
     siteVisits: isEmployee ? siteVisits.filter((visit) => projectNames.has(visit.project) && sameName(visit.engineer, ownName)) : [],
     activities: filterActivities(data.activities),
-    materials: (isEmployee || isProjectManager) ? filterProjects(data.materials) : [],
+    materials: isEmployee ? filterProjects(data.materials) : isProjectManager ? data.materials : [],
     materialAllocations: (isEmployee || isProjectManager)
       ? (Array.isArray(data.materialAllocations) ? data.materialAllocations as typeof materialAllocations : [])
         .filter((allocation) => isProjectManager ? projectNames.has(allocation.project) : sameName(allocation.engineer, session.name) && projectNames.has(allocation.project))
@@ -554,6 +561,7 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
       ? body.filter((item) => item && typeof item === "object" && sameName((item as { engineer?: unknown }).engineer, session.name) && projectNames.has((item as { project?: string }).project ?? ""))
       : body;
   }
+  if (pathname === "/api/materials" && session.role === "project_manager") return body;
   if (["/api/quotations", "/api/expenses", "/api/payments", "/api/materials", "/api/material-requests", "/api/progress", "/api/feedback"].includes(pathname)) {
     return body.filter((item) => item && typeof item === "object" &&
       matchesProject(item as { project?: unknown }, projectNames) &&
@@ -567,7 +575,10 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
 
 export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: AuthenticatedSession): WorkspaceUpdate | undefined {
   if (session.role === "owner") return update;
+  if (session.role === "project_manager" &&
+    (update.resource === "materialCategories" || update.resource === "materials")) return update;
   if (session.role === "employee") {
+    if (update.resource === "materialCategories") return update;
     const push = update.push;
     if (update.resource === "materialRequests" && push?.targets.some((target) => ownPushTarget(session, target))) {
       return { ...update, push: { ...push, targets: push.targets.filter((target) => ownPushTarget(session, target)) } };

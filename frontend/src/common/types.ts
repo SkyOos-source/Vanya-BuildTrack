@@ -1,7 +1,7 @@
 export type Role = "Owner" | "Employee" | "ProjectManager" | "Client";
 export type RoleId = "owner" | "employee" | "project_manager" | "client";
 export type PaletteId = "current" | "previous" | "reference";
-export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "payment" | "visit" | "material" | "material-allocation" | "material-log" | "material-request" | "person";
+export type RecordModalType = "project" | "quote" | "progress" | "expense" | "expense-log" | "expense-allocation" | "payment" | "visit" | "material" | "material-category" | "material-allocation" | "material-log" | "material-request" | "person";
 export type SessionUser = { name: string; email: string; role: RoleId };
 export type Project = {
   id: string;
@@ -23,7 +23,8 @@ export type ExpenseAllocation = { id: string; engineer: string; amount: number; 
 export type SiteVisitProof = { image: string; capturedAt: string; latitude: number; longitude: number; accuracy: number; locationName?: string };
 export type SiteVisit = { id: string; project: string; site: string; engineer: string; date: string; status: string; purpose?: string; checkIn?: SiteVisitProof; checkOut?: SiteVisitProof };
 export type Activity = { id: string; actor: string; action: string; project: string; time: string; kind: string; description?: string; completionSummary?: string; attachment?: string; attachments?: string[]; createdAt?: string; stage?: "Start" | "Progress" | "Completion" };
-export type Material = { id: string; material: string; project: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };
+export type MaterialCategory = { id: string; name: string; createdAt: string; createdBy?: string };
+export type Material = { id: string; material: string; category?: string; project?: string; received: string; used: string; stock: string; lastUpdated: string; submittedBy?: string };
 export type MaterialAllocation = { id: string; material: string; project: string; engineer: string; quantity: number; unit: string; usedQuantity: number; remainingQuantity: number; assignedAt: string; assignedBy: string; requestId?: string };
 export type MaterialUsageLog = { id: string; allocationId: string; material: string; project: string; quantity: number; unit: string; engineer: string; loggedBy?: string; note?: string; loggedAt: string };
 export type MaterialRequest = { id: string; material: string; project: string; quantity: string; requestedBy: string; note?: string; requestedAt: string; status: string; reviewedBy?: string; reviewedAt?: string };
@@ -39,5 +40,5 @@ export type Backup = { id: string; status: string; requestedAt: string; requeste
 export type OwnerAuditLog = { id: string; ownerName: string; ownerEmail: string; action: string; resource: string; target?: string; createdAt: string };
 export type Person = { id: string; name: string; role: "Client" | "Site Engineer" | "Project Manager"; project: string; email: string; phone?: string };
 export type ProjectContact = { id?: string; name: string; phone?: string };
-export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; payments: Payment[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialAllocations: MaterialAllocation[]; materialUsageLogs: MaterialUsageLog[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
+export type DashboardData = { projects: Project[]; quotes: Quote[]; expenses: Expense[]; payments: Payment[]; expenseAllocations: ExpenseAllocation[]; siteVisits: SiteVisit[]; activities: Activity[]; materials: Material[]; materialCategories: MaterialCategory[]; materialAllocations: MaterialAllocation[]; materialUsageLogs: MaterialUsageLog[]; materialRequests: MaterialRequest[]; attendance: Attendance[]; feedback: Feedback[]; backups: Backup[]; people: Person[] };
 export type NotificationItem = { title: string; detail: string; time: string; icon: string; page: string };
