@@ -5,7 +5,7 @@ export const navigation: Record<Role, { label: string; icon: string }[]> = {
     { label: "Dashboard", icon: "dashboard" }, { label: "Projects & Sites", icon: "projects" },
     { label: "Work Progress", icon: "progress" },
     { label: "Materials", icon: "materials" }, { label: "Expenses", icon: "expenses" },
-    { label: "Payments", icon: "payments" },
+    { label: "Payments", icon: "payments" }, { label: "Financial Overview", icon: "reports" },
     { label: "Quotations", icon: "quotations" }, { label: "People", icon: "people" },
     { label: "Attendance", icon: "attendance" }, { label: "Reports", icon: "reports" },
     { label: "Site Visits", icon: "site-visits" }, { label: "Feedback", icon: "feedback" },
@@ -42,6 +42,7 @@ export const emptyDashboardData: DashboardData = {
   quotes: [],
   expenses: [],
   payments: [],
+  paymentRequests: [],
   expenseAllocations: [],
   siteVisits: [],
   activities: [],
@@ -123,6 +124,6 @@ export function pageFromPath(pathname: string, role: Role): string {
   const base = rolePath(roleId(role));
   const slug = pathname.slice(base.length).replace(/^\/+|\/+$/g, "");
   if (!slug) return "Dashboard";
-  const pages = [...(role !== "Client" ? ["Profile"] : []), ...navigation[role].map((item) => item.label), ...(role === "Owner" ? ["Settings & Backup", "Financial Overview"] : ["Settings"])];
+  const pages = [...(role !== "Client" ? ["Profile"] : []), ...navigation[role].map((item) => item.label), ...(role === "Owner" ? ["Settings & Backup"] : ["Settings"])];
   return pages.find((page) => pageSlug(page) === slug) ?? "Dashboard";
 }

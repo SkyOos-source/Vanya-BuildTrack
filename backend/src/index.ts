@@ -5,7 +5,7 @@ import express from "express";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { RegisterRoutes } from "./generated/routes";
-import { findOwnerAccount, initializeStore, ownerAuditLogs, people, projects, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type ExpenseAllocation, type MaterialAllocation, type Payment, type SiteVisit } from "./data/store";
+import { findOwnerAccount, getProjectEngineers, getProjectManagers, initializeStore, ownerAuditLogs, people, projects, recordOwnerAction, restoreStoreSnapshot, saveStore, snapshotStore, type ExpenseAllocation, type MaterialAllocation, type Payment, type SiteVisit } from "./data/store";
 import { getPushPublicKey, isPushSubscription, pushConfigured, removePushSubscription, savePushSubscription } from "./push";
 import { publishWorkspaceUpdate, subscribeToWorkspaceUpdates } from "./realtime";
 import { authenticateBearerHeader } from "./features/auth/session";
@@ -103,6 +103,7 @@ app.use((request, response, next) => {
       } else if (request.method === "POST" && request.path === "/api/material-requests") {
         publishWorkspaceUpdate({
           resource: "materialRequests",
+          ...(typeof record?.project === "string" ? { project: record.project } : {}),
           push: {
             title: "Vanya BuildTrack",
             body: "Material request received. An engineer submitted a request for your review.",
@@ -180,13 +181,19 @@ app.use((request, response, next) => {
       if (request.method === "POST" && request.path === "/api/expenses/allocations") {
         const allocation = (body as { record?: ExpenseAllocation } | null)?.record;
         if (allocation) {
+          const isProjectManager = allocation.assigneeRole === "Project Manager";
           publishWorkspaceUpdate({
             resource: "expenseAllocations",
+            ...(allocation.project ? { project: allocation.project } : {}),
             allocation,
             push: {
               title: "Expense funds assigned",
-              body: `${allocation.amount} assigned for your project expenses.`,
-              targets: [{ role: "employee", userName: allocation.engineer, url: "/engineer/expenses" }]
+              body: `${allocation.amount} assigned${allocation.project ? ` for ${allocation.project}` : ""} project expenses.`,
+              targets: [{
+                role: isProjectManager ? "project_manager" : "employee",
+                userName: allocation.engineer,
+                url: isProjectManager ? "/project_manager/expenses" : "/engineer/expenses"
+              }]
             }
           });
         }
@@ -196,6 +203,7 @@ app.use((request, response, next) => {
         if (allocation) {
           publishWorkspaceUpdate({
             resource: "materialAllocations",
+            project: allocation.project,
             materialAllocation: allocation,
             push: {
               title: "Materials assigned",
@@ -207,8 +215,8 @@ app.use((request, response, next) => {
         }
       }
       if (request.method === "POST" && request.path === "/api/material-usage") {
-        const log = (body as { record?: { engineer?: string } } | null)?.record;
-        if (log?.engineer) publishWorkspaceUpdate({ resource: "materialUsage", engineer: log.engineer });
+        const log = (body as { record?: { engineer?: string; project?: string } } | null)?.record;
+        if (log?.engineer) publishWorkspaceUpdate({ resource: "materialUsage", project: log.project, engineer: log.engineer });
       }
       if (request.method === "POST" && request.path === "/api/payments") {
         const payment = (body as { record?: Payment } | null)?.record;
@@ -241,6 +249,7 @@ app.use((request, response, next) => {
         if (requestRecord) {
           publishWorkspaceUpdate({
             resource: "materialRequests",
+            project: requestRecord.project,
             ...(payload.allocation ? { materialAllocation: payload.allocation } : {}),
             push: {
               title: `Material request ${requestRecord.status.toLowerCase()}`,
@@ -267,11 +276,16 @@ app.use((request, response, next) => {
         if (requestRecord) {
           if (request.method === "POST") {
             const project = projects.find((item) => item.name === requestRecord.project);
-            const engineer = project && people.find((person) => person.role === "Site Engineer" &&
-              person.name.toLowerCase() === project.engineer.toLowerCase());
-            const manager = project?.projectManager && people.find((person) => person.role === "Project Manager" &&
-              (person.name.toLowerCase() === project.projectManager!.toLowerCase() ||
-                person.email.toLowerCase() === project.projectManager!.toLowerCase()));
+            const engineers = project ? getProjectEngineers(project).flatMap((name) => {
+              const engineer = people.find((person) => person.role === "Site Engineer" &&
+                (person.name.toLowerCase() === name.toLowerCase() || person.email.toLowerCase() === name.toLowerCase()));
+              return engineer ? [engineer] : [];
+            }) : [];
+            const managers = project ? getProjectManagers(project).flatMap((name) => {
+              const manager = people.find((person) => person.role === "Project Manager" &&
+                (person.name.toLowerCase() === name.toLowerCase() || person.email.toLowerCase() === name.toLowerCase()));
+              return manager ? [manager] : [];
+            }) : [];
             publishWorkspaceUpdate({
               resource: "workRequests",
               project: requestRecord.project,
@@ -280,8 +294,8 @@ app.use((request, response, next) => {
                 body: `${requestRecord.requestedBy} requested additional work for ${requestRecord.project}.`,
                 targets: [
                   { role: "owner", url: "/admin/work-requests" },
-                  ...(engineer ? [{ role: "employee" as const, userName: engineer.name, userEmail: engineer.email, url: "/employee/work-requests" }] : []),
-                  ...(manager ? [{ role: "project_manager" as const, userName: manager.name, userEmail: manager.email, url: "/project_manager/work-requests" }] : [])
+                  ...engineers.map((engineer) => ({ role: "employee" as const, userName: engineer.name, userEmail: engineer.email, url: "/employee/work-requests" })),
+                  ...managers.map((manager) => ({ role: "project_manager" as const, userName: manager.name, userEmail: manager.email, url: "/project_manager/work-requests" }))
                 ]
               }
             });

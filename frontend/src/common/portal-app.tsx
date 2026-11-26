@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialCategory, MaterialRequest, MaterialUsageLog, Payment, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
+import type { Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, Backup, DashboardData, Expense, ExpenseAllocation, Feedback, Material, MaterialAllocation, MaterialCategory, MaterialRequest, MaterialUsageLog, Payment, PaymentRequest, Person, Project, ProjectContact, Quote, RecordModalType, Role, RoleId, SiteVisit, SiteVisitProof, Activity, NotificationItem } from "./types";
 import { clearAuthTokens, emptyDashboardData, navigation, pageFromPath, pagePath, readRefreshToken, readSession, roleId, roleName, rolePath } from "./data";
 import { apiFetch, connectWorkspaceEvents } from "./api";
 import { compressImageFile, currentMonthKey, formatCurrency, googleReviewUrl, initials, siteVisitDateParts, withRetryGuidance } from "./utils";
 import { BuildingIcon, RecordModal } from "./components";
+import { getProjectEngineers, getProjectManagers } from "./project-assignments";
 import OwnerDashboard from "../owner/dashboard/page";
 import EngineerDashboard from "../engineer/dashboard/page";
 import ClientDashboard from "../client/dashboard/page";
@@ -113,6 +114,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   const [dashboardDataLoading, setDashboardDataLoading] = useState(true);
   const [dashboardDataLoadError, setDashboardDataLoadError] = useState("");
   const [dashboardDataRetry, setDashboardDataRetry] = useState(0);
+  const [pageDataLoadError, setPageDataLoadError] = useState("");
+  const [pageDataRetry, setPageDataRetry] = useState(0);
   const dashboardDataLoaded = useRef(false);
   const dashboardDataRequestInFlight = useRef(false);
   const [financialMonth, setFinancialMonth] = useState(currentMonthKey());
@@ -138,6 +141,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   };
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [modalProject, setModalProject] = useState<Project | null>(null);
+  const [modalPaymentRequest, setModalPaymentRequest] = useState<PaymentRequest | null>(null);
   const [personCreationRole, setPersonCreationRole] = useState<"Site Engineer" | "Client" | "Project Manager">("Site Engineer");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -153,9 +157,10 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     setPersonCreationRole(personRole);
     setModal("person");
   };
-  const openProjectCreate = (nextModal: RecordModalType | null, project?: Project) => {
+  const openProjectCreate = (nextModal: RecordModalType | null, project?: Project, paymentRequest?: PaymentRequest) => {
     setEditingProject(null);
     setModalProject(project ?? null);
+    setModalPaymentRequest(paymentRequest ?? null);
     setModal(nextModal);
   };
   const editProject = (project: Project) => {
@@ -198,11 +203,12 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (active) setData((current) => ({ ...current, quotes: records as DashboardData["quotes"] }));
       } catch (error) {
         console.error("Unable to load quotations for project details:", error);
+        if (active) setPageDataLoadError(error instanceof Error ? error.message : "Project quotations could not be loaded.");
       }
     };
     void loadProjectQuotations();
     return () => { active = false; };
-  }, [page, role]);
+  }, [page, pageDataRetry, role]);
 
   useEffect(() => {
     let active = true;
@@ -385,7 +391,6 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
   };
 
   useEffect(() => {
-    if (page !== "Dashboard" && page !== "Financial Overview") return;
     if (dashboardDataLoaded.current || dashboardDataRequestInFlight.current) return;
     dashboardDataRequestInFlight.current = true;
     setDashboardDataLoading(true);
@@ -576,12 +581,16 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }
         return;
       }
+      if (role === "ProjectManager" && update.resource === "expenseAllocations" &&
+        update.push?.targets.some((target) => target.role === "project_manager" && target.userName === userName)) {
+        showToast(update.push.body);
+      }
       const resource = update.resource;
-      if (resource !== "materials" && resource !== "materialCategories" && resource !== "materialRequests" && resource !== "materialAllocations" && resource !== "materialUsage" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "payments" && resource !== "attendance") {
+      if (resource !== "materials" && resource !== "materialCategories" && resource !== "materialRequests" && resource !== "materialAllocations" && resource !== "materialUsage" && resource !== "expenses" && resource !== "expenseAllocations" && resource !== "progress" && resource !== "quotations" && resource !== "payments" && resource !== "paymentRequests" && resource !== "attendance") {
         console.error("Received an unsupported real-time workspace update:", resource);
         return;
       }
-      if (role === "Client" && resource !== "progress" && resource !== "quotations" && resource !== "payments") return;
+      if (role === "Client" && resource !== "progress" && resource !== "quotations" && resource !== "payments" && resource !== "paymentRequests") return;
       void (async () => {
         try {
           if (resource === "progress") {
@@ -602,6 +611,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
           }
           const endpoint = resource === "materialRequests"
             ? "/api/material-requests"
+            : resource === "paymentRequests" ? "/api/payment-requests"
             : resource === "materialCategories" ? "/api/material-categories"
             : resource === "materialAllocations" ? "/api/material-allocations"
               : resource === "materialUsage" ? "/api/material-usage"
@@ -645,6 +655,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
             setData((current) => ({ ...current, attendance: records as DashboardData["attendance"] }));
           } else if (resource === "payments") {
             setData((current) => ({ ...current, payments: records as DashboardData["payments"] }));
+          } else if (resource === "paymentRequests") {
+            setData((current) => ({ ...current, paymentRequests: records as DashboardData["paymentRequests"] }));
           } else if (resource === "expenseAllocations") {
             setData((current) => ({ ...current, expenseAllocations: records as DashboardData["expenseAllocations"] }));
           } else {
@@ -687,13 +699,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         }));
       } catch (error) {
         console.error("Unable to load material workflow:", error);
+        if (active) setPageDataLoadError(error instanceof Error ? error.message : "Material workflow could not be loaded.");
       }
     };
     void loadMaterialData();
     return () => { active = false; };
-  }, [page]);
+  }, [page, pageDataRetry]);
 
   useEffect(() => {
+    setPageDataLoadError("");
     const resources: Record<string, string> = {
       "Projects & Sites": "/api/projects",
       "My Sites": "/api/projects",
@@ -729,7 +743,8 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         if (materialCategories !== undefined && !Array.isArray(materialCategories)) {
           throw new Error("Material categories request returned invalid data.");
         }
-        if (!active || !Array.isArray(result)) return;
+        if (!Array.isArray(result)) throw new Error(`${page} request returned invalid data.`);
+        if (!active) return;
         const isProjectPage = page === "Projects & Sites" || page === "My Sites" || page === "My Projects";
         const progressResponse = isProjectPage ? await apiFetch("/api/progress") : undefined;
         if (progressResponse && !progressResponse.ok) throw new Error(`Project progress request failed (${progressResponse.status})`);
@@ -803,11 +818,12 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         });
       } catch (error) {
         console.error(`Unable to load ${page} API:`, error);
+        if (active) setPageDataLoadError(error instanceof Error ? error.message : `${page} data could not be loaded.`);
       }
     };
     void loadPageData();
     return () => { active = false; };
-  }, [page]);
+  }, [page, pageDataRetry]);
 
   const visibleProjects = useMemo(() => data.projects.filter((project) => {
     const matchesSearch = `${project.name} ${project.site} ${project.client}`.toLowerCase().includes(search.toLowerCase());
@@ -970,13 +986,15 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       const form = new FormData(event.currentTarget);
       const name = String(form.get("name") || form.get("title") || form.get("description") || "").trim();
       const amount = Number(form.get("amount") || 0);
+      const selectedEngineers = form.getAll("engineers").map(String);
+      const selectedProjectManagers = form.getAll("projectManagers").map(String);
       const materialAllocation = modal === "material-log"
         ? data.materialAllocations.find((item) => item.id === form.get("allocationId"))
         : undefined;
       const projectEndpoint = modal === "project" && editingProject
         ? `/api/projects/${editingProject.id}`
         : "/api/projects";
-      const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "payment" ? "payments" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-category" ? "material-categories" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
+      const endpoint = modal === "project" ? projectEndpoint : `/api/${modal === "quote" ? "quotations" : modal === "payment" ? "payments" : modal === "payment-request" ? "payment-requests" : modal === "expense-allocation" ? "expenses/allocations" : modal === "material-category" ? "material-categories" : modal === "material-allocation" ? "material-allocations" : modal === "material-log" ? "material-usage" : modal === "expense" || modal === "expense-log" ? "expenses" : modal === "visit" ? "site-visits" : modal === "material" ? "materials" : modal === "material-request" ? "material-requests" : modal === "person" ? "people" : "progress"}`;
       const progressFiles = modal === "progress"
         ? [...form.getAll("attachments"), ...form.getAll("cameraAttachments")].filter((file): file is File => file instanceof File && file.size > 0)
         : [];
@@ -1002,7 +1020,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         project: form.get("project"),
         engineer: modal === "material-log"
           ? materialAllocation?.engineer ?? currentUser
-          : form.get("engineer") || (modal === "project" ? form.get("engineer") : currentUser),
+          : modal === "project"
+            ? selectedEngineers[0] ?? "Unassigned"
+            : form.get("engineer") || currentUser,
+        engineers: modal === "project" ? selectedEngineers : undefined,
+        projectManager: modal === "project" ? selectedProjectManagers[0] ?? "Unassigned" : undefined,
+        projectManagers: modal === "project" ? selectedProjectManagers : undefined,
+        assignee: form.get("assignee"),
+        assigneeRole: form.get("assigneeRole"),
         date: form.get("date"),
         site: form.get("site"),
         client: modal === "person" && form.get("role") === "Client" ? name : form.get("client"),
@@ -1027,6 +1052,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         entryType: modal === "expense-log" ? "log" : "request",
         method: form.get("method"),
         proofImage,
+        requestId: form.get("requestId"),
         allocationId: form.get("allocationId"),
         attachment,
         attachments: progressAttachments,
@@ -1040,7 +1066,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const result = await response.json() as { record?: Project | Quote | Expense | Payment | ExpenseAllocation | SiteVisit | Activity | Material | DashboardData["materialCategories"][number] | MaterialAllocation | MaterialUsageLog | DashboardData["materialRequests"][number] | Person; allocation?: MaterialAllocation; material?: Material; project?: Project; error?: string };
+      const result = await response.json() as { record?: Project | Quote | Expense | Payment | PaymentRequest | ExpenseAllocation | SiteVisit | Activity | Material | DashboardData["materialCategories"][number] | MaterialAllocation | MaterialUsageLog | DashboardData["materialRequests"][number] | Person; allocation?: MaterialAllocation; material?: Material; project?: Project; error?: string };
       if (!response.ok) throw new Error(result.error || `Could not save record (${response.status})`);
       const record = result.record;
       if (!record) throw new Error("The API returned no saved record.");
@@ -1055,7 +1081,18 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       } else if (modal === "quote") {
         setData((current) => ({ ...current, quotes: [record as Quote, ...current.quotes] }));
       } else if (modal === "payment") {
-        setData((current) => ({ ...current, payments: [record as Payment, ...current.payments] }));
+        const payment = record as Payment;
+        setData((current) => ({
+          ...current,
+          payments: [payment, ...current.payments],
+          paymentRequests: modalPaymentRequest
+            ? current.paymentRequests.map((request) => request.id === modalPaymentRequest.id
+              ? { ...request, status: "Paid" as const, paidPaymentId: payment.id }
+              : request)
+            : current.paymentRequests
+        }));
+      } else if (modal === "payment-request") {
+        setData((current) => ({ ...current, paymentRequests: [record as PaymentRequest, ...current.paymentRequests] }));
       } else if (modal === "expense") {
         const expense = record as Expense;
         setData((current) => ({
@@ -1128,8 +1165,9 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       }
       setEditingProject(null);
       setModalProject(null);
+      setModalPaymentRequest(null);
       setModal(null);
-      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "payment" ? "Payment" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-category" ? "Material category" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
+      showToast(`${modal === "project" ? "Project" : modal === "quote" ? "Quotation" : modal === "payment" ? "Payment" : modal === "payment-request" ? "Payment request" : modal === "expense" ? "Extra funds request" : modal === "expense-log" ? "Expense" : modal === "expense-allocation" ? "Funds allocation" : modal === "visit" ? "Site visit" : modal === "material" ? "Material entry" : modal === "material-category" ? "Material category" : modal === "material-allocation" ? "Material assignment" : modal === "material-log" ? "Material usage" : modal === "material-request" ? "Material request" : modal === "person" ? "Person" : "Progress update"} saved.`);
     } catch (error) {
       console.error("Unable to save record:", error);
       showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not save this record."));
@@ -1334,14 +1372,18 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
     }
   };
 
-  const unassignEngineerProject = async (project: Project) => {
-    const release = acquireMutation(`project-engineer-unassign:${project.id}`);
+  const unassignEngineerProject = async (engineer: Person, project: Project) => {
+    const remainingEngineers = getProjectEngineers(project).filter((name) => name.toLowerCase() !== engineer.name.toLowerCase());
+    const release = acquireMutation(`project-engineer-unassign:${project.id}:${engineer.id}`);
     if (!release) return;
     try {
       const response = await apiFetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ engineer: "Unassigned" })
+        body: JSON.stringify({
+          engineer: remainingEngineers[0] ?? "Unassigned",
+          engineers: remainingEngineers
+        })
       });
       const result = await response.json() as { record?: Project; error?: string };
       if (!response.ok || !result.record) {
@@ -1351,7 +1393,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         ...current,
         projects: current.projects.map((item) => item.id === project.id ? result.record as Project : item)
       }));
-      showToast(`${project.name} unassigned from the engineer.`);
+      showToast(`${project.name} unassigned from ${engineer.name}.`);
     } catch (error) {
       console.error("Unable to unassign project from engineer:", error);
       showToast(withRetryGuidance(error instanceof Error ? error.message : "Could not unassign this site."));
@@ -1412,9 +1454,19 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
       setData((current) => ({
         ...current,
         people: current.people.map((item) => item.id === person.id ? updatedPerson : item),
-        projects: current.projects.map((project) => person.role === "Client"
-          ? project.client === person.name ? { ...project, client: updatedPerson.name } : project
-          : project.engineer === person.name ? { ...project, engineer: updatedPerson.name } : project),
+        projects: current.projects.map((project) => {
+          if (person.role === "Client") return project.client === person.name ? { ...project, client: updatedPerson.name } : project;
+          if (person.role === "Project Manager") {
+            const managers = getProjectManagers(project).map((name) => name === person.name ? updatedPerson.name : name);
+            return managers.some((name, index) => name !== getProjectManagers(project)[index])
+              ? { ...project, projectManagers: managers, projectManager: managers[0] ?? "Unassigned" }
+              : project;
+          }
+          const engineers = getProjectEngineers(project).map((name) => name === person.name ? updatedPerson.name : name);
+          return engineers.some((name, index) => name !== getProjectEngineers(project)[index])
+            ? { ...project, engineers, engineer: engineers[0] ?? "Unassigned" }
+            : project;
+        }),
         quotes: person.role === "Client" ? current.quotes.map((quote) => quote.client === person.name ? { ...quote, client: updatedPerson.name } : quote) : current.quotes,
         feedback: person.role === "Client" ? current.feedback.map((item) => item.client === person.name ? { ...item, client: updatedPerson.name } : item) : current.feedback,
         siteVisits: person.role === "Site Engineer" ? current.siteVisits.map((visit) => visit.engineer === person.name ? { ...visit, engineer: updatedPerson.name } : visit) : current.siteVisits,
@@ -1740,6 +1792,14 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
               {role === "Client" && page === "Dashboard" && <button className="button button-secondary" onClick={() => navigateToPage("Quotations")}>View quotations <span>↗</span></button>}
             </div>
           </section>
+          {dashboardDataLoadError && page !== "Financial Overview" && <div className="panel inline-empty" role="alert">
+            Workspace data could not be refreshed: {dashboardDataLoadError}{" "}
+            <button className="text-link" onClick={() => setDashboardDataRetry((retry) => retry + 1)}>Retry</button>
+          </div>}
+          {pageDataLoadError && <div className="panel inline-empty" role="alert">
+            {pageDataLoadError}{" "}
+            <button className="text-link" onClick={() => setPageDataRetry((retry) => retry + 1)}>Retry</button>
+          </div>}
 
           {page === "Profile" && role !== "Client" && <AccountProfilePage role={role} email={userEmail} onProfileImageChange={setProfileImage} />}
           {page === "Dashboard" && role === "Owner" && <OwnerDashboard data={data} selectedMonth={financialMonth} onMonthChange={setFinancialMonth} onNavigate={navigateToPage} onCreate={setModal} onOpenProject={(project) => { setSearch(project.name); navigateToPage("Projects & Sites"); }} />}
@@ -1794,7 +1854,7 @@ export function PortalApp({ role, userName, userEmail }: { role: Role; userName:
         </section>
       </div>}
       {toast && <div className="toast"><span className="toast-check">✓</span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></div>}
-      {modal && <RecordModal modal={modal} role={role} isSubmitting={recordSubmissionBusy} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" || modal === "expense-log" ? modalProject ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} materials={data.materials} materialCategories={data.materialCategories} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onAddMaterialCategory={addMaterialCategory} onClose={() => { setEditingProject(null); setModalProject(null); setModal(null); }} onSubmit={createRecord} />}
+      {modal && <RecordModal modal={modal} role={role} isSubmitting={recordSubmissionBusy} initialPersonRole={personCreationRole} initialProject={modal === "project" ? editingProject ?? undefined : modal === "payment" || modal === "expense-log" ? modalProject ?? undefined : undefined} initialPaymentRequest={modal === "payment" ? modalPaymentRequest ?? undefined : undefined} projects={data.projects} projectsLoading={projectsLoading} projectsLoadError={projectsLoadError} people={data.people} peopleLoading={peopleLoading} peopleLoadError={peopleLoadError} materials={data.materials} materialCategories={data.materialCategories} expenseAllocations={data.expenseAllocations} materialAllocations={data.materialAllocations} onAddMaterialCategory={addMaterialCategory} onClose={() => { setEditingProject(null); setModalProject(null); setModalPaymentRequest(null); setModal(null); }} onSubmit={createRecord} />}
     </div>
   );
 }

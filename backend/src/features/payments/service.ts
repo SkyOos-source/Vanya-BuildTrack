@@ -1,6 +1,7 @@
-import { nextId, payments, projects, readAmount, readCompressedImage, readText } from "../../data/store";
+import { nextId, paymentRequests, payments, projects, readAmount, readCompressedImage, readText } from "../../data/store";
 import { failure, result, today } from "../shared";
 import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
+import { publishWorkspaceUpdate } from "../../realtime";
 
 export const listPayments = () => payments;
 
@@ -12,6 +13,7 @@ export async function createPayment(body: any) {
   const recordedBy = readText(body?.recordedBy);
   const recordedByRole = body?.recordedByRole;
   const note = readText(body?.note);
+  const requestId = readText(body?.requestId);
   if (!project || !projects.some((item) => item.name === project)) {
     return failure(400, "Select an existing project for this payment.");
   }
@@ -30,6 +32,15 @@ export async function createPayment(body: any) {
   }
   if (!recordedBy || (recordedByRole !== "Owner" && recordedByRole !== "Client")) {
     return failure(400, "The payment recorder could not be verified.");
+  }
+  if (requestId) {
+    const request = paymentRequests.find((item) => item.id === requestId);
+    if (!request || request.status !== "Pending" || request.project !== project) {
+      return failure(409, "This payment request is not available.");
+    }
+    if (request.amount !== amount) {
+      return failure(400, "The payment amount must match the requested amount.");
+    }
   }
   let uploadedProof: string | undefined;
   if (proofImage) {
@@ -51,5 +62,13 @@ export async function createPayment(body: any) {
     ...(proofImage ? { proofImage: uploadedProof } : {})
   };
   payments.unshift(payment);
+  if (requestId) {
+    const request = paymentRequests.find((item) => item.id === requestId);
+    if (request && request.status === "Pending" && request.project === project && request.amount === amount) {
+      request.status = "Paid";
+      request.paidPaymentId = payment.id;
+      publishWorkspaceUpdate({ resource: "paymentRequests", project: request.project });
+    }
+  }
   return result({ record: payment }, 201);
 }

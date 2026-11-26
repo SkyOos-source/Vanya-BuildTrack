@@ -9,7 +9,9 @@ export type Project = {
   site: string;
   client: string;
   engineer: string;
+  engineers?: string[];
   projectManager?: string;
+  projectManagers?: string[];
   status: string;
   progress: number;
   quotationAmount?: number;
@@ -57,9 +59,24 @@ export type Payment = {
   proofImage?: string;
 };
 
+export type PaymentRequest = {
+  id: string;
+  project: string;
+  amount: number;
+  requestedBy: string;
+  requestedByEmail: string;
+  requestedAt: string;
+  dueDate?: string;
+  note?: string;
+  status: "Pending" | "Paid" | "Cancelled";
+  paidPaymentId?: string;
+};
+
 export type ExpenseAllocation = {
   id: string;
   engineer: string;
+  assigneeRole?: "Site Engineer" | "Project Manager";
+  project?: string;
   amount: number;
   assignedAt: string;
   assignedBy: string;
@@ -124,6 +141,8 @@ export const expenses: Expense[] = [];
 
 export const payments: Payment[] = [];
 
+export const paymentRequests: PaymentRequest[] = [];
+
 export const expenseAllocations: ExpenseAllocation[] = [];
 
 export const siteVisits: SiteVisit[] = [];
@@ -149,11 +168,12 @@ export const clientCredentials: EmployeeCredential[] = [];
 export const pushSubscriptions: PushSubscriptionRecord[] = [];
 export const ownerAccounts: OwnerAccount[] = [];
 
-export const store = { projects, quotations, expenses, payments, expenseAllocations, siteVisits, activities, materials, materialCategories, materialAllocations, materialUsageLogs, materialRequests, workRequests, attendance, attendanceLeaves, attendanceLeaveRequests, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfiles, ownerAccounts, ownerAuditLogs };
+export const store = { projects, quotations, expenses, payments, paymentRequests, expenseAllocations, siteVisits, activities, materials, materialCategories, materialAllocations, materialUsageLogs, materialRequests, workRequests, attendance, attendanceLeaves, attendanceLeaveRequests, attendanceRegularizationRequests, feedback, backups, people, pushSubscriptions, ownerProfiles, ownerAccounts, ownerAuditLogs };
 let projectSequence = 1;
 let quotationSequence = 1;
 let expenseSequence = 1;
 let paymentSequence = 1;
+let paymentRequestSequence = 1;
 let expenseAllocationSequence = 1;
 let visitSequence = 1;
 let updateSequence = 1;
@@ -177,10 +197,35 @@ export function readAmount(value: unknown): number | null {
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
+function uniqueNames(values: unknown[]) {
+  const names = new Map<string, string>();
+  for (const value of values) {
+    const name = readText(value);
+    if (name && name.toLowerCase() !== "unassigned" && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+  }
+  return [...names.values()];
+}
+
+export function getProjectEngineers(project: Pick<Project, "engineer" | "engineers">) {
+  return uniqueNames([...(project.engineers ?? []), project.engineer]);
+}
+
+export function getProjectManagers(project: Pick<Project, "projectManager" | "projectManagers">) {
+  return uniqueNames([...(project.projectManagers ?? []), project.projectManager]);
+}
+
 export function readProject(value: unknown, id: string): Project | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
   const name = readText(input.name);
+  const engineers = uniqueNames([
+    ...(Array.isArray(input.engineers) ? input.engineers : []),
+    input.engineer
+  ]);
+  const projectManagers = uniqueNames([
+    ...(Array.isArray(input.projectManagers) ? input.projectManagers : []),
+    input.projectManager
+  ]);
   const budget = input.budget === undefined ? 0 : readAmount(input.budget);
   const quotationAmount = input.quotationAmount === undefined ? 0 : readAmount(input.quotationAmount);
   const spent = input.spent === undefined ? 0 : readAmount(input.spent);
@@ -191,8 +236,10 @@ export function readProject(value: unknown, id: string): Project | null {
     name,
     site: readText(input.site) ?? "New project site",
     client: readText(input.client) ?? "Unassigned",
-    engineer: readText(input.engineer) ?? "Unassigned",
-    projectManager: readText(input.projectManager) ?? "Unassigned",
+    engineer: engineers[0] ?? "Unassigned",
+    engineers,
+    projectManager: projectManagers[0] ?? "Unassigned",
+    ...(Array.isArray(input.projectManagers) || projectManagers.length > 0 ? { projectManagers } : {}),
     status: readText(input.status) ?? "Planning",
     progress,
     quotationAmount,
@@ -294,6 +341,7 @@ export async function initializeStore() {
   restore(quotations, "quotations");
   restore(expenses, "expenses");
   restore(payments, "payments");
+  restore(paymentRequests, "paymentRequests");
   restore(expenseAllocations, "expenseAllocations");
   restore(siteVisits, "siteVisits");
   restore(activities, "activities");
@@ -347,6 +395,7 @@ export async function initializeStore() {
   quotationSequence = nextSequence(quotations, "QT-", quotationSequence);
   expenseSequence = nextSequence(expenses, "EXP-", expenseSequence);
   paymentSequence = nextSequence(payments, "PAY-", paymentSequence);
+  paymentRequestSequence = nextSequence(paymentRequests, "PREQ-", paymentRequestSequence);
   expenseAllocationSequence = nextSequence(expenseAllocations, "EAL-", expenseAllocationSequence);
   visitSequence = nextSequence(siteVisits, "VIS-", visitSequence);
   attendanceSequence = nextSequence(attendance, "ATT-", attendanceSequence);
@@ -428,6 +477,11 @@ export function restoreStoreSnapshot(snapshot: string) {
   restoreArray(quotations, "quotations");
   restoreArray(expenses, "expenses");
   restoreArray(payments, "payments");
+  if (Array.isArray(saved.paymentRequests)) {
+    paymentRequests.splice(0, paymentRequests.length, ...saved.paymentRequests as PaymentRequest[]);
+  } else if (saved.paymentRequests !== undefined) {
+    throw new Error("Workspace snapshot field 'paymentRequests' must be an array.");
+  }
   if (Array.isArray(saved.expenseAllocations)) {
     expenseAllocations.splice(0, expenseAllocations.length, ...saved.expenseAllocations as ExpenseAllocation[]);
   } else if (saved.expenseAllocations !== undefined) {
@@ -586,6 +640,7 @@ export function nextId(kind: string): string {
     quotation: { prefix: "QT-", next: () => quotationSequence++ },
     expense: { prefix: "EXP-", next: () => expenseSequence++ },
     payment: { prefix: "PAY-", next: () => paymentSequence++ },
+    "payment-request": { prefix: "PREQ-", next: () => paymentRequestSequence++ },
     "expense-allocation": { prefix: "EAL-", next: () => expenseAllocationSequence++ },
     visit: { prefix: "VIS-", next: () => visitSequence++ },
     progress: { prefix: "UPD-", next: () => updateSequence++ },

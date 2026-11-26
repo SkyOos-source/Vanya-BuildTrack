@@ -168,8 +168,20 @@
 					"status": {
 						"type": "string"
 					},
+					"projectManagers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
 					"projectManager": {
 						"type": "string"
+					},
+					"engineers": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
 					},
 					"engineer": {
 						"type": "string"
@@ -344,6 +356,56 @@
 					"recordedByRole",
 					"recordedBy",
 					"method",
+					"amount",
+					"project",
+					"id"
+				],
+				"type": "object"
+			},
+			"PaymentRequest": {
+				"properties": {
+					"paidPaymentId": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"Pending",
+							"Paid",
+							"Cancelled"
+						]
+					},
+					"note": {
+						"type": "string"
+					},
+					"dueDate": {
+						"type": "string"
+					},
+					"requestedAt": {
+						"type": "string"
+					},
+					"requestedByEmail": {
+						"type": "string"
+					},
+					"requestedBy": {
+						"type": "string"
+					},
+					"amount": {
+						"type": "number",
+						"format": "double"
+					},
+					"project": {
+						"type": "string"
+					},
+					"id": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
+					"requestedAt",
+					"requestedByEmail",
+					"requestedBy",
 					"amount",
 					"project",
 					"id"
@@ -1012,6 +1074,14 @@
 						"schema": {
 							"type": "string"
 						}
+					},
+					{
+						"in": "query",
+						"name": "month",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
 					}
 				]
 			}
@@ -1547,6 +1617,77 @@
 				}
 			}
 		},
+		"/api/payment-requests": {
+			"get": {
+				"operationId": "List",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"items": {
+										"$ref": "#/components/schemas/PaymentRequest"
+									},
+									"type": "array"
+								}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "Create",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {}
+						}
+					}
+				}
+			}
+		},
+		"/api/payment-requests/{id}/cancel": {
+			"patch": {
+				"operationId": "Cancel",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"security": [],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
 		"/api/materials": {
 			"get": {
 				"operationId": "List",
@@ -2002,6 +2143,16 @@
 												"type": "number",
 												"format": "double"
 											},
+											"project": {
+												"type": "string"
+											},
+											"assigneeRole": {
+												"type": "string",
+												"enum": [
+													"Site Engineer",
+													"Project Manager"
+												]
+											},
 											"engineer": {
 												"type": "string"
 											},
@@ -2234,6 +2385,16 @@
 														"type": "number",
 														"format": "double"
 													},
+													"project": {
+														"type": "string"
+													},
+													"assigneeRole": {
+														"type": "string",
+														"enum": [
+															"Site Engineer",
+															"Project Manager"
+														]
+													},
 													"engineer": {
 														"type": "string"
 													},
@@ -2259,6 +2420,12 @@
 													"spentAmount"
 												],
 												"type": "object"
+											},
+											"type": "array"
+										},
+										"paymentRequests": {
+											"items": {
+												"$ref": "#/components/schemas/PaymentRequest"
 											},
 											"type": "array"
 										},
@@ -2339,6 +2506,7 @@
 										"activities",
 										"siteVisits",
 										"expenseAllocations",
+										"paymentRequests",
 										"payments",
 										"expenses",
 										"quotes",

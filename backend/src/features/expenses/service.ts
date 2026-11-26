@@ -1,4 +1,4 @@
-import { nextId, people, projects, readAmount, readCompressedImage, readText, type ExpenseAllocation } from "../../data/store";
+import { getProjectManagers, nextId, people, projects, readAmount, readCompressedImage, readText, type ExpenseAllocation } from "../../data/store";
 import { expenses, expenseAllocations } from "./data";
 import { failure, result, today } from "../shared";
 import { R2StorageError, uploadBase64Image } from "../../object-storage/r2";
@@ -35,17 +35,29 @@ export const listExpenseAllocations = (engineer?: string) =>
     .map(allocationTotals);
 
 export function createExpenseAllocation(body: any) {
-  const engineer = readText(body?.engineer);
+  const engineer = readText(body?.assignee) ?? readText(body?.engineer);
+  const assigneeRole = body?.assigneeRole ?? "Site Engineer";
   const amount = readPositiveCurrencyAmount(body?.amount);
-  if (!engineer || amount === null) {
-    return failure(400, "A site engineer and a positive allocation amount with no more than two decimal places are required.");
+  if ((assigneeRole !== "Site Engineer" && assigneeRole !== "Project Manager") || !engineer || amount === null) {
+    return failure(400, "Select a team member and enter a positive allocation amount with no more than two decimal places.");
   }
-  if (!people.some((person) => person.role === "Site Engineer" && person.name.toLowerCase() === engineer.toLowerCase())) {
-    return failure(400, "Select an existing site engineer.");
+  const assignee = people.find((person) =>
+    person.role === assigneeRole && person.name.toLowerCase() === engineer.toLowerCase()
+  );
+  if (!assignee) {
+    return failure(400, `Select an existing ${assigneeRole.toLowerCase()}.`);
   }
+  const project = assigneeRole === "Project Manager" ? readText(body?.project) : undefined;
+  if (assigneeRole === "Project Manager" && (!project || !projects.some((item) =>
+    item.name === project &&
+    (getProjectManagers(item).some((name) => name.toLowerCase() === engineer.toLowerCase()) ||
+      !Array.isArray(item.projectManagers) && typeof assignee.project === "string" && assignee.project.toLowerCase() === project.toLowerCase())
+  ))) return failure(400, "Select a site assigned to this project manager.");
   const allocation = {
     id: nextId("expense-allocation"),
     engineer,
+    assigneeRole,
+    ...(project ? { project } : {}),
     amount,
     assignedAt: today(),
     assignedBy: readText(body?.assignedBy) ?? "Owner"
@@ -83,6 +95,9 @@ export async function createExpense(body: any) {
     allocation = expenseAllocations.find((item) => item.id === allocationId);
     if (!allocation || allocation.engineer.toLowerCase() !== String(body?.submittedBy ?? "").toLowerCase()) {
       return failure(400, "Select one of your assigned expense allocations.");
+    }
+    if (allocation.project && allocation.project !== project) {
+      return failure(400, "The expense project must match the site assigned to these funds.");
     }
     if (!isLog) return failure(400, "Expense requests cannot be charged to an allocation.");
   }

@@ -6,6 +6,8 @@ import {
   expenseAllocations,
   expenses,
   feedback,
+  getProjectEngineers,
+  getProjectManagers,
   materialRequests,
   materialAllocations,
   materialUsageLogs,
@@ -16,8 +18,7 @@ import {
   siteVisits,
   workRequests,
   type AccountRole,
-  type Activity,
-  type ExpenseAllocation
+  type Activity
 } from "../../data/store";
 import type { WorkspaceUpdate } from "../../realtime";
 import { authenticateBearerHeader, type AuthenticatedSession } from "./session";
@@ -55,7 +56,7 @@ const projectManagerReadRoutes = new Set([
   "/api/site-visits", "/api/attendance", "/api/attendance/leaves",
   "/api/work-requests",
   "/api/attendance/leave-requests", "/api/attendance/regularization-requests",
-  "/api/payments", "/api/feedback", "/api/events", "/api/profiles/me"
+  "/api/payments", "/api/payment-requests", "/api/feedback", "/api/events", "/api/profiles/me"
 ]);
 
 const clientReadRoutes = new Set([
@@ -69,7 +70,8 @@ const clientReadRoutes = new Set([
   "/api/feedback",
   "/api/events",
   "/api/profiles/me",
-  "/api/payments"
+  "/api/payments",
+  "/api/payment-requests"
 ]);
 
 function isPublicEndpoint(method: string, pathname: string) {
@@ -106,9 +108,10 @@ function assignedProjectNames(session: AuthenticatedSession) {
   const person = personForSession(session);
   if (!person || typeof person.name !== "string") return new Set<string>();
   const assignedProjects = projects.filter((project) => session.role === "employee"
-    ? sameName(project.engineer, person.name)
+    ? getProjectEngineers(project).some((name) => sameName(name, person.name))
     : session.role === "project_manager"
-      ? sameName(project.projectManager, person.name) || typeof person.project === "string" && sameName(project.name, person.project)
+      ? getProjectManagers(project).some((name) => sameName(name, person.name)) ||
+        !Array.isArray(project.projectManagers) && typeof person.project === "string" && sameName(project.name, person.project)
       : sameName(project.client, person.name) || typeof person.project === "string" && sameName(project.name, person.project)
   );
   const nameCounts = new Map<string, number>();
@@ -117,6 +120,22 @@ function assignedProjectNames(session: AuthenticatedSession) {
     nameCounts.set(projectName, (nameCounts.get(projectName) ?? 0) + 1);
   }
   return new Set(assignedProjects.filter((project) => nameCounts.get(project.name.toLowerCase()) === 1).map((project) => project.name));
+}
+
+function scopedExpenseAllocations(session: AuthenticatedSession, projectNames = assignedProjectNames(session)) {
+  const isProjectManager = session.role === "project_manager";
+  return expenseAllocations
+    .filter((allocation) => sameName(allocation.engineer, session.name) &&
+      (isProjectManager
+        ? allocation.assigneeRole === "Project Manager" && projectNames.has(allocation.project ?? "")
+        : (allocation.assigneeRole ?? "Site Engineer") === "Site Engineer"))
+    .map((allocation) => {
+      const spentCents = expenses.filter((expense) => expense.allocationId === allocation.id &&
+        (expense.entryType === "log" || (!expense.entryType && expense.status === "Logged")))
+        .reduce((total, expense) => total + Math.round(expense.amount * 100), 0);
+      const allocationCents = Math.round(allocation.amount * 100);
+      return { ...allocation, spentAmount: spentCents / 100, remainingAmount: (allocationCents - spentCents) / 100 };
+    });
 }
 
 function belongsToAssignedProject(session: AuthenticatedSession, projectName: unknown) {
@@ -147,9 +166,17 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
     if (method === "POST" && path === "/api/expenses/allocations") body.assignedBy = session.name;
     if (method === "POST" && path === "/api/material-allocations") body.assignedBy = session.name;
     if (method === "POST" && path === "/api/material-usage") body.loggedBy = session.name;
+    if (method === "POST" && path === "/api/progress") {
+      body.actor = session.name;
+      body.submittedBy = session.name;
+    }
     if (method === "POST" && path === "/api/payments") {
       body.recordedBy = session.name;
       body.recordedByRole = "Owner";
+    }
+    if (method === "POST" && path === "/api/payment-requests") {
+      body.requestedBy = session.name;
+      body.requestedByEmail = session.email;
     }
     if (method === "PATCH" && /^\/api\/material-requests\/[^/]+$/.test(path)) {
       body.reviewedBy = session.name;
@@ -167,6 +194,60 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
   }
 
   if (session.role === "project_manager") {
+    if (method === "POST" && path === "/api/expenses/allocations") {
+      return { allowed: false, status: 403, error: "Only owners can assign expense funds." };
+    }
+    if (method === "POST" && path === "/api/expenses") {
+      body.submittedBy = session.name;
+      if (body.entryType === "log") {
+        const allocation = expenseAllocations.find((item) =>
+          item.id === body.allocationId && item.assigneeRole === "Project Manager" &&
+          sameName(item.engineer, session.name) && projectNames.has(item.project ?? "")
+        );
+        if (!allocation || typeof body.project === "string" && body.project !== allocation.project) {
+          return { allowed: false, status: 403, error: "You can only log expenses against your funds for an assigned site." };
+        }
+        body.project = allocation.project;
+        body.requireAllocation = true;
+      }
+      if (typeof body.project !== "string" || !projectNames.has(body.project)) {
+        return { allowed: false, status: 403, error: "You can only add expenses to your assigned projects." };
+      }
+      return { allowed: true };
+    }
+    if (method === "POST" && path === "/api/progress") {
+      if (!belongsToAssignedProject(session, body.project)) {
+        return { allowed: false, status: 403, error: "You can only add progress updates to your assigned projects." };
+      }
+      body.actor = session.name;
+      body.submittedBy = session.name;
+      return { allowed: true };
+    }
+    if (method === "POST" && path === "/api/material-categories") {
+      body.createdBy = session.name;
+      return { allowed: true };
+    }
+    if (method === "POST" && path === "/api/material-allocations") {
+      if (!belongsToAssignedProject(session, body.project)) {
+        return { allowed: false, status: 403, error: "You can only assign materials to your assigned projects." };
+      }
+      body.assignedBy = session.name;
+      return { allowed: true };
+    }
+    if (method === "POST" && path === "/api/material-usage") {
+      const allocation = materialAllocations.find((item) => item.id === body.allocationId);
+      if (!allocation || !projectNames.has(allocation.project) ||
+        typeof body.project === "string" && body.project !== allocation.project) {
+        return { allowed: false, status: 403, error: "You can only log material usage for your assigned projects." };
+      }
+      body.project = allocation.project;
+      body.engineer = allocation.engineer;
+      body.loggedBy = session.name;
+      return { allowed: true };
+    }
+    if (method === "POST" && path === "/api/materials") {
+      return { allowed: false, status: 403, error: "Project managers can assign existing company inventory but cannot record stock." };
+    }
     if (method === "POST" && path === "/api/work-requests") {
       return { allowed: false, status: 403, error: "Only clients can submit work requests." };
     }
@@ -220,7 +301,7 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
         return { allowed: false, status: 403, error: "You can only edit your assigned projects." };
       }
     }
-    if (method === "POST" && ["/api/progress", "/api/material-requests", "/api/material-usage", "/api/expenses", "/api/payments", "/api/quotations", "/api/materials", "/api/material-allocations", "/api/expenses/allocations", "/api/feedback"].includes(path)) {
+    if (method === "POST" && ["/api/progress", "/api/material-requests", "/api/expenses", "/api/payments", "/api/quotations", "/api/expenses/allocations", "/api/feedback"].includes(path)) {
       if (typeof body.project === "string" && !belongsToAssignedProject(session, body.project)) {
         return { allowed: false, status: 403, error: "You can only manage records for your assigned projects." };
       }
@@ -302,7 +383,9 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
         body.submittedBy = session.name;
         if (body.entryType === "log") {
           const allocation = expenseAllocations.find((item) => item.id === body.allocationId &&
-            sameName(item.engineer, session.name));
+            sameName(item.engineer, session.name) &&
+            (item.assigneeRole ?? "Site Engineer") === "Site Engineer" &&
+            (!item.project || item.project === body.project));
           if (!allocation) {
             return { allowed: false, status: 403, error: "You can only log expenses against your own assigned funds." };
           }
@@ -343,6 +426,9 @@ function authorizeMutation(request: Request, session: AuthenticatedSession): Aut
       body.recordedBy = session.name;
       body.recordedByRole = "Client";
       return { allowed: true };
+    }
+    if (method === "POST" && path === "/api/payment-requests") {
+      return { allowed: false, status: 403, error: "Only owners can send payment requests." };
     }
     if (method === "POST" && path === "/api/feedback") {
       if (!belongsToAssignedProject(session, body.project)) {
@@ -444,10 +530,8 @@ function scopeDashboard(data: Record<string, unknown>, session: AuthenticatedSes
     quotes: isEmployee ? [] : filterProjects(data.quotes),
     expenses: isEmployee ? filterProjects(data.expenses) : isProjectManager ? filterProjects(data.expenses) : [],
     payments: isEmployee ? [] : filterProjects(data.payments),
-    expenseAllocations: isEmployee
-      ? (Array.isArray(data.expenseAllocations) ? data.expenseAllocations as ExpenseAllocation[] : [])
-        .filter((allocation) => sameName(allocation.engineer, session.name))
-      : [],
+    paymentRequests: isEmployee ? [] : filterProjects(data.paymentRequests),
+    expenseAllocations: isEmployee || isProjectManager ? scopedExpenseAllocations(session, projectNames) : [],
     siteVisits: isEmployee ? siteVisits.filter((visit) => projectNames.has(visit.project) && sameName(visit.engineer, ownName)) : [],
     activities: filterActivities(data.activities),
     materials: isEmployee ? filterProjects(data.materials) : isProjectManager ? data.materials : [],
@@ -459,7 +543,9 @@ function scopeDashboard(data: Record<string, unknown>, session: AuthenticatedSes
       ? (Array.isArray(data.materialUsageLogs) ? data.materialUsageLogs as typeof materialUsageLogs : [])
         .filter((log) => isProjectManager ? projectNames.has(log.project) : sameName(log.engineer, session.name) && projectNames.has(log.project))
       : [],
-    materialRequests: isEmployee
+    materialRequests: isProjectManager
+      ? filterProjects(data.materialRequests)
+      : isEmployee
       ? filterProjects(data.materialRequests).filter((request) =>
         request && typeof request === "object" && sameName((request as { requestedBy?: unknown }).requestedBy, session.name))
       : [],
@@ -487,7 +573,12 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
     const ownPeople = people.filter((person) => typeof person.email === "string" &&
       person.email.toLowerCase() === session.email.toLowerCase());
     if (session.role === "project_manager") {
+      const assignedEngineerNames = new Set(projects
+        .filter((project) => projectNames.has(project.name))
+        .flatMap(getProjectEngineers)
+        .map((name) => name.toLowerCase()));
       return people.filter((person) => ownPeople.includes(person) ||
+        person.role === "Site Engineer" && assignedEngineerNames.has(person.name.toLowerCase()) ||
         typeof person.project === "string" && projectNames.has(person.project));
     }
     if (session.role === "employee") {
@@ -502,22 +593,17 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
     }
     if (session.role === "client") {
       const assignedEngineerNames = new Set(projects
-        .filter((project) => projectNames.has(project.name) && project.engineer.toLowerCase() !== "unassigned")
-        .map((project) => project.engineer.toLowerCase()));
+        .filter((project) => projectNames.has(project.name))
+        .flatMap(getProjectEngineers)
+        .map((name) => name.toLowerCase()));
       return people.filter((person) => ownPeople.includes(person) ||
         person.role === "Site Engineer" && assignedEngineerNames.has(person.name.toLowerCase()));
     }
     return ownPeople;
   }
   if (pathname === "/api/expenses/allocations") {
-    return session.role === "employee"
-      ? expenseAllocations.filter((allocation) => sameName(allocation.engineer, session.name)).map((allocation) => {
-        const spentCents = expenses.filter((expense) => expense.allocationId === allocation.id &&
-          (expense.entryType === "log" || (!expense.entryType && expense.status === "Logged")))
-          .reduce((total, expense) => total + Math.round(expense.amount * 100), 0);
-        const allocationCents = Math.round(allocation.amount * 100);
-        return { ...allocation, spentAmount: spentCents / 100, remainingAmount: (allocationCents - spentCents) / 100 };
-      })
+    return session.role === "employee" || session.role === "project_manager"
+      ? scopedExpenseAllocations(session, projectNames)
       : body;
   }
   if (pathname === "/api/attendance" || pathname === "/api/attendance/leave-requests" ||
@@ -554,15 +640,20 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
       ? body.filter((allocation) => allocation && typeof allocation === "object" &&
         sameName((allocation as { engineer?: unknown }).engineer, session.name) &&
         matchesProject(allocation as { project?: unknown }, projectNames))
-      : body;
+      : session.role === "project_manager"
+        ? body.filter((allocation) => allocation && typeof allocation === "object" &&
+          matchesProject(allocation as { project?: unknown }, projectNames))
+        : body;
   }
   if (pathname === "/api/material-usage") {
     return session.role === "employee"
       ? body.filter((item) => item && typeof item === "object" && sameName((item as { engineer?: unknown }).engineer, session.name) && projectNames.has((item as { project?: string }).project ?? ""))
-      : body;
+      : session.role === "project_manager"
+        ? body.filter((item) => item && typeof item === "object" && matchesProject(item as { project?: unknown }, projectNames))
+        : body;
   }
   if (pathname === "/api/materials" && session.role === "project_manager") return body;
-  if (["/api/quotations", "/api/expenses", "/api/payments", "/api/materials", "/api/material-requests", "/api/progress", "/api/feedback"].includes(pathname)) {
+  if (["/api/quotations", "/api/expenses", "/api/payments", "/api/payment-requests", "/api/materials", "/api/material-requests", "/api/progress", "/api/feedback"].includes(pathname)) {
     return body.filter((item) => item && typeof item === "object" &&
       matchesProject(item as { project?: unknown }, projectNames) &&
       (pathname !== "/api/material-requests" || session.role !== "employee" ||
@@ -575,8 +666,32 @@ export function scopeApiResponse(pathname: string, body: unknown, session?: Auth
 
 export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: AuthenticatedSession): WorkspaceUpdate | undefined {
   if (session.role === "owner") return update;
-  if (session.role === "project_manager" &&
-    (update.resource === "materialCategories" || update.resource === "materials")) return update;
+  if (session.role === "project_manager") {
+    if (update.resource === "materialCategories" || update.resource === "materials") return update;
+    if (update.resource === "expenseAllocations" && update.allocation &&
+      update.allocation.assigneeRole === "Project Manager" &&
+      sameName(update.allocation.engineer, session.name) &&
+      update.allocation.project && assignedProjectNames(session).has(update.allocation.project) &&
+      (!update.project || update.project === update.allocation.project)) {
+      return {
+        ...update,
+        project: update.allocation.project,
+        ...(update.push ? {
+          push: {
+            ...update.push,
+            targets: update.push.targets.filter((target) =>
+              target.role === "project_manager" && target.userName === session.name)
+          }
+        } : {})
+      };
+    }
+    const project = update.project ?? update.materialAllocation?.project;
+    if (project && assignedProjectNames(session).has(project) &&
+      ["materialAllocations", "materialRequests", "materialUsage", "progress"].includes(update.resource)) {
+      return { ...update, project, push: undefined };
+    }
+    return undefined;
+  }
   if (session.role === "employee") {
     if (update.resource === "materialCategories") return update;
     const push = update.push;
@@ -584,6 +699,7 @@ export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: Authentic
       return { ...update, push: { ...push, targets: push.targets.filter((target) => ownPushTarget(session, target)) } };
     }
     if (update.resource === "expenseAllocations" && update.allocation &&
+      (update.allocation.assigneeRole ?? "Site Engineer") === "Site Engineer" &&
       sameName(update.allocation.engineer, session.name)) return update;
     if (update.resource === "materialAllocations" && update.materialAllocation &&
       sameName(update.materialAllocation.engineer, session.name)) return update;
@@ -602,7 +718,8 @@ export function scopeWorkspaceUpdate(update: WorkspaceUpdate, session: Authentic
     }
     return undefined;
   }
-  if ((update.resource !== "progress" && update.resource !== "quotations" && update.resource !== "payments" && update.resource !== "workRequests") ||
+  if ((update.resource !== "progress" && update.resource !== "quotations" && update.resource !== "payments" &&
+    update.resource !== "paymentRequests" && update.resource !== "workRequests") ||
     !update.project || !belongsToAssignedProject(session, update.project)) return undefined;
   return {
     ...update,

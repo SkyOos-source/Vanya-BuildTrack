@@ -1,4 +1,4 @@
-import { materialAllocations, materialCategories, materialRequests, materialUsageLogs, nextId, people, projects, readAmount, readText } from "../../data/store";
+import { getProjectEngineers, materialAllocations, materialCategories, materialRequests, materialUsageLogs, nextId, people, projects, readAmount, readText } from "../../data/store";
 import { materials } from "./data";
 import { failure, result } from "../shared";
 
@@ -55,12 +55,14 @@ function remainingQuantity(allocation: { quantity: number; usedQuantity: number 
 
 function buildAllocation(body: any, project: string, material: string, quantity: number, unit: string, requestId?: string) {
   const projectRecord = projects.find((item) => item.name === project);
-  if (!projectRecord) return null;
+  const engineer = readText(body?.engineer) ?? (projectRecord ? getProjectEngineers(projectRecord)[0] : undefined);
+  if (!projectRecord || !engineer ||
+    !getProjectEngineers(projectRecord).some((name) => name.toLowerCase() === engineer.toLowerCase())) return null;
   return {
     id: nextId("material-allocation"),
     material,
     project,
-    engineer: projectRecord.engineer,
+    engineer,
     quantity,
     unit,
     usedQuantity: 0,
@@ -88,7 +90,7 @@ export function createMaterialAllocation(body: any) {
     return failure(400, `Only ${inventory.stock} is available to assign.`);
   }
   const allocation = buildAllocation(body, project, material, quantity, available.unit);
-  if (!allocation) return failure(400, "Select an existing project.");
+  if (!allocation) return failure(400, "Select an engineer assigned to the selected project.");
   inventory.stock = formatQuantity((availableThousandths - assignedThousandths) / 1000, available.unit);
   inventory.lastUpdated = new Date().toLocaleString("en", { dateStyle: "medium", timeStyle: "short" });
   materialAllocations.unshift(allocation);
@@ -197,8 +199,8 @@ export function updateMaterialRequest(id: string, body: any) {
   if (status === "Approved") {
     const parsedQuantity = parseQuantityText(request.quantity);
     if (!parsedQuantity) return failure(400, "The requested quantity is invalid and cannot be assigned.");
-    const allocation = buildAllocation(body, request.project, request.material, parsedQuantity.quantity, parsedQuantity.unit, request.id);
-    if (!allocation) return failure(400, "The request project no longer exists.");
+    const allocation = buildAllocation({ ...body, engineer: request.requestedBy }, request.project, request.material, parsedQuantity.quantity, parsedQuantity.unit, request.id);
+    if (!allocation) return failure(400, "The request project or assigned engineer no longer exists.");
     const engineer = people.find((person) => person.role === "Site Engineer" && person.name.toLowerCase() === request.requestedBy.toLowerCase());
     const reviewedBy = readText(body?.reviewedBy) ?? "Owner";
     let materialCategory = materialCategories.find((item) => item.name.toLowerCase() === request.material.toLowerCase());

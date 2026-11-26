@@ -1,4 +1,4 @@
-import { activities, attendance, createClientCredential, createEmployeeCredential, deleteClientCredential, deleteEmployeeCredential, expenses, feedback, materialAllocations, materialRequests, materialUsageLogs, materials, nextId, people, projects, quotations, readText, siteVisits, updatePersonCredentialEmail } from "../../data/store";
+import { activities, attendance, createClientCredential, createEmployeeCredential, deleteClientCredential, deleteEmployeeCredential, expenseAllocations, expenses, feedback, getProjectEngineers, getProjectManagers, materialAllocations, materialRequests, materialUsageLogs, materials, nextId, people, projects, quotations, readText, siteVisits, updatePersonCredentialEmail } from "../../data/store";
 import { failure, result } from "../shared";
 
 export const listPeople = () => people;
@@ -99,19 +99,46 @@ export function updatePerson(id: string, body: any) {
       }
     }
   } else if (person.role === "Project Manager") {
-    projects.forEach((project) => { if (project.projectManager === previousName) project.projectManager = name; });
+    projects.forEach((project) => {
+      const managers = getProjectManagers(project);
+      if (managers.some((manager) => manager.toLowerCase() === previousName.toLowerCase())) {
+        const renamedManagers = managers.map((manager) => manager.toLowerCase() === previousName.toLowerCase() ? name : manager);
+        project.projectManagers = renamedManagers;
+        project.projectManager = renamedManagers[0] ?? "Unassigned";
+      }
+    });
     if (projectProvided && nextProject) {
-        if (previousProject !== nextProject) {
-          projects.forEach((project) => {
-            if (project.name === previousProject && project.projectManager === name) project.projectManager = "Unassigned";
-          });
+      if (previousProject !== nextProject) {
+        const previousAssignment = projects.find((project) => project.name === previousProject);
+        if (previousAssignment) {
+          const managers = getProjectManagers(previousAssignment).filter((manager) => manager.toLowerCase() !== name.toLowerCase());
+          previousAssignment.projectManagers = managers;
+          previousAssignment.projectManager = managers[0] ?? "Unassigned";
         }
-        person.project = nextProject;
-        const assignedProject = projects.find((project) => project.name === nextProject);
-        if (assignedProject) assignedProject.projectManager = name;
+      }
+      person.project = nextProject;
+      const assignedProject = projects.find((project) => project.name === nextProject);
+      if (assignedProject) {
+        const managers = getProjectManagers(assignedProject);
+        if (!managers.some((manager) => manager.toLowerCase() === name.toLowerCase())) managers.push(name);
+        assignedProject.projectManagers = managers;
+        assignedProject.projectManager = managers[0] ?? "Unassigned";
+      }
     }
+    expenseAllocations.forEach((allocation) => {
+      if (allocation.assigneeRole === "Project Manager" && allocation.engineer.toLowerCase() === previousName.toLowerCase()) {
+        allocation.engineer = name;
+      }
+    });
   } else {
-    projects.forEach((project) => { if (project.engineer === previousName) project.engineer = name; });
+    projects.forEach((project) => {
+      const engineers = getProjectEngineers(project);
+      if (engineers.some((engineer) => engineer.toLowerCase() === previousName.toLowerCase())) {
+        const renamedEngineers = engineers.map((engineer) => engineer.toLowerCase() === previousName.toLowerCase() ? name : engineer);
+        project.engineers = renamedEngineers;
+        project.engineer = renamedEngineers[0] ?? "Unassigned";
+      }
+    });
     siteVisits.forEach((visit) => { if (visit.engineer === previousName) visit.engineer = name; });
     activities.forEach((activity) => { if (activity.actor === previousName) activity.actor = name; });
     expenses.forEach((expense) => { if (expense.submittedBy === previousName) expense.submittedBy = name; });

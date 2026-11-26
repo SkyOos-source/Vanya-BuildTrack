@@ -1,8 +1,9 @@
 import type { DashboardData } from "../../common/types";
 import { ExpenseRows, StatCard } from "../../common/components";
+import { getProjectEngineers } from "../../common/project-assignments";
 
 export function EngineerDashboard({ data, currentUser, onNavigate }: { data: DashboardData; currentUser: string; onNavigate: (page: string) => void }) {
-  const projects = data.projects.filter((project) => project.engineer === currentUser);
+  const projects = data.projects.filter((project) => getProjectEngineers(project).some((name) => name.toLowerCase() === currentUser.toLowerCase()));
   const today = new Date();
   const dateLabel = today.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;

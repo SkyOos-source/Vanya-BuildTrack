@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Request } from "express";
-import { expenseAllocations, materialAllocations, ownerAccounts, ownerProfiles, people, projects, quotations, type Project, type Quote } from "../src/data/store";
-import { authorizeApiRequest, scopeApiResponse } from "../src/features/auth/access";
+import { expenseAllocations, materialAllocations, materialRequests, materialUsageLogs, ownerAccounts, ownerProfiles, paymentRequests, people, projects, quotations, type Project, type Quote } from "../src/data/store";
+import { authorizeApiRequest, scopeApiResponse, scopeWorkspaceUpdate } from "../src/features/auth/access";
 import type { AuthenticatedSession } from "../src/features/auth/session";
 import { createProject } from "../src/features/projects/service";
 import { createPerson, updatePerson } from "../src/features/people/service";
@@ -11,6 +11,7 @@ import { getWorkspaceOwnerContacts } from "../src/features/profiles/service";
 const employee: AuthenticatedSession = { name: "Engineer One", email: "engineer@example.com", role: "employee" };
 const client: AuthenticatedSession = { name: "Client One", email: "client@example.com", role: "client" };
 const owner: AuthenticatedSession = { name: "Owner One", email: "owner@example.com", role: "owner" };
+const projectManager: AuthenticatedSession = { name: "Manager One", email: "manager@example.com", role: "project_manager" };
 
 function project(id: string, name: string, engineer: string, clientName: string): Project {
   return {
@@ -88,6 +89,114 @@ test("workspace owner contacts include every owner account", () => {
     ownerAccounts.splice(0, ownerAccounts.length, ...ownerAccountsBefore);
     for (const email of Object.keys(ownerProfiles)) delete ownerProfiles[email];
     Object.assign(ownerProfiles, ownerProfilesBefore);
+  }
+});
+
+test("clients can reload assigned payment requests and receive their realtime updates", () => {
+  const projectsBefore = [...projects];
+  const peopleBefore = [...people];
+  const requestsBefore = [...paymentRequests];
+  try {
+    projects.splice(0, projects.length, project("p1", "Alpha", employee.name, client.name));
+    people.splice(0, people.length, {
+      id: "c1",
+      name: client.name,
+      email: client.email,
+      role: "Client",
+      project: "Alpha"
+    });
+
+    test("project managers can manage material workflows only for assigned projects", () => {
+      const projectsBefore = [...projects];
+      const peopleBefore = [...people];
+      const allocationsBefore = [...materialAllocations];
+      const usageBefore = [...materialUsageLogs];
+      const requestsBefore = [...materialRequests];
+      try {
+        projects.splice(0, projects.length,
+          { ...project("p1", "Alpha", employee.name, client.name), projectManager: projectManager.name },
+          project("p2", "Beta", "Another Engineer", "Another Client")
+        );
+        people.splice(0, people.length, {
+          id: "manager-1",
+          name: projectManager.name,
+          email: projectManager.email,
+          role: "Project Manager",
+          project: "Alpha"
+        });
+        materialAllocations.splice(0, materialAllocations.length,
+          { id: "m1", material: "Cement", project: "Alpha", engineer: employee.name, quantity: 5, unit: "bags", usedQuantity: 0, assignedAt: "Today", assignedBy: owner.name },
+          { id: "m2", material: "Sand", project: "Beta", engineer: "Another Engineer", quantity: 5, unit: "bags", usedQuantity: 0, assignedAt: "Today", assignedBy: owner.name }
+        );
+        materialUsageLogs.splice(0, materialUsageLogs.length,
+          { id: "u1", allocationId: "m1", material: "Cement", project: "Alpha", quantity: 1, unit: "bags", engineer: employee.name, loggedAt: "Today" },
+          { id: "u2", allocationId: "m2", material: "Sand", project: "Beta", quantity: 1, unit: "bags", engineer: "Another Engineer", loggedAt: "Today" }
+        );
+        materialRequests.splice(0, materialRequests.length,
+          { id: "r1", material: "Cement", project: "Alpha", quantity: "2 bags", requestedBy: employee.name, requestedAt: "Today", status: "Pending review" },
+          { id: "r2", material: "Sand", project: "Beta", quantity: "2 bags", requestedBy: "Another Engineer", requestedAt: "Today", status: "Pending review" }
+        );
+
+        assert.equal(authorizeApiRequest(request("GET", "/api/material-requests"), projectManager).allowed, true);
+        assert.deepEqual((scopeApiResponse("/api/material-requests", materialRequests, projectManager) as typeof materialRequests).map((item) => item.id), ["r1"]);
+        assert.deepEqual((scopeApiResponse("/api/material-allocations", materialAllocations, projectManager) as typeof materialAllocations).map((item) => item.id), ["m1"]);
+        assert.deepEqual((scopeApiResponse("/api/material-usage", materialUsageLogs, projectManager) as typeof materialUsageLogs).map((item) => item.id), ["u1"]);
+
+        const categoryBody = { name: "Roofing", createdBy: "Forged" };
+        assert.equal(authorizeApiRequest(request("POST", "/api/material-categories", categoryBody), projectManager).allowed, true);
+        assert.equal(categoryBody.createdBy, projectManager.name);
+
+        const allocationBody = { project: "Alpha", assignedBy: "Forged" };
+        assert.equal(authorizeApiRequest(request("POST", "/api/material-allocations", allocationBody), projectManager).allowed, true);
+        assert.equal(allocationBody.assignedBy, projectManager.name);
+        assert.equal(authorizeApiRequest(request("POST", "/api/material-allocations", { project: "Beta" }), projectManager).allowed, false);
+
+        const usageBody = { allocationId: "m1", project: "Alpha", engineer: "Forged", loggedBy: "Forged" };
+        assert.equal(authorizeApiRequest(request("POST", "/api/material-usage", usageBody), projectManager).allowed, true);
+        assert.equal(usageBody.engineer, employee.name);
+        assert.equal(usageBody.loggedBy, projectManager.name);
+        assert.equal(authorizeApiRequest(request("POST", "/api/material-usage", { allocationId: "m2" }), projectManager).allowed, false);
+        assert.equal(authorizeApiRequest(request("POST", "/api/materials", { project: "Alpha" }), projectManager).allowed, false);
+
+        const scopedDashboard = scopeApiResponse("/api/dashboard", { materialRequests }, projectManager) as { materialRequests: typeof materialRequests };
+        assert.deepEqual(scopedDashboard.materialRequests.map((item) => item.id), ["r1"]);
+      } finally {
+        projects.splice(0, projects.length, ...projectsBefore);
+        people.splice(0, people.length, ...peopleBefore);
+        materialAllocations.splice(0, materialAllocations.length, ...allocationsBefore);
+        materialUsageLogs.splice(0, materialUsageLogs.length, ...usageBefore);
+        materialRequests.splice(0, materialRequests.length, ...requestsBefore);
+      }
+    });
+    paymentRequests.splice(0, paymentRequests.length,
+      {
+        id: "PREQ-1",
+        project: "Alpha",
+        amount: 100,
+        requestedBy: owner.name,
+        requestedByEmail: owner.email,
+        requestedAt: "2026-11-26T00:00:00.000Z",
+        status: "Pending"
+      },
+      {
+        id: "PREQ-2",
+        project: "Beta",
+        amount: 200,
+        requestedBy: owner.name,
+        requestedByEmail: owner.email,
+        requestedAt: "2026-11-26T00:00:00.000Z",
+        status: "Pending"
+      }
+    );
+
+    assert.equal(authorizeApiRequest(request("GET", "/api/payment-requests"), client).allowed, true);
+    assert.deepEqual(scopeApiResponse("/api/payment-requests", paymentRequests, client), [paymentRequests[0]]);
+    assert.equal(scopeWorkspaceUpdate({ resource: "paymentRequests", project: "Alpha" }, client)?.resource, "paymentRequests");
+    assert.equal(scopeWorkspaceUpdate({ resource: "paymentRequests", project: "Beta" }, client), undefined);
+  } finally {
+    projects.splice(0, projects.length, ...projectsBefore);
+    people.splice(0, people.length, ...peopleBefore);
+    paymentRequests.splice(0, paymentRequests.length, ...requestsBefore);
   }
 });
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { projects, restoreStoreSnapshot, snapshotStore } from "../src/data/store";
+import { paymentRequests, projects, restoreStoreSnapshot, snapshotStore } from "../src/data/store";
 
 test("restoring a workspace snapshot rolls back array mutations in place", () => {
   const original = snapshotStore();
@@ -18,6 +18,30 @@ test("restoring a workspace snapshot rolls back array mutations in place", () =>
       spent: 0,
       dueDate: "30 Nov 2026",
       image: "example.jpg"
+    });
+
+    test("payment requests persist across workspace snapshots", () => {
+      const original = snapshotStore();
+      try {
+        paymentRequests.push({
+          id: "PREQ-snapshot",
+          project: "Snapshot project",
+          amount: 125,
+          requestedBy: "Owner",
+          requestedByEmail: "owner@example.com",
+          requestedAt: "2026-11-26T00:00:00.000Z",
+          status: "Pending"
+        });
+        const snapshot = snapshotStore();
+        paymentRequests[0].status = "Cancelled";
+
+        restoreStoreSnapshot(snapshot);
+
+        assert.equal(paymentRequests[0].id, "PREQ-snapshot");
+        assert.equal(paymentRequests[0].status, "Pending");
+      } finally {
+        restoreStoreSnapshot(original);
+      }
     });
     const snapshot = snapshotStore();
     projects[originalLength].name = "After failure";

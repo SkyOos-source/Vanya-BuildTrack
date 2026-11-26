@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, MaterialRequest, OwnerAuditLog, Payment, Project, ProjectContact, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
+import type { Activity, Attendance, AttendanceLeaveRequest, AttendanceProof, AttendanceRegularizationRequest, DashboardData, Expense, MaterialRequest, OwnerAuditLog, Payment, PaymentRequest, Project, ProjectContact, Quote, RecordModalType, Role, SiteVisit, SiteVisitProof, Person } from "./types";
 import { apiFetch } from "./api";
 import { formatCurrency, initials, isLoggedExpense, withRetryGuidance } from "./utils";
 import { DateInput, ExpenseRows, ProjectCards, StatusBadge } from "./components";
@@ -9,8 +9,10 @@ import { QuotationPdfPreview } from "./quotation-pdf-preview";
 import { SiteVisitsPage, type SiteVisitAction } from "./site-visits-page";
 import { PalettePicker } from "./palette";
 import { WorkRequestsPage } from "./work-requests-page";
+import { ReportsPage } from "./reports-page";
+import { getProjectEngineers, getProjectManagers } from "./project-assignments";
 
-export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null, project?: Project) => void; onEditProject?: (project: Project) => void; onCreatePerson: (role: "Site Engineer" | "Client" | "Project Manager") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined", stockAction?: boolean | "record") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onUnassignEngineerProject: (project: Project) => Promise<void>; onUnassignClientProject: (client: Person, project: Project) => Promise<void>; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => Promise<void>; onBackup: () => void; workRequestsRefresh: number };
+export type FeaturePageProps = { page: string; role: Role; currentUser: string; currentUserEmail: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; data: DashboardData; projects: Project[]; search: string; setSearch: (value: string) => void; filter: string; setFilter: (value: string) => void; onCreate: (modal: RecordModalType | null, project?: Project, paymentRequest?: PaymentRequest) => void; onEditProject?: (project: Project) => void; onCreatePerson: (role: "Site Engineer" | "Client" | "Project Manager") => void; onQuote: (quote: Quote, decision: "Approved" | "Declined") => void; onAttendanceSubmit: (action: "check-in" | "check-out", date: string, proof: AttendanceProof) => Promise<void>; onAttendanceRegularize: (record: Attendance, capturedAt: string, reason: string) => Promise<void>; onAttendanceRequestReview: (requestId: string, decision: "Approved" | "Declined") => Promise<AttendanceRegularizationRequest>; onAttendanceLeaveReview: (requestId: string, decision: "Approved" | "Declined") => Promise<{ request: AttendanceLeaveRequest; record?: Attendance }>; onExpenseStatus: (expense: Expense, status: "Approved" | "Declined" | "Paid") => void; onMaterialRequestStatus: (request: MaterialRequest, status: "Approved" | "Declined", stockAction?: boolean | "record") => void; onVisitStatus: (visit: SiteVisit, action: SiteVisitAction, proof: SiteVisitProof) => Promise<void>; onVisitCheckIn: (project: string, site: string, createProject: boolean, proof: SiteVisitProof) => Promise<void>; onUpdatePerson: (person: Person, event: FormEvent<HTMLFormElement>) => Promise<boolean>; onRemovePerson: (person: Person) => void; onUnassignEngineerProject: (engineer: Person, project: Project) => Promise<void>; onUnassignClientProject: (client: Person, project: Project) => Promise<void>; onToast: (message: string) => void; onFeedback: (event: FormEvent<HTMLFormElement>) => Promise<void>; onBackup: () => void; workRequestsRefresh: number };
 
 const RECORDS_PER_PAGE = 10;
 const AUDIT_LOGS_PER_PAGE = 20;
@@ -38,9 +40,9 @@ function localDateKey(value?: string) {
 }
 
 function isAssignedToEngineer(project: Project, engineer: Person) {
-  const assignment = project.engineer.trim().toLocaleLowerCase();
-  return assignment === engineer.name.trim().toLocaleLowerCase() ||
-    assignment === engineer.email.trim().toLocaleLowerCase();
+  const assignments = getProjectEngineers(project).map((name) => name.trim().toLocaleLowerCase());
+  return assignments.includes(engineer.name.trim().toLocaleLowerCase()) ||
+    assignments.includes(engineer.email.trim().toLocaleLowerCase());
 }
 
 function isAssignedToClient(project: Project, client: Person) {
@@ -49,7 +51,8 @@ function isAssignedToClient(project: Project, client: Person) {
 }
 
 function isAssignedToProjectManager(project: Project, manager: Person) {
-  return (project.projectManager ?? "").trim().toLocaleLowerCase() === manager.name.trim().toLocaleLowerCase();
+  return getProjectManagers(project).some((name) => name.trim().toLocaleLowerCase() === manager.name.trim().toLocaleLowerCase()) ||
+    !project.projectManagers && project.name.trim().toLocaleLowerCase() === manager.project.trim().toLocaleLowerCase();
 }
 
 export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerContacts, ownerContactsError, data, projects, search, setSearch, filter, setFilter, onCreate, onCreatePerson, onQuote, onAttendanceSubmit, onAttendanceRegularize, onAttendanceRequestReview, onAttendanceLeaveReview, onExpenseStatus, onVisitStatus, onVisitCheckIn, onUpdatePerson, onRemovePerson, onUnassignEngineerProject, onUnassignClientProject, onToast, onFeedback, onBackup, workRequestsRefresh }: FeaturePageProps) {
@@ -67,7 +70,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   const [allocationPage, setAllocationPage] = useState(1);
   const [expensePage, setExpensePage] = useState(1);
   const [auditLogsPage, setAuditLogsPage] = useState(1);
-  const [allocationEngineerFilter, setAllocationEngineerFilter] = useState("All");
+  const [allocationAssigneeFilter, setAllocationAssigneeFilter] = useState("All");
   const [expenseProjectFilter, setExpenseProjectFilter] = useState("All");
   const [expenseDateFilter, setExpenseDateFilter] = useState("");
   const [paymentProjectFilter, setPaymentProjectFilter] = useState("All");
@@ -180,9 +183,9 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   const scopedProjects = role === "Owner"
     ? projects
     : role === "Employee"
-      ? projects.filter((project) => project.engineer === currentUser)
+      ? projects.filter((project) => getProjectEngineers(project).some((name) => name.toLowerCase() === currentUser.toLowerCase()))
       : role === "ProjectManager"
-        ? projects.filter((project) => project.projectManager === currentUser)
+        ? projects
         : projects.filter((project) => project.name === clientProjectName);
   const selectedProject = scopedProjects.find((project) => project.id === selectedProjectId);
   const visibleQuotes = role === "Client"
@@ -207,8 +210,11 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     : role === "Employee"
       ? data.expenses.filter((expense) => expense.submittedBy === currentUser)
       : data.expenses;
-  const visibleExpenseAllocations = role === "Employee"
-    ? data.expenseAllocations.filter((allocation) => allocation.engineer === currentUser)
+  const visibleExpenseAllocations = role === "Employee" || role === "ProjectManager"
+    ? data.expenseAllocations.filter((allocation) => allocation.engineer === currentUser &&
+      (role === "ProjectManager"
+        ? allocation.assigneeRole === "Project Manager"
+        : (allocation.assigneeRole ?? "Site Engineer") === "Site Engineer"))
     : data.expenseAllocations;
   const projectPayments = data.payments.filter((payment) =>
     data.projects.some((project) => project.name === payment.project)
@@ -227,13 +233,19 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
       const payments = projectPayments.filter((payment) => payment.project === project.name);
       return { project, payments, receivedAmount: payments.reduce((total, payment) => total + payment.amount, 0) };
     });
-  const allocationEngineers = [...new Set(visibleExpenseAllocations.map((allocation) => allocation.engineer))]
-    .sort((left, right) => left.localeCompare(right));
+  const allocationAssignees = Array.from(new Map(visibleExpenseAllocations.map((allocation) => [
+    `${allocation.assigneeRole ?? "Site Engineer"}:${allocation.engineer}`,
+    `${allocation.engineer} · ${allocation.assigneeRole ?? "Site Engineer"}`
+  ])).entries()).sort((left, right) => left[1].localeCompare(right[1]));
   const filteredExpenseAllocations = visibleExpenseAllocations.filter((allocation) =>
-    role !== "Owner" || allocationEngineerFilter === "All" || allocation.engineer === allocationEngineerFilter
+    role !== "Owner" || allocationAssigneeFilter === "All" ||
+      `${allocation.assigneeRole ?? "Site Engineer"}:${allocation.engineer}` === allocationAssigneeFilter
   );
   const totalAssignedFunds = visibleExpenseAllocations.reduce((total, allocation) => total + allocation.amount, 0);
-  const totalLoggedExpenses = visibleExpenses.filter(isLoggedExpense).reduce((total, expense) => total + expense.amount, 0);
+  const allocationIds = new Set(visibleExpenseAllocations.map((allocation) => allocation.id));
+  const totalLoggedExpenses = visibleExpenses.filter((expense) => isLoggedExpense(expense) &&
+    (role !== "ProjectManager" || Boolean(expense.allocationId && allocationIds.has(expense.allocationId)))
+  ).reduce((total, expense) => total + expense.amount, 0);
   const remainingFunds = totalAssignedFunds - totalLoggedExpenses;
   const filteredExpenses = visibleExpenses.filter((item) => {
     if (expenseProjectFilter !== "All" && item.project !== expenseProjectFilter) return false;
@@ -255,7 +267,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
   }, [expenseDateFilter, expenseProjectFilter, page]);
   useEffect(() => {
     setAllocationPage(1);
-  }, [allocationEngineerFilter, page]);
+  }, [allocationAssigneeFilter, page]);
   const clientWorkProgress = data.activities.filter((item) =>
     item.kind === "progress" &&
     scopedProjects.some((project) => project.name === item.project) &&
@@ -321,23 +333,6 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     </>;
   };
 
-  const downloadReport = async (type: string) => {
-    try {
-      const response = await apiFetch(`/api/reports/${type}`);
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || `Report request failed (${response.status})`);
-      const file = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(file);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `buildtrack-${type}-report.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error(`Unable to generate ${type} report:`, error);
-      onToast(withRetryGuidance(error instanceof Error ? error.message : "Could not generate this report."));
-    }
-  };
   const downloadBackup = async (id: string) => {
     try {
       const response = await apiFetch(`/api/backups/${id}/download`);
@@ -354,7 +349,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
       onToast(withRetryGuidance(error instanceof Error ? error.message : "Could not download this backup."));
     }
   };
-  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${page === "Payments" ? "payment-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""} ${role === "Employee" && page === "Materials" ? "engineer-materials-feature-page" : ""}`}>
+  return <div className={`feature-page ${page === "Expenses" ? "expenses-feature-page" : ""} ${page === "Payments" ? "payment-feature-page" : ""} ${role === "Employee" && page === "Expenses" ? "engineer-expenses-feature-page" : ""} ${role === "Employee" && page === "Materials" ? "engineer-materials-feature-page" : ""} ${role === "ProjectManager" && page === "Materials" ? "project-manager-materials-feature-page" : ""}`}>
     {projectView && (selectedProject
       ? <ProjectDetails project={selectedProject} data={data} role={role} currentUser={currentUser} ownerContacts={ownerContacts} ownerContactsError={ownerContactsError} onBack={() => setSelectedProjectId(null)} onCreate={onCreate} />
       : <section className="panel feature-panel"><div className="list-toolbar"><div className="search-box"><span>⌕</span><input aria-label="Search projects" placeholder="Search projects, sites, clients..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>{role === "Owner" && <div className="toolbar-actions"><button className="button button-primary" onClick={() => onCreate("project")}>＋ New project</button></div>}</div><ProjectCards projects={scopedProjects} onOpen={(project) => setSelectedProjectId(project.id)} /></section>)}
@@ -376,6 +371,15 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
           <small>{payments.length} {payments.length === 1 ? "payment" : "payments"} received</small>
         </article>)}
       </section>}
+      {data.paymentRequests?.some((request) => request.status === "Pending") && <section className="panel feature-panel" aria-label="Payment requests">
+        <div className="list-toolbar"><div><span className="panel-kicker">{role === "Owner" ? "OUTSTANDING REQUESTS" : "AWAITING YOUR PAYMENT"}</span><h2 className="list-title">{role === "Owner" ? "Payment requests" : "Payment requests for you"}</h2></div></div>
+        <div className="payment-history-list">{data.paymentRequests.filter((request) => request.status === "Pending").map((request) => <article className="payment-history-row" key={request.id}>
+          <div className="payment-history-amount"><strong>{formatCurrency(request.amount)}</strong><span>{request.dueDate ? `Due ${request.dueDate}` : "Pending"}</span></div>
+          <div className="payment-history-project"><strong>{request.project}</strong><span>{request.requestedAt.slice(0, 10)}{request.note ? ` · ${request.note}` : ""}</span></div>
+          <div className="payment-history-recorder"><strong>{request.requestedBy}</strong><span>Sent by owner</span></div>
+          {role === "Client" && <button className="button button-primary" type="button" onClick={() => onCreate("payment", data.projects.find((project) => project.name === request.project), request)}>Record payment</button>}
+        </article>)}</div>
+      </section>}
       <section className="panel feature-panel">
         <div className="list-toolbar">
           <div><span className="panel-kicker">{role === "Owner" ? "OWNER & CLIENT ACTIVITY" : "YOUR PROJECT ACTIVITY"}</span><h2 className="list-title">{role === "Owner" ? "Payment history" : "My project payments"}</h2></div>
@@ -384,6 +388,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
               <option value="All">All projects</option>
               {data.projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}
             </select>
+            {role === "Owner" && <button className="button button-outline" type="button" onClick={() => onCreate("payment-request")} disabled={scopedProjects.length === 0}>Send payment request</button>}
             <button className="button button-primary" type="button" onClick={() => onCreate("payment")} disabled={scopedProjects.length === 0}>＋ Add payment</button>
           </div>
         </div>
@@ -397,7 +402,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
           : <p className="project-details-empty">{data.projects.length ? "No payments match this project filter yet." : "No assigned projects are available for payment tracking."}</p>}
       </section>
     </>}
-    {role === "Employee" && page === "Expenses" && <section className="financial-summary-card engineer-expense-summary" aria-label="Your expense summary">
+    {(role === "Employee" || role === "ProjectManager") && page === "Expenses" && <section className="financial-summary-card engineer-expense-summary" aria-label="Your expense summary">
       <div className="financial-summary-top">
         <div><span>Total funds</span><strong>{formatCurrency(totalAssignedFunds)}</strong></div>
         <div className="engineer-expense-summary-spent"><span>Spent (logged expenses)</span><strong>{formatCurrency(totalLoggedExpenses)}</strong></div>
@@ -406,21 +411,23 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     </section>}
     {role !== "Client" && page === "Expenses" && <>
       <section className="panel feature-panel">
-        <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED SPENDING</span><h2 className="list-title">{role === "Owner" ? "Engineer fund allocations" : "Your assigned funds"}</h2></div>
+        <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED SPENDING</span><h2 className="list-title">{role === "Owner" ? "Team member fund allocations" : "Your assigned funds"}</h2></div>
           <div className="toolbar-actions">
-            {role === "Owner" && <select className="select-button" aria-label="Filter fund allocations by engineer" value={allocationEngineerFilter} onChange={(event) => setAllocationEngineerFilter(event.target.value)}>
-              <option value="All">All engineers</option>
-              {allocationEngineers.map((engineer) => <option key={engineer} value={engineer}>{engineer}</option>)}
+            {role === "Owner" && <select className="select-button" aria-label="Filter fund allocations by assignee" value={allocationAssigneeFilter} onChange={(event) => setAllocationAssigneeFilter(event.target.value)}>
+              <option value="All">All team members</option>
+              {allocationAssignees.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </select>}
             {role === "Owner" && <button className="button button-outline" onClick={() => onCreate("expense-allocation")}>＋ Assign funds</button>}
             {role === "Employee" && <button className="button button-outline" onClick={() => onCreate("expense")}>＋ Request extra funds</button>}
           </div>
         </div>
-        {role === "Employee" && <p className="feature-subtitle">Review the funds assigned to you. Request extra funds here if you need more.</p>}
+        {(role === "Employee" || role === "ProjectManager") && <p className="feature-subtitle">Review the funds assigned to you. Expenses must be logged against an assigned site allocation.</p>}
         {filteredExpenseAllocations.length ? <div className="project-details-list">{allocationPageRecords.map((allocation) => <article key={allocation.id}>
-          <div><strong>{role === "Owner" ? allocation.engineer : `Assigned ${allocation.assignedAt}`}</strong><span>{formatCurrency(allocation.spentAmount)} spent · {formatCurrency(allocation.remainingAmount)} remaining</span></div>
+          <div><strong>{role === "Owner"
+            ? `${allocation.engineer} · ${allocation.assigneeRole ?? "Site Engineer"}${allocation.project ? ` · ${allocation.project}` : ""}`
+            : `Assigned ${allocation.assignedAt}${allocation.project ? ` · ${allocation.project}` : ""}`}</strong><span>{formatCurrency(allocation.spentAmount)} spent · {formatCurrency(allocation.remainingAmount)} remaining</span></div>
           <strong>{formatCurrency(allocation.amount)}</strong>
-        </article>)}</div> : <div className="inline-empty">{role === "Owner" ? allocationEngineerFilter === "All" ? "No funds have been assigned to engineers yet." : `No funds have been assigned to ${allocationEngineerFilter} yet.` : "No funds have been assigned to you yet."}</div>}
+        </article>)}</div> : <div className="inline-empty">{role === "Owner" ? allocationAssigneeFilter === "All" ? "No funds have been assigned to team members yet." : "No funds have been assigned to this team member yet." : "No funds have been assigned to you yet."}</div>}
         <RecordPagination page={currentAllocationPage} totalItems={filteredExpenseAllocations.length} onPageChange={setAllocationPage} />
       </section>
       <section className="panel feature-panel">
@@ -429,6 +436,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
             <select className="select-button" aria-label="Filter expenses by project" value={expenseProjectFilter} onChange={(event) => setExpenseProjectFilter(event.target.value)}><option value="All">All projects</option>{data.projects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>
             <label className="work-progress-date-filter"><DateInput aria-label="Filter expenses by date" value={expenseDateFilter} onChange={(event) => setExpenseDateFilter(event.currentTarget.value)} onClear={() => setExpenseDateFilter("")} /></label>
             {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
+            {role === "ProjectManager" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
             {role === "Owner" && <button className="button button-primary" onClick={() => onCreate("expense-log")}>＋ Log expense</button>}
           </div>
         </div>
@@ -462,6 +470,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
         <div className="list-toolbar"><div><span className="panel-kicker">ASSIGNED & REQUESTED MATERIALS</span><h2 className="list-title">Assigned and requested materials</h2></div><div className="toolbar-actions">
           <select className="select-button" aria-label="Filter assigned materials and requests by project" value={materialProjectFilter} onChange={(event) => setMaterialProjectFilter(event.target.value)}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>
           <select className="select-button" aria-label="Filter assignments and requests by status" value={materialActivityStatusFilter} onChange={(event) => setMaterialActivityStatusFilter(event.target.value)}><option value="All">All statuses</option><option>Assigned</option><option>Pending review</option><option>Approved</option><option>Declined</option></select>
+          {role === "ProjectManager" && <button className="button button-outline" onClick={() => onCreate("material-allocation")}>＋ Assign materials</button>}
           {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("material-request")}>＋ Request material</button>}
         </div></div>
         {materialAssignmentRows.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Type</th><th>Material</th><th>Project / site</th><th>Quantity / balance</th><th>Submitted by</th><th>Date</th><th>Status</th><th>Note</th></tr></thead><tbody>
@@ -471,7 +480,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
       <section className="panel feature-panel">
         <div className="list-toolbar"><div><span className="panel-kicker">MATERIAL LOGS</span><h2 className="list-title">Material usage logs</h2></div><div className="toolbar-actions">
           <select className="select-button" aria-label="Filter material logs by project" value={materialLogProjectFilter} onChange={(event) => setMaterialLogProjectFilter(event.target.value)}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select>
-          {role === "Employee" && <button className="button button-primary" onClick={() => onCreate("material-log")}>＋ Log material use</button>}
+          {(role === "Employee" || role === "ProjectManager" || role === "Owner") && <button className="button button-primary" onClick={() => onCreate("material-log")}>＋ Log material use</button>}
         </div></div>
         {visibleMaterialLogs.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Material</th><th>Project / site</th><th>Used</th><th>Engineer</th><th>Logged</th><th>Note</th></tr></thead><tbody>
           {visibleMaterialLogs.map((log) => <tr key={log.id}><td>{log.material}</td><td>{log.project}</td><td>{log.quantity} {log.unit}</td><td>{log.engineer}</td><td>{log.loggedAt}</td><td>{log.note || "—"}</td></tr>)}
@@ -481,7 +490,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
     {page === "Attendance" && <AttendancePage data={data} role={role} currentUser={currentUser} onSubmit={onAttendanceSubmit} onRegularize={onAttendanceRegularize} onReviewRequest={onAttendanceRequestReview} onReviewLeaveRequest={onAttendanceLeaveReview} />}
     {page === "Site Visits" && <SiteVisitsPage visits={data.siteVisits} projects={projects} role={role} currentUser={currentUser} onAction={onVisitStatus} onCheckIn={onVisitCheckIn} />}
     {page === "Work Requests" && <WorkRequestsPage role={role} currentUser={currentUser} projects={data.projects} refreshKey={workRequestsRefresh} onToast={onToast} />}
-    {page === "Reports" && <section className="report-grid"><article className="report-card panel"><span className="report-icon">▥</span><span className="panel-kicker">PROJECT PERFORMANCE</span><h2>Progress report</h2><p>Milestone completion and updates, by project and site.</p><button className="text-link" onClick={() => void downloadReport("progress")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">＄</span><span className="panel-kicker">FINANCIAL HEALTH</span><h2>Expense report</h2><p>Approved, pending, and paid expenses across your portfolio.</p><button className="text-link" onClick={() => void downloadReport("expenses")}>Generate report ↗</button></article><article className="report-card panel"><span className="report-icon">◈</span><span className="panel-kicker">SITE INVENTORY</span><h2>Materials report</h2><p>Material received, consumed, and remaining at every site.</p><button className="text-link" onClick={() => void downloadReport("materials")}>Generate report ↗</button></article></section>}
+    {page === "Reports" && <ReportsPage />}
     {(page === "Settings" || page === "Settings & Backup") && <>
       <section className="panel palette-settings">
         <div className="panel-heading compact"><div><span className="panel-kicker">PERSONAL APPEARANCE</span><h2>Color palette</h2></div><span className="palette-scope-label">Saved per user</span></div>
@@ -522,7 +531,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
                 </div>
               </div>
               {expanded && <div className="engineer-site-details" id={`site-details-${project.id}`}>
-                <div><span>Assigned engineer</span><strong>{project.engineer}</strong></div>
+                <div><span>Assigned engineers</span><strong>{getProjectEngineers(project).join(", ") || "Not assigned"}</strong></div>
                 <div><span>Client</span><strong>{project.client}</strong></div>
                 <div><span>Progress</span><strong>{project.progress}%</strong></div>
                 <div><span>Status</span><strong>{project.status}</strong></div>
@@ -540,7 +549,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
         <section className="people-section"><div className="people-section-heading"><h3 className="people-section-title">Clients</h3>{role === "Owner" && <button className="button button-primary" type="button" onClick={() => onCreatePerson("Client")}>＋ Add client</button>}</div>{renderPeople(data.people.filter((person) => person.role === "Client"))}</section>
       </>}
     </section>}
-    {page === "Work Progress" && (role === "Client" || role === "Owner" || role === "ProjectManager") && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">{role === "Client" ? "FROM YOUR PROJECT TEAM" : "SITE TEAM UPDATES"}</span><h2 className="list-title">Work progress</h2><p className="feature-subtitle">{role === "Client" ? "Updates and photos shared by your project team." : "Updates and photos shared by engineers across your projects."}</p></div><div className="toolbar-actions"><select className="select-button" aria-label="Filter work progress by project" value={workProgressProject} onChange={(event) => { setWorkProgressProject(event.target.value); setSelectedWorkProgress(null); }}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select><div className="work-progress-date-filter"><DateInput aria-label="Filter work progress by date" value={workProgressDate} onChange={(event) => { setWorkProgressDate(event.currentTarget.value); setSelectedWorkProgress(null); }} onClear={() => { setWorkProgressDate(""); setSelectedWorkProgress(null); }} /></div></div></div>{clientWorkProgress.length > 0 ? <div className="progress-update-list">{clientWorkProgress.map(renderProgressRow)}</div> : <div className="inline-empty">{workProgressProject !== "All" ? `No work progress updates were shared for ${workProgressProject}${workProgressDate ? " on this date" : ""}.` : workProgressDate ? "No work progress updates were shared on this date." : "No work progress updates have been shared yet."}</div>}</section>}
+    {page === "Work Progress" && (role === "Client" || role === "Owner" || role === "ProjectManager") && <section className="panel feature-panel"><div className="list-toolbar"><div><span className="panel-kicker">{role === "Client" ? "FROM YOUR PROJECT TEAM" : "SITE TEAM UPDATES"}</span><h2 className="list-title">Work progress</h2><p className="feature-subtitle">{role === "Client" ? "Updates and photos shared by your project team." : "Review site updates and share work completed at your projects."}</p></div><div className="toolbar-actions">{role !== "Client" && <button className="button button-primary" type="button" onClick={() => onCreate("progress")}>＋ Submit work update</button>}<select className="select-button" aria-label="Filter work progress by project" value={workProgressProject} onChange={(event) => { setWorkProgressProject(event.target.value); setSelectedWorkProgress(null); }}><option value="All">All projects</option>{scopedProjects.map((project) => <option key={project.id} value={project.name}>{project.name}</option>)}</select><div className="work-progress-date-filter"><DateInput aria-label="Filter work progress by date" value={workProgressDate} onChange={(event) => { setWorkProgressDate(event.currentTarget.value); setSelectedWorkProgress(null); }} onClear={() => { setWorkProgressDate(""); setSelectedWorkProgress(null); }} /></div></div></div>{clientWorkProgress.length > 0 ? <div className="progress-update-list">{clientWorkProgress.map(renderProgressRow)}</div> : <div className="inline-empty">{workProgressProject !== "All" ? `No work progress updates were shared for ${workProgressProject}${workProgressDate ? " on this date" : ""}.` : workProgressDate ? "No work progress updates were shared on this date." : "No work progress updates have been shared yet."}</div>}</section>}
     {(page === "Work Progress" || page === "Progress Updates") && selectedWorkProgress && <div className="client-progress-gallery-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedWorkProgress(null); }}>
       <section className="client-progress-gallery" role="dialog" aria-modal="true" aria-label={`${activeWorkProgressPhoto?.project ?? selectedWorkProgress.project} progress photos`}>
         <header className="client-progress-gallery-header"><strong>{activeWorkProgressPhoto?.project ?? selectedWorkProgress.project} - Progress Photos</strong><button type="button" aria-label="Close progress photos" onClick={() => setSelectedWorkProgress(null)}>×</button></header>
@@ -583,7 +592,7 @@ export function FeaturePage({ page, role, currentUser, currentUserEmail, ownerCo
           setUnassigningProjectId(project.id);
           const unassign = selectedClient
             ? onUnassignClientProject(selectedClient, project)
-            : onUnassignEngineerProject(project);
+            : selectedEngineer ? onUnassignEngineerProject(selectedEngineer, project) : Promise.resolve();
           void unassign.finally(() => setUnassigningProjectId(null));
         }}>Unassign {selectedEngineer ? "site" : "project"}</button></div>
       </section>

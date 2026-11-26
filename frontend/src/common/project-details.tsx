@@ -3,6 +3,7 @@ import type { DashboardData, Project, ProjectContact, Role } from "./types";
 import { formatCurrency, googleReviewUrl, isLoggedExpense } from "./utils";
 import { ExpenseRows, StatusBadge } from "./components";
 import { QuotationPdfPreview } from "./quotation-pdf-preview";
+import { getProjectEngineers, getProjectManagers } from "./project-assignments";
 
 export function ProjectDetails({ project, data, role, currentUser, ownerContacts, ownerContactsError, onBack, onEdit, onCreate }: { project: Project; data: DashboardData; role: Role; currentUser: string; ownerContacts?: ProjectContact[] | null; ownerContactsError?: string; onBack: () => void; onEdit?: (project: Project) => void; onCreate?: (modal: "payment" | "expense-log", project: Project) => void }) {
   const [showCompletionReport, setShowCompletionReport] = useState(false);
@@ -22,7 +23,11 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
   const displayedQuotationAmount = quotations.length > 0
     ? quotations.reduce((total, quotation) => total + quotation.amount, 0)
     : project.quotationAmount ?? 0;
-  const assignedEngineer = data.people.find((person) => person.role === "Site Engineer" && person.name === project.engineer);
+  const projectEngineers = getProjectEngineers(project);
+  const assignedEngineers = projectEngineers.map((name) =>
+    data.people.find((person) => person.role === "Site Engineer" && person.name === name)
+  ).filter((person): person is NonNullable<typeof person> => Boolean(person));
+  const assignedEngineer = assignedEngineers[0];
   const assignedClient = data.people.find((person) =>
     person.role === "Client"
     && (person.project === project.name || person.name === project.client)
@@ -75,8 +80,8 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
         <div><span>Site</span><strong>{project.site}</strong></div>
         <div><span>Client</span><strong>{project.client}</strong></div>
         <div><span>Report prepared for</span><strong>{currentUser}</strong></div>
-        <div><span>Site engineer</span><strong>{project.engineer}</strong></div>
-        <div><span>Project manager</span><strong>{project.projectManager || "Not assigned"}</strong></div>
+        <div><span>Site engineers</span><strong>{projectEngineers.join(", ") || "Not assigned"}</strong></div>
+        <div><span>Project managers</span><strong>{getProjectManagers(project).join(", ") || "Not assigned"}</strong></div>
         <div><span>Completion status</span><strong>Completed · {project.progress}%</strong></div>
         <div><span>Started</span><strong>{startingUpdate ? formatPhotoDate(startingUpdate.createdAt) : "Date not recorded"}</strong></div>
         <div><span>Completed</span><strong>{completionUpdate ? formatPhotoDate(completionUpdate.createdAt) : "Date not recorded"}</strong></div>
@@ -139,13 +144,13 @@ export function ProjectDetails({ project, data, role, currentUser, ownerContacts
           : <div><span>Owner contact</span><strong>{ownerContactsError ? "Unable to load owner contacts" : ownerContacts === null ? "Loading owner contacts…" : "No owner contacts available"}</strong>{ownerContactsError && <small role="alert">{ownerContactsError}</small>}</div>
         : <div><span>Client</span><strong>{assignedClientName}</strong>{assignedClient?.phone && <a href={`tel:${assignedClient.phone}`}>{assignedClient.phone}</a>}</div>}
       {(role === "Owner" || role === "ProjectManager") && <div>
-        <span>Assigned engineer</span>
-        <strong>{project.engineer !== "Unassigned" ? project.engineer : "No engineer assigned"}</strong>
+        <span>Assigned engineers</span>
+        <strong>{projectEngineers.join(", ") || "No engineer assigned"}</strong>
         {assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}
       </div>}
       {role === "Client" && <div>
-        <span>Engineer contact</span>
-        <strong>{project.engineer !== "Unassigned" ? assignedEngineer?.name ?? project.engineer : "No engineer assigned"}</strong>
+        <span>Engineer contacts</span>
+        <strong>{projectEngineers.join(", ") || "No engineer assigned"}</strong>
         {assignedEngineer?.phone && <a href={`tel:${assignedEngineer.phone}`}>{assignedEngineer.phone}</a>}
       </div>}
       {role === "Client" && <div><span>Progress</span><strong>{project.progress}%</strong></div>}
